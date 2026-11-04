@@ -1,0 +1,109 @@
+# Table Marvel Champions
+
+Table solo pour **Marvel Champions** (boîte de base et paquet de scénarios *Le Bouffon Vert*, version française), en Vue 3.
+Mise en place automatique, decks préconstruits officiels, import de decks OCTGN `.o8d`, installable en PWA.
+
+## Démarrer
+
+```bash
+npm install
+npm run dev          # http://localhost:5173
+npm test             # tests du moteur de règles (Vitest)
+npm run build        # build PWA dans dist/
+npm run preview      # sert dist/ pour tester le build et le service worker
+```
+
+Node 20.19+ ou 22.12+ (exigence de Vite 8).
+
+Pour déployer sous un sous-chemin (par exemple dans Gamebox Hero) :
+
+```bash
+BASE_PATH=/modules/marvel-champions/ npm run build
+```
+
+`npm run build:artifact` produit `dist-artifact/page.html`, une page unique (JS et CSS inlinés, sans service worker) pour l'hébergement en artefact Claude ; les images restent à côté dans `cards/` (un dossier par boîte), `backs/` et `status/`.
+
+## Structure
+
+```
+src/
+  game/
+    data.js            listes héros / méchants / modules, libellés, index des cartes
+    engine.js          moteur de règles : fonctions pures sur un objet d'état (aucune dépendance à Vue)
+    engine.test.js     tests Vitest du moteur
+  stores/
+    game.js            store Pinia : état de partie, persistance localStorage, actions → engine
+    ui.js              taille des cartes, sélection, survol, aperçu, menu contextuel, modale ouverte
+  composables/
+    usePointer.js      glisser-déposer, clic, double-clic, survol, clic droit / appui long (délégués sur document)
+    useKeyboard.js     raccourcis clavier
+    useCardMenu.js     contenu des menus contextuels
+    useZoneActions.js  action d'un clic sur une pile ou une carte
+    useAssets.js       URL des images (respecte BASE_URL)
+  components/
+    GameTable, GameCard, CardPile, HandStrip, TopBar, CounterBox, CardPreview, GameLog, ContextMenu
+    modals/            BaseModal, ChoiceOption, SetupModal, PileModal, MulliganModal, HelpModal
+  data/
+    cards.json         boîte de base, 198 cartes (GUID OCTGN, nom FR, type, set, quantité, PV, menace, taille de main…)
+    bouffon-vert.json  paquet Le Bouffon Vert, 49 cartes saisies depuis les cartes imprimées (id gob-<numéro>)
+    precons.json       les 5 decks préconstruits (40 cartes)
+public/
+  cards/base/          209 images de la boîte de base (GUID.jpg, GUID.b.jpg pour les versos)
+  cards/bouffon vert/  57 images du paquet Le Bouffon Vert (gob-NN.jpg, gob-NN.b.jpg pour les versos)
+  backs/               dos bleu, violet (joueur) et orange (Rencontre)
+  status/              cartes de statut posées sur les personnages (sonné, désorienté, tenace)
+  icons/               icônes PWA
+scripts/
+  build-data.py        régénère cards.json / precons.json (voir l'en-tête du script)
+  inline-artifact.mjs  post-traitement du build artefact
+```
+
+Le principe : `engine.js` porte toutes les règles (mise en place, pioche, paquet Rencontre, phase du méchant, mulligan, dégâts/menace) et ne connaît que des objets JS. Le store Pinia lui passe son état réactif ; les composants ne font qu'afficher et appeler le store. Les cartes portent `data-id` et les zones `data-zone`, ce qui permet de gérer tout le pointeur à un seul endroit (`usePointer`).
+
+### État d'une carte
+
+```js
+{ id, g /* GUID OCTGN */, o /* 'p' joueur | 'e' rencontre */, zone, side /* 0 face A | 1 face B */,
+  faceUp, tapped, x, y, z, dmg, thr, tok, hero?, kind? /* 'token' */, stunned?, confused?, tough? }
+```
+
+L'ordre du tableau `cards` est l'ordre des piles : le dessus d'une pile est sa dernière carte.
+
+## Règles automatisées
+
+- Mise en place : identité en alter ego, deck précon ou `.o8d`, méchant (I+II standard, II+III expert) et manigance face A sur la table, paquet Rencontre = set du méchant + module + Standard (+ Expert) + obligation du héros, set Némésis mis de côté.
+- Paquet joueur vide : la défausse est remélangée et une carte Rencontre arrive face cachée.
+- Paquet Rencontre vide : la défausse est remélangée et un jeton d'accélération est ajouté.
+- Phase du méchant : menace d'accélération (+ jetons) puis révélation d'une carte Rencontre.
+- Nouveau tour : vos cartes sont redressées, la main est complétée selon la forme actuelle.
+- Mulligan officiel : défausser des cartes de la main de départ puis repiocher.
+- Dégâts / menace / jetons : les dégâts ne vont que sur les personnages (compteurs PV du héros et du méchant, jeton sur les alliés et sbires), la menace que sur les manigances (compteur avec seuil pour la principale, jeton sur les annexes), et les autres cartes (ou une carte face cachée) reçoivent des jetons génériques.
+- Statuts : clic droit sur un personnage (identité, allié, méchant, sbire) pour le rendre Sonné, Désorienté ou Tenace ; ils se cumulent, s'affichent sur la carte, restent quand l'identité change de forme et disparaissent quand la carte quitte la table.
+- Une nouvelle étape du méchant ou de la manigance posée depuis « De côté » met les compteurs à jour.
+- Le Bouffon Vert, deux scénarios et quatre sets modulaires (Gadgets du Bouffon, Un Immense Gâchis, Absorption Électrique, Ingérence en Cours) :
+  - *Entreprise à Risques* : l'environnement Entreprise Criminelle est mis en jeu avec 2 jetons Infamie. Retourner Norman Osborn (F) le change en Le Bouffon Vert et renomme le compteur de PV ; Entreprise Criminelle se retourne en Accès de Folie.
+  - *Formule Mutagène* : un Esclave Bouffon est mis en jeu engagé avec vous. Sur Nuage Mutagène, l'accélération +X compte les ennemis Bouffon en jeu, Le Bouffon Vert compris.
+
+Les effets des cartes eux-mêmes restent à appliquer à la main.
+
+## Raccourcis
+
+`D` piocher · `N` nouveau tour · `V` phase du méchant · `E` révéler · `G`/`⇧G` dégât ± · `M`/`⇧M` menace ± · `J`/`⇧J` jeton ± · `T` épuiser · `F` retourner · `H` en main · `X` de côté · `Suppr` défausser · `Entrée` jouer · `?` aide.
+Les raccourcis de carte visent la carte sous la souris, sinon la carte sélectionnée.
+
+## Tablette
+
+Toucher une carte l'agrandit, la glisser la déplace, un double tap l'épuise (ou la joue depuis la main), un appui long ouvre ses options avec la carte en grand (aussi sur les paquets et dans les défausses). Une main trop longue défile en glissant horizontalement, une carte glissée vers le haut part sur la table.
+
+Côté code (`usePointer`) : l'appui long envoie lui-même un `contextmenu` (iOS n'en émet pas) et ignore celui d'Android ou Windows s'il arrive en plus ; le clic qui suit un geste déjà traité est absorbé (pioche en double, option du menu sous le doigt, pile découverte par une fenêtre qui se ferme) ; le double tap est détecté à la main pour le toucher et le stylet. Le navigateur ne reçoit jamais de glissement horizontal (`touch-action`), sinon il peut le transformer en « page précédente ».
+
+## Données et droits
+
+- Statistiques et traductions : [MarvelCDB](https://github.com/zzorba/marvelsdb-json-data).
+- Decks préconstruits : module [OCTGN Marvel Champions](https://github.com/twistedsistem/OCTGN-Marvel-Champions).
+- Images des cartes et des dos : © Fantasy Flight Games / Marvel. À garder pour un usage privé, ne pas redistribuer publiquement.
+
+## Pistes
+
+- Multijoueur : l'état est un objet sérialisable, il suffit de synchroniser les actions du store (WebSocket) ; le moteur reste côté client ou passe côté serveur.
+- Extensions : comme pour Le Bouffon Vert, un fichier `src/data/<boîte>.json` et un dossier d'images `public/cards/<boîte>/` déclarés dans `PACKS` (`data.js`), puis compléter `HEROES` / `VILLAINS` / `MODULARS`. Un scénario peut décrire dans `setup` les cartes que sa manigance 1A met en jeu.

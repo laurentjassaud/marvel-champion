@@ -1,0 +1,185 @@
+/* Layout: one-screen tabletop — toolbar, free table (villain row on top, hero row at bottom)
+   + side column (encounter piles, preview, log), player strip (deck, hand, discard) at the bottom.
+   Deliberately a single dark look: it is a game table. */
+:root {
+  color-scheme: dark;
+  --bg: #12161c;
+  --table: #1b2a2e;
+  --table-line: #22363b;
+  --panel: #171d24;
+  --line: #2a333d;
+  --fg: #e6e2d8;
+  --muted: #8f978f;
+  --brass: #d1a356;
+  --brass-ink: #1a1408;
+  --hero: #4f7fc9;
+  --enc: #c9733f;
+  --threat: #8a6bd0;
+  --danger: #d9705c;
+  --f-display: "Saira Condensed", "Arial Narrow", system-ui, sans-serif;
+  --f-body: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+  --cw: 80px;  /* table card width (set from the size slider) */
+  --hw: 76px;  /* hand and player pile card width */
+  --sw: 58px;  /* side pile card width */
+}
+
+* { box-sizing: border-box; }
+/* touch: no grey tap flash, no font inflation, no pull-to-refresh or page bounce */
+html { height: 100%; -webkit-tap-highlight-color: transparent; -webkit-text-size-adjust: 100%; overscroll-behavior: none; }
+body {
+  height: 100%; margin: 0;
+  background: var(--bg); color: var(--fg); font: 14px/1.4 var(--f-body); overflow: hidden; overscroll-behavior: none;
+  touch-action: manipulation; /* no double-tap zoom (pinch zoom stays available) */
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+#app { height: 100%; height: 100dvh; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; touch-action: manipulation; }
+/* controls are not text: a long press must not select their label */
+button, label, .bar, .drop, .zone-label, .menu, .table { -webkit-user-select: none; user-select: none; }
+input, textarea { -webkit-user-select: text; user-select: text; } /* iOS would not let you type in them otherwise */
+:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
+[hidden] { display: none !important; }
+/* wording for one kind of pointer (mouse and keyboard, or finger) */
+.on-touch { display: none; }
+@media (pointer: coarse) {
+  .on-touch { display: inline; }
+  .on-mouse { display: none; }
+}
+
+/* ---------- shell ---------- */
+.app { height: 100%; display: grid; grid-template-rows: auto 1fr auto; gap: 10px; padding-block: max(10px, env(safe-area-inset-top, 0px)) max(10px, env(safe-area-inset-bottom, 0px)); }
+/* the side column narrows on tablets so the table keeps its room */
+.mid { display: grid; grid-template-columns: minmax(0, 1fr) clamp(240px, 30vw, 440px); gap: 10px; min-height: 0; }
+/* the preview takes what the encounter piles leave, the log keeps a readable strip */
+.side { display: grid; grid-template-rows: auto minmax(0, 1fr) minmax(64px, .4fr); gap: 10px; min-height: 0; }
+.encrow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.bottom { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; }
+
+/* ---------- buttons & labels ---------- */
+.btn { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; line-height: 1.1; white-space: nowrap; transition: transform .1s ease-out; }
+.btn:active { transform: scale(.96); }
+@media (hover: hover) and (pointer: fine) {
+  .btn:hover { border-color: var(--brass); }
+}
+.btn.primary { background: var(--brass); color: var(--brass-ink); border-color: var(--brass); font-weight: 600; }
+.btn.enc { border-color: color-mix(in srgb, var(--enc) 60%, var(--line)); }
+.btn kbd { font-family: var(--f-mono); font-size: 10px; color: var(--muted); margin-left: 5px; }
+.btn.primary kbd { color: var(--brass-ink); opacity: .7; }
+.zone-label { font-family: var(--f-display); font-weight: 600; font-size: 12.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 0 0 6px; white-space: nowrap; }
+.sp { flex: 1; }
+.note { font-size: 12px; color: var(--muted); }
+.err { color: var(--danger); font-size: 13px; }
+
+/* ---------- panels, piles, hand ---------- */
+.drop { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; min-width: 0; position: relative; }
+.drop.e { border-top: 2px solid color-mix(in srgb, var(--enc) 70%, transparent); }
+.drop.p { border-top: 2px solid color-mix(in srgb, var(--hero) 70%, transparent); }
+.drop.over, .table.over { box-shadow: inset 0 0 0 2px var(--brass); }
+.pile { display: flex; flex-direction: column; align-items: center; gap: 4px; --pw: var(--hw); min-width: calc(var(--pw) + 22px); cursor: pointer; }
+.encrow .pile { --pw: var(--sw); padding: 6px; min-width: 0; }
+.pile .slot { width: var(--pw); height: calc(var(--pw) * 1.4); border: 1px dashed var(--line); border-radius: 6px; position: relative; }
+.pile .slot .card { position: absolute; inset: 0; --w: var(--pw); }
+.pile .slot .card.land { inset: auto; top: calc(var(--pw) * .2); left: calc(var(--pw) * -.2); }
+.pile .slot .stack { position: absolute; inset: 0; border-radius: 6px; transform: translate(3px, 3px); background: var(--line); opacity: .6; }
+.pile .count { font-family: var(--f-mono); font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.hand { display: flex; flex-direction: column; }
+/* touch-action: the browser never pans the hand sideways (usePointer scrolls it under the finger),
+   because a native sideways pan that hits the end of a row can become a "back" navigation */
+.hand-row { display: flex; gap: 6px; overflow-x: auto; overscroll-behavior: contain; touch-action: pan-y; padding: 8px 2px 4px; min-height: calc(var(--hw) * 1.4 + 12px); align-items: flex-end; }
+.hand-row .card { --w: var(--hw); flex: none; transition: transform .12s; }
+@media (hover: hover) and (pointer: fine) {
+  .hand-row .card:hover { transform: translateY(-6px); }
+}
+.pile:active .slot { transform: scale(.97); }
+.hand-empty { color: var(--muted); font-size: 12.5px; align-self: center; }
+
+/* ---------- cards ---------- */
+.card { --w: var(--cw); width: var(--w); height: calc(var(--w) * 1.4); border-radius: calc(var(--w) * .06); position: relative; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: none; cursor: grab; box-shadow: 0 2px 6px rgb(0 0 0 / .5); }
+/* display-only cards (pile viewer, mulligan, preview) do not drag: the finger scrolls through them */
+.card:not([data-id]) { touch-action: manipulation; }
+.card.land { width: calc(var(--w) * 1.4); height: var(--w); }
+.card.sel { outline: 2px solid var(--brass); outline-offset: 2px; }
+.card .face, .card .back { position: absolute; inset: 0; border-radius: inherit; background: #0d1015 center / cover no-repeat; }
+.card .mk { position: absolute; right: -7px; top: -7px; min-width: 22px; height: 22px; padding: 0 5px; border-radius: 11px; font-family: var(--f-mono); font-size: 12px; display: grid; place-items: center; box-shadow: 0 1px 3px rgb(0 0 0 / .6); color: #fff; }
+.card .mk.dmg { background: #b8402f; }
+.card .mk.thr { background: #6a4bb0; right: auto; left: -7px; }
+.card .mk.tok { background: #56677a; top: auto; bottom: -7px; }
+/* status cards (stunned, confused, tough) stacked over the card art, they can combine */
+.card .status { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: calc(var(--w) * .02); pointer-events: none; }
+.card .status img { width: calc(var(--w) * 1.04); height: auto; flex: none; filter: drop-shadow(0 2px 3px rgb(0 0 0 / .6)); }
+.card.token { width: calc(var(--cw) * .4); height: calc(var(--cw) * .4); border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff6, transparent 50%), var(--tok); border: 2px solid #0006; }
+.card.pick { outline: 3px solid var(--danger); outline-offset: 2px; opacity: .5; }
+.ghost { position: fixed; left: 0; top: 0; pointer-events: none; z-index: 1000; opacity: .92; }
+
+/* ---------- context menu ---------- */
+.menu { position: fixed; z-index: 2000; background: #20272f; border: 1px solid var(--line); border-radius: 8px; padding: 4px; min-width: 220px; box-shadow: 0 8px 24px rgb(0 0 0 / .5); max-height: 90vh; overflow: auto; overscroll-behavior: contain; touch-action: pan-y pinch-zoom; }
+.menu .mh { font-family: var(--f-display); font-size: 13px; letter-spacing: .05em; color: var(--muted); padding: 4px 10px 2px; }
+.menu button { display: flex; justify-content: space-between; gap: 16px; width: 100%; text-align: left; background: none; border: 0; border-radius: 5px; padding: 6px 10px; }
+.menu button:focus-visible, .menu button:active { background: var(--line); }
+@media (hover: hover) and (pointer: fine) {
+  .menu button:hover { background: var(--line); }
+}
+.menu kbd { font-family: var(--f-mono); font-size: 11px; color: var(--muted); }
+.menu .chk { color: var(--brass); font-weight: 700; }
+.menu .peek { display: none; }
+.menu hr { border: 0; border-top: 1px solid var(--line); margin: 4px 0; }
+
+/* ---------- modals ---------- */
+.modal { position: fixed; inset: 0; z-index: 1500; background: rgb(5 8 10 / .72); display: grid; place-items: center; padding: 16px; }
+/* vertical scrollers only pan vertically: no sideways swipe for the browser to turn into "back" */
+.modal .box { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; width: min(820px, 100%); max-height: 100%; overflow: auto; overscroll-behavior: contain; touch-action: pan-y pinch-zoom; padding: 18px 20px; display: grid; gap: 14px; }
+.modal h2 { font-family: var(--f-display); font-weight: 700; font-size: 24px; margin: 0; text-wrap: balance; }
+.modal p { margin: 0; color: var(--muted); line-height: 1.5; max-width: 68ch; }
+.modal .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.grid-cards { display: flex; flex-wrap: wrap; gap: 8px; }
+.grid-cards .card { --w: 96px; cursor: pointer; }
+.fieldset { display: grid; gap: 6px; }
+.fieldset > .lab, .keys .lab { font-family: var(--f-display); font-size: 13px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.choices { display: flex; flex-wrap: wrap; gap: 8px; }
+.file-btn { position: relative; overflow: hidden; }
+.file-btn input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.help-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 18px; }
+.keys { display: grid; grid-template-columns: auto 1fr; gap: 7px 12px; align-items: center; align-content: start; }
+.keys .lab { grid-column: 1 / -1; }
+.keys kbd { font-family: var(--f-mono); font-size: 12px; background: var(--bg); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 1px 6px; white-space: nowrap; }
+
+/* ---------- touch screens ---------- */
+/* finger-sized targets; keyboard hints only clutter a tablet (the ? help still lists them) */
+@media (pointer: coarse) {
+  .btn { min-height: 36px; padding: 8px 12px; }
+  .menu button { padding: 10px 12px; }
+  .btn kbd, .menu kbd { display: none; }
+}
+/* touch, or a short screen: the side preview is small, so the long press / right-click menu
+   also shows the card big enough to read */
+@media (pointer: coarse), (max-height: 800px) {
+  .menu.peeks { display: flex; align-items: flex-start; gap: 8px; }
+  .menu .peek { display: block; flex: none; --w: min(240px, calc((90vh - 10px) / 1.4)); cursor: default; }
+  .menu .peek.land { --w: min(240px, calc(90vh - 10px)); }
+  .menu .items { flex: 1; min-width: 210px; }
+}
+/* short landscape screens: smaller encounter piles leave the preview more room */
+@media (max-height: 860px) and (min-width: 701px) {
+  .encrow { --sw: 46px; }
+}
+
+/* ---------- small screens ---------- */
+/* portrait tablets and narrow windows keep the table and the hand on one screen */
+@media (max-width: 860px) {
+  :root { --hw: 62px; }
+}
+/* phones: one column, the page scrolls */
+@media (max-width: 700px) {
+  body { overflow: auto; }
+  #app, .app { height: auto; min-height: 100%; }
+  .mid { grid-template-columns: 1fr; }
+  .side { grid-template-rows: none; }
+  .bottom { grid-template-columns: 1fr 1fr; }
+  .bottom .hand { grid-column: 1 / -1; order: -1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hand-row .card, .btn { transition: none; }
+}
