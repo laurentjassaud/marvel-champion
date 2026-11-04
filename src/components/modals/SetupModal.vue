@@ -1,5 +1,5 @@
 <script setup>
-import { reactive, ref, watch } from 'vue'
+import { reactive, ref, computed, watch } from 'vue'
 import BaseModal from './BaseModal.vue'
 import ChoiceOption from './ChoiceOption.vue'
 import { HEROES, VILLAINS, MODULARS, DEFS, BY_ID } from '../../game/data.js'
@@ -25,6 +25,8 @@ const error = ref('')
 
 const heroImage = id => imageById(DEFS.find(d => d.t === 'hero' && d.s === id).id)
 const advisedFor = mod => VILLAINS.filter(v => v.modular === mod).map(v => v.name).join(', ')
+// several villains at once (Les Démolisseurs): no modular set, difficulty picks version A or B
+const crew = computed(() => !!VILLAINS.find(v => v.id === form.villain)?.crew)
 
 // each villain comes with its advised modular set
 watch(() => form.villain, v => { form.modular = VILLAINS.find(x => x.id === v).modular })
@@ -93,18 +95,19 @@ function start() {
       </div>
     </div>
 
-    <div class="fieldset">
+    <div v-if="!crew" class="fieldset">
       <div class="lab">Set modulaire</div>
       <div class="choices">
         <ChoiceOption v-for="m in MODULARS" :key="m.id" v-model="form.modular" name="modular" :value="m.id" :label="m.name" :sub="advisedFor(m.id) ? `Conseillé avec ${advisedFor(m.id)}` : ''" />
       </div>
     </div>
+    <p v-else class="note">Les Démolisseurs : quatre méchants en jeu, chacun avec sa manigance annexe et son propre paquet Rencontre ; ni set modulaire, ni set Standard, ni obligation, ni Némésis.</p>
 
     <div class="fieldset">
       <div class="lab">Difficulté</div>
       <div class="choices">
-        <ChoiceOption v-model="form.diff" name="diff" value="std" label="Standard" sub="Étapes I et II + set Standard" />
-        <ChoiceOption v-model="form.diff" name="diff" value="exp" label="Expert" sub="Étapes II et III + set Expert" />
+        <ChoiceOption v-model="form.diff" name="diff" value="std" label="Standard" :sub="crew ? 'Méchants version A' : 'Étapes I et II + set Standard'" />
+        <ChoiceOption v-model="form.diff" name="diff" value="exp" label="Expert" :sub="crew ? 'Méchants version B' : 'Étapes II et III + set Expert'" />
       </div>
     </div>
 

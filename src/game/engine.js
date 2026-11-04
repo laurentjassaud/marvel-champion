@@ -10,6 +10,9 @@
 //   accel: number            // acceleration tokens
 //   mull: boolean            // mulligan already taken
 //   zTop: number             // highest z-index on the table
+//   crew?: string[]          // several villains at once (Les Démolisseurs): their encounter sets
+//   active?: string          // set of the villain with the Active token; edeck/ediscard are shared
+//                            // zones, the piles in use are the cards of that set (encounterPile)
 // }
 // Card: {id, g (OCTGN GUID), o ('p' player | 'e' encounter), zone, side (0 A / 1 B),
 //        faceUp, tapped, x, y, z, dmg, thr, tok, hero?, kind? ('token'), color?,
@@ -53,6 +56,52 @@ export function counterOf(c) {
 const deckOf = c => (isEnc(c) ? 'edeck' : 'deck')
 const discardOf = c => (isEnc(c) ? 'ediscard' : 'discard')
 
+/* ---------- several villains (Les Démolisseurs) ---------- */
+/** Encounter deck or discard in use: with several villains, only the active villain's cards. */
+export const encounterPile = (s, zone) => cardsIn(s, zone).filter(c => !s.active || def(c).s === s.active)
+export const activeVillain = s => cardsIn(s, 'table').find(c => def(c).t === 'villain' && def(c).s === s.active)
+const activeName = s => { const v = activeVillain(s); return v ? nameOf(v) : 'aucun méchant' }
+const sideSchemeOf = (s, set) => cardsIn(s, 'table').find(c => def(c).t === 'side_scheme' && def(c).s === set)
+
+/** Villain whose side scheme has the most threat; a tie keeps the active one if it is among them. */
+function mostThreatened(s) {
+  const alive = s.crew.filter(set => cardsIn(s, 'table').some(c => def(c).t === 'villain' && def(c).s === set))
+  const threat = set => sideSchemeOf(s, set)?.thr ?? 0
+  const max = Math.max(...alive.map(threat))
+  const top = alive.filter(set => threat(set) === max)
+  return { set: top.includes(s.active) ? s.active : top[0], tie: top.length > 1 }
+}
+
+/** The villain counter follows the active villain (its damage stays on its card). */
+function syncCrewCounter(s) {
+  const v = activeVillain(s)
+  if (v) Object.assign(s.counters[1], { l: `${def(v).n} ${def(v).st}`, v: Math.max(0, def(v).hp - v.dmg) })
+}
+
+const TIE = ' (égalité : le premier joueur choisit, clic droit sur un autre méchant → Rendre actif)'
+
+/** Give the Active token to the villain of encounter set `set`. */
+export function setActive(s, set) {
+  if (!s.crew?.includes(set) || set === s.active) return
+  s.active = set
+  syncCrewCounter(s)
+  log(s, `Jeton Actif sur « ${activeName(s)} » : les piles Rencontre affichées sont les siennes.`, true)
+}
+
+/** A defeated villain leaves with its side scheme; the Active token moves on if it was on it. */
+function crewVillainGone(s, c) {
+  const set = def(c).s
+  const side = sideSchemeOf(s, set)
+  if (side) moveCard(s, side, 'aside', {}, true)
+  log(s, `« ${def(c).n} » quitte la partie${side ? ` avec sa manigance « ${def(side).n} » (mise de côté)` : ''}.`, true)
+  const next = mostThreatened(s)
+  if (!next.set) { log(s, 'Les quatre Démolisseurs sont vaincus : vous gagnez la partie !', true); return }
+  if (s.active !== set) return
+  s.active = next.set
+  syncCrewCounter(s)
+  log(s, `Jeton Actif sur « ${activeName(s)} », dont la manigance annexe a le plus de menaces${next.tie ? TIE : ''}.`, true)
+}
+
 /** Current hand size of the identity (hero side or alter-ego side). */
 export function handSize(s) {
   const id = identity(s)
@@ -91,19 +140,26 @@ export function shuffleZone(s, zone) {
 }
 
 /* ---------- table placement ---------- */
+const crewColumn = (L, i) => 16 + i * (L.cw * 1.4 + 12)
 export const slots = {
   villain: () => ({ x: 16, y: 26 }),
   scheme: L => ({ x: 16 + L.cw + 20, y: 26 }),
-  identity: L => ({ x: 16, y: L.h - L.cw * 1.4 - 26 })
+  identity: L => ({ x: 16, y: L.h - L.cw * 1.4 - 26 }),
+  // several villains: one column each, its side scheme (landscape) below it, the main scheme on the right
+  crew: (L, i) => ({ x: crewColumn(L, i), y: 26 }),
+  crewScheme: (L, i) => ({ x: crewColumn(L, i), y: 26 + L.cw * 1.4 + 10 }),
+  crewMain: L => ({ x: crewColumn(L, 4), y: 26 })
 }
 
-/** Next free spot in the villain row, right of the villain and main scheme. */
+/** Next free spot in the villain row, right of the villain and main scheme (below the crew when several villains). */
 export function encounterSlot(s, L) {
-  const n = cardsIn(s, 'table').filter(c => isEnc(c) && !['villain', 'main_scheme'].includes(def(c).t)).length
-  const start = 16 + L.cw + 20 + L.cw * 1.4 + 24
+  const fixed = c => ['villain', 'main_scheme'].includes(def(c).t) || (s.crew && def(c).t === 'side_scheme' && s.crew.includes(def(c).s))
+  const n = cardsIn(s, 'table').filter(c => isEnc(c) && !fixed(c)).length
+  const start = s.crew ? 16 : 16 + L.cw + 20 + L.cw * 1.4 + 24
+  const top = s.crew ? 26 + L.cw * 2.4 + 26 : 26
   const step = L.cw + 12
   const perRow = Math.max(1, Math.floor((L.w - start - 10) / step))
-  return { x: start + (n % perRow) * step, y: 26 + Math.floor(n / perRow) * (L.cw * 1.4 + 16) }
+  return { x: start + (n % perRow) * step, y: top + Math.floor(n / perRow) * (L.cw * 1.4 + 16) }
 }
 
 /** Next free spot in the hero row, right of the identity, growing upwards. */
@@ -154,42 +210,63 @@ export function newGame(opt, L) {
     for (let i = 0; i < q; i++) add(g, 'p', 'deck')
   }
 
-  // villain: stages I+II in standard, II+III in expert
-  const stages = DEFS.filter(d => d.t === 'villain' && d.s === opt.villain).sort(byStage)
-  const used = opt.expert ? stages.slice(1, 3) : stages.slice(0, 2)
-  add(used[0].id, 'e', 'table', { z: 2, ...slots.villain() })
-  add(used[1].id, 'e', 'aside')
-
-  // main scheme stages: first one on the table (side A), the others set aside
   const schemes = DEFS.filter(d => d.t === 'main_scheme' && d.s === opt.villain).sort((a, b) => a.st.localeCompare(b.st))
-  add(schemes[0].id, 'e', 'table', { z: 3, ...slots.scheme(L) })
-  schemes.slice(1).forEach(d => add(d.id, 'e', 'aside'))
-
-  // encounter deck: villain set + modular + standard (+ expert) + hero obligation
-  const sets = [opt.villain, opt.modular, 'standard', ...(opt.expert ? ['expert'] : [])]
-  for (const d of DEFS) {
-    if (d.f !== 'encounter' || !sets.includes(d.s) || d.t === 'villain' || d.t === 'main_scheme') continue
-    for (let i = 0; i < d.q; i++) add(d.id, 'e', 'edeck')
-  }
-  const obligation = DEFS.find(d => d.t === 'obligation' && d.s === opt.hero)
-  if (obligation) add(obligation.id, 'e', 'edeck')
-
-  // setup printed on the 1A side of the main scheme: these cards start in play, not in the deck
+  let first // villain whose HP the counter shows
   const inPlay = []
-  for (const { g, tok = 0 } of villain.setup ?? []) {
-    const c = cardsIn(s, 'edeck').find(x => x.g === g)
-    if (!c) continue
-    moveCard(s, c, 'table', encounterSlot(s, L), true)
-    c.tok = tok
-    inPlay.push(c)
-  }
+  if (villain.crew) {
+    // Les Démolisseurs: every villain at once (version A, B in expert) with its side scheme in play
+    // and its own encounter deck; the first one holds the Active token. No obligation, no nemesis.
+    s.crew = villain.crew
+    s.active = villain.crew[0]
+    villain.crew.forEach((set, i) => {
+      const [a, b] = DEFS.filter(d => d.t === 'villain' && d.s === set).sort(byStage)
+      add((opt.expert ? b : a).id, 'e', 'table', { z: 2, ...slots.crew(L, i) })
+      const side = DEFS.find(d => d.t === 'side_scheme' && d.s === set)
+      add(side.id, 'e', 'table', { z: 2, thr: side.bth ?? 0, ...slots.crewScheme(L, i) })
+      for (const d of DEFS) {
+        if (d.s !== set || d.t === 'villain' || d.t === 'side_scheme') continue
+        for (let k = 0; k < d.q; k++) add(d.id, 'e', 'edeck')
+      }
+    })
+    first = def(activeVillain(s))
+    add(schemes[0].id, 'e', 'table', { z: 3, ...slots.crewMain(L) })
+  } else {
+    // villain: stages I+II in standard, II+III in expert
+    const stages = DEFS.filter(d => d.t === 'villain' && d.s === opt.villain).sort(byStage)
+    const used = opt.expert ? stages.slice(1, 3) : stages.slice(0, 2)
+    first = used[0]
+    add(used[0].id, 'e', 'table', { z: 2, ...slots.villain() })
+    add(used[1].id, 'e', 'aside')
 
-  // nemesis set aside
-  for (const d of DEFS) if (d.s === `${opt.hero}_nemesis`) for (let i = 0; i < d.q; i++) add(d.id, 'e', 'aside')
+    // main scheme stages: first one on the table (side A), the others set aside
+    add(schemes[0].id, 'e', 'table', { z: 3, ...slots.scheme(L) })
+    schemes.slice(1).forEach(d => add(d.id, 'e', 'aside'))
+
+    // encounter deck: villain set + modular + standard (+ expert) + hero obligation
+    const sets = [opt.villain, opt.modular, 'standard', ...(opt.expert ? ['expert'] : [])]
+    for (const d of DEFS) {
+      if (d.f !== 'encounter' || !sets.includes(d.s) || d.t === 'villain' || d.t === 'main_scheme') continue
+      for (let i = 0; i < d.q; i++) add(d.id, 'e', 'edeck')
+    }
+    const obligation = DEFS.find(d => d.t === 'obligation' && d.s === opt.hero)
+    if (obligation) add(obligation.id, 'e', 'edeck')
+
+    // setup printed on the 1A side of the main scheme: these cards start in play, not in the deck
+    for (const { g, tok = 0 } of villain.setup ?? []) {
+      const c = cardsIn(s, 'edeck').find(x => x.g === g)
+      if (!c) continue
+      moveCard(s, c, 'table', encounterSlot(s, L), true)
+      c.tok = tok
+      inPlay.push(c)
+    }
+
+    // nemesis set aside
+    for (const d of DEFS) if (d.s === `${opt.hero}_nemesis`) for (let i = 0; i < d.q; i++) add(d.id, 'e', 'aside')
+  }
 
   s.counters = [
     { l: heroDef.n.toUpperCase(), v: heroDef.hp, c: 'var(--hero)' },
-    { l: `${used[0].n} ${used[0].st}`, v: used[0].hp, c: 'var(--enc)' },
+    { l: `${first.n} ${first.st}`, v: first.hp, c: 'var(--enc)' },
     { l: `Menace /${schemes[0].th ?? '?'}`, v: schemes[0].bth ?? 0, c: 'var(--threat)' }
   ]
 
@@ -198,11 +275,16 @@ export function newGame(opt, L) {
   const hs = heroDef.bhs ?? 6
   for (let i = 0; i < hs; i++) drawCard(s, L, true)
 
-  const modular = MODULARS.find(m => m.id === opt.modular)?.name ?? opt.modular
+  const modular = MODULARS.find(m => m.id === opt.modular)?.name
   const scenario = villain.scenario ? ` (${villain.scenario})` : ''
-  log(s, `Partie : ${heroDef.n} (${opt.label}) contre ${villain.name}${scenario}, module ${modular}, ${opt.expert ? 'expert' : 'standard'}.`, true)
-  log(s, `Paquet : ${cardsIn(s, 'deck').length + hs} cartes · Rencontre : ${cardsIn(s, 'edeck').length} cartes · Némésis mis de côté.`)
+  log(s, `Partie : ${heroDef.n} (${opt.label}) contre ${villain.name}${scenario}${modular ? `, module ${modular}` : ''}, ${opt.expert ? 'expert' : 'standard'}.`, true)
   const start = `Vous commencez en alter ego (${heroDef.bn}) avec ${hs} cartes.`
+  if (s.crew) {
+    log(s, `Paquet : ${cardsIn(s, 'deck').length + hs} cartes · un paquet Rencontre de 15 cartes par méchant, ni obligation ni Némésis.`)
+    log(s, `${start} Les quatre méchants et leurs manigances annexes sont en jeu, jeton Actif sur « ${first.n} » : les piles Rencontre affichées sont les siennes. Retournez la manigance (F) pour passer au stade 1B.`, true)
+    return s
+  }
+  log(s, `Paquet : ${cardsIn(s, 'deck').length + hs} cartes · Rencontre : ${cardsIn(s, 'edeck').length} cartes · Némésis mis de côté.`)
   if (inPlay.length) {
     const cards = inPlay.map(c => `« ${nameOf(c)} »${c.tok ? ` avec ${plural(c.tok, 'jeton')}` : ''}`).join(', ')
     log(s, `${start} Mise en place de la manigance faite (${cards} en jeu) : retournez-la (F) pour passer au stade 1B.`, true)
@@ -261,20 +343,21 @@ export function drawMany(s, L, n) {
 }
 
 /* ---------- encounter deck ---------- */
+// with several villains, only the active villain's deck and discard (encounterPile)
 function refillEncounter(s) {
-  const discard = cardsIn(s, 'ediscard')
+  const discard = encounterPile(s, 'ediscard')
   if (!discard.length) return false
   discard.forEach(c => { c.zone = 'edeck'; c.faceUp = false; c.dmg = 0; c.thr = 0; c.tok = 0 })
   shuffleZone(s, 'edeck')
   s.accel += 1
-  log(s, `Paquet Rencontre épuisé : défausse remélangée. Jeton d'accélération : ${s.accel} (+1 menace par phase du méchant).`, true)
+  const whose = s.active ? ` de « ${activeName(s)} »` : ''
+  log(s, `Paquet Rencontre${whose} épuisé : défausse remélangée. Jeton d'accélération : ${s.accel} (+1 menace par phase du méchant).`, true)
   return true
 }
 
 function topEncounter(s) {
-  if (!cardsIn(s, 'edeck').length && !refillEncounter(s)) return null
-  const deck = cardsIn(s, 'edeck')
-  return deck[deck.length - 1]
+  if (!encounterPile(s, 'edeck').length && !refillEncounter(s)) return null
+  return encounterPile(s, 'edeck').at(-1)
 }
 
 export function revealEncounter(s, L) {
@@ -309,7 +392,21 @@ export function villainPhase(s, L) {
   const k = s.counters[2]
   k.v += add
   const why = x === null ? '' : `, dont X = ${x} ennemi${x > 1 ? 's' : ''} Bouffon`
-  log(s, `Phase du méchant : +${add} menace sur la manigance principale (${k.v}${why}). Le méchant active (en alter ego, il manigance).`, true)
+  let crew = ''
+  const full = []
+  if (s.crew) {
+    // Évasion, forced response after step one: 1 threat on each side scheme,
+    // then the Active token goes to the villain whose side scheme has the most threat
+    const sides = cardsIn(s, 'table').filter(c => def(c).t === 'side_scheme')
+    sides.forEach(c => { c.thr += 1 })
+    const next = mostThreatened(s)
+    if (next.set) { s.active = next.set; syncCrewCounter(s) }
+    crew = ` +1 menace sur chaque manigance annexe, jeton Actif sur « ${activeName(s)} »${next.tie ? TIE : ''}.`
+    full.push(...sides.filter(c => c.thr >= 10))
+  }
+  const who = s.crew ? `« ${activeName(s)} »` : 'Le méchant'
+  log(s, `Phase du méchant : +${add} menace sur la manigance principale (${k.v}${why}).${crew} ${who} active (en alter ego, il manigance).`, true)
+  for (const c of full) log(s, `« ${nameOf(c)} » a ${c.thr} menaces : appliquez sa Réponse forcée, puis retirez toutes ses menaces sauf 3.`, true)
   warnThreshold(s)
   revealEncounter(s, L)
 }
@@ -364,7 +461,7 @@ export function moveCard(s, c, zone, opts = {}, quiet = false) {
   // a new villain stage or main scheme entering play updates the counters
   if (zone === 'table' && from === 'aside') {
     const d = def(c)
-    if (d.t === 'villain') {
+    if (d.t === 'villain' && !s.crew) {
       Object.assign(s.counters[1], { v: d.hp, l: `${d.n} ${d.st}` })
       log(s, `Nouvelle étape du méchant : ${d.n} ${d.st}, ${d.hp} PV.`, true)
     }
@@ -378,6 +475,7 @@ export function moveCard(s, c, zone, opts = {}, quiet = false) {
     const where = zone === 'deck' || zone === 'edeck' ? `${opts.bottom ? 'sous le' : 'sur le'} ${ZONE_LABELS[zone]}` : `→ ${ZONE_LABELS[zone]}`
     log(s, `${name} : ${ZONE_LABELS[from]} ${where}.`)
   }
+  if (s.crew && from === 'table' && zone !== 'table' && def(c).t === 'villain') crewVillainGone(s, c)
 }
 
 export function playToTable(s, L, c, faceDown = false) {
@@ -452,7 +550,16 @@ export function flipCard(s, c) {
  */
 export function addDamage(s, c, n) {
   if (c && counterOf(c) !== 'dmg') return
-  if (!c || def(c).t === 'villain') {
+  if (s.crew && (!c || def(c).t === 'villain')) {
+    // several villains: each keeps its damage on its card, the counter shows the active one
+    const v = c ?? activeVillain(s)
+    if (!v) return
+    v.dmg = Math.max(0, v.dmg + n)
+    const left = Math.max(0, def(v).hp - v.dmg)
+    log(s, `${n > 0 ? 'Dégât' : 'Soin'} sur ${nameOf(v)} : ${left} PV.`)
+    if (n > 0 && left === 0) log(s, `« ${nameOf(v)} » est vaincu : défaussez-le, sa manigance annexe quitte la partie avec lui.`, true)
+    syncCrewCounter(s)
+  } else if (!c || def(c).t === 'villain') {
     const k = s.counters[1]
     k.v = Math.max(0, k.v - n)
     log(s, `${n > 0 ? 'Dégât' : 'Soin'} sur ${k.l} : ${k.v} PV.`)

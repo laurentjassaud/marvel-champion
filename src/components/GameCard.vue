@@ -39,9 +39,12 @@ const style = computed(() => {
   return st
 })
 const statuses = computed(() => STATUSES.filter(st => props.card[st.id]))
+// several villains (Les Démolisseurs): the one holding the Active token
+const active = computed(() => props.positioned && !!game.s?.active && def(props.card).t === 'villain' && def(props.card).s === game.s.active)
 const label = computed(() => {
   const name = token.value ? 'Pion' : showFace.value ? nameOf(props.card) : 'Carte face cachée'
-  return statuses.value.length ? `${name} (${statuses.value.map(st => st.label).join(', ')})` : name
+  const notes = [...(active.value ? ['actif'] : []), ...statuses.value.map(st => st.label)]
+  return notes.length ? `${name} (${notes.join(', ')})` : name
 })
 </script>
 
@@ -65,5 +68,6 @@ const label = computed(() => {
     <span v-if="card.dmg" class="mk dmg" title="Dégâts">{{ card.dmg }}</span>
     <span v-if="card.thr" class="mk thr" title="Menace">{{ card.thr }}</span>
     <span v-if="card.tok" class="mk tok" title="Jetons">{{ card.tok }}</span>
+    <span v-if="active" class="mk act" title="Jeton Actif">Actif</span>
   </div>
 </template>

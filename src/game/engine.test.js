@@ -43,6 +43,11 @@ describe('données', () => {
     const sizes = { risky_business: 24, mutagen_formula: 31, goblin_gimmicks: 8, a_mess_of_things: 5, power_drain: 5, running_interference: 5 }
     for (const [set, n] of Object.entries(sizes)) expect(qty(d => d.s === set), set).toBe(n)
   })
+
+  it('les sets des Démolisseurs ont le nombre de cartes imprimé', () => {
+    const sizes = { wrecking_crew: 1, wrecker: 18, thunderball: 18, piledriver: 18, bulldozer: 18 }
+    for (const [set, n] of Object.entries(sizes)) expect(qty(d => d.s === set), set).toBe(n)
+  })
 })
 
 describe('mise en place', () => {
@@ -249,6 +254,79 @@ describe('scénarios du Bouffon Vert', () => {
     E.moveCard(s, soldier, 'table', {}, true)
     E.villainPhase(s, L) // Le Bouffon Vert + Esclave Bouffon + Soldat Bouffon
     expect(s.counters[2].v).toBe(4 + 3)
+  })
+})
+
+describe('Les Démolisseurs', () => {
+  const crewGame = (over = {}) => game({ villain: 'wrecking_crew', modular: null, ...over })
+  const villains = s => E.cardsIn(s, 'table').filter(c => E.def(c).t === 'villain')
+  const villainOf = (s, set) => villains(s).find(c => E.def(c).s === set)
+  const sideOf = (s, set) => E.cardsIn(s, 'table').find(c => E.def(c).t === 'side_scheme' && E.def(c).s === set)
+
+  it('mise en place : 4 méchants A, leurs manigances annexes, un paquet de 15 cartes chacun', () => {
+    const s = crewGame()
+    expect(villains(s).map(c => `${E.nameOf(c)} ${E.def(c).st}`)).toEqual(['Le Démolisseur A', 'Le Boulet A', 'Le Compresseur A', 'Le Bulldozer A'])
+    expect(['wrecker', 'thunderball', 'piledriver', 'bulldozer'].map(set => sideOf(s, set).thr)).toEqual([6, 5, 3, 4])
+    expect(E.cardsIn(s, 'edeck')).toHaveLength(60)
+    expect(E.encounterPile(s, 'edeck')).toHaveLength(15)
+    expect(E.cardsIn(s, 'edeck').some(c => E.def(c).t === 'obligation')).toBe(false)
+    expect(E.cardsIn(s, 'aside')).toHaveLength(0) // ni Némésis
+    expect(s.active).toBe('wrecker')
+    expect(s.counters.map(k => k.v)).toEqual([10, 14, 0])
+    expect(s.counters.map(k => k.l).slice(1)).toEqual(['Le Démolisseur A', 'Menace /6'])
+  })
+
+  it('expert : les versions B', () => {
+    const s = crewGame({ expert: true })
+    expect(villains(s).map(c => E.def(c).st)).toEqual(['B', 'B', 'B', 'B'])
+    expect(s.counters[1].v).toBe(18)
+  })
+
+  it('phase du méchant : +1 menace par manigance annexe, le jeton Actif va au méchant le plus menaçant', () => {
+    const s = crewGame()
+    sideOf(s, 'thunderball').thr = 9
+    E.villainPhase(s, L)
+    expect(s.counters[2].v).toBe(1)
+    expect(sideOf(s, 'thunderball').thr).toBe(10)
+    expect(sideOf(s, 'wrecker').thr).toBe(7)
+    expect(s.active).toBe('thunderball')
+    expect(s.counters[1]).toMatchObject({ l: 'Le Boulet A', v: 13 })
+    // la carte révélée vient du paquet du Boulet
+    const revealed = E.cardsIn(s, 'table').at(-1)
+    expect(E.def(revealed).s).toBe('thunderball')
+    expect(s.log.some(e => e.msg.includes('« Envoyer Bouler » a 10 menaces'))).toBe(true)
+  })
+
+  it('dégâts : chaque méchant garde les siens, le compteur suit le méchant actif', () => {
+    const s = crewGame()
+    E.addDamage(s, villainOf(s, 'piledriver'), 2)
+    expect(villainOf(s, 'piledriver').dmg).toBe(2)
+    expect(s.counters[1].v).toBe(14)
+    E.addDamage(s, null, 3)
+    expect(villainOf(s, 'wrecker').dmg).toBe(3)
+    expect(s.counters[1].v).toBe(11)
+    E.setActive(s, 'piledriver')
+    expect(s.counters[1]).toMatchObject({ l: 'Le Compresseur A', v: 9 })
+  })
+
+  it('méchant vaincu : il part avec sa manigance, le jeton Actif passe, victoire après les quatre', () => {
+    const s = crewGame()
+    sideOf(s, 'bulldozer').thr = 8
+    E.moveCard(s, villainOf(s, 'wrecker'), 'discard')
+    expect(sideOf(s, 'wrecker')).toBeUndefined()
+    expect(s.active).toBe('bulldozer')
+    for (const c of villains(s)) E.moveCard(s, c, 'discard')
+    expect(s.log.at(-1).msg).toContain('vous gagnez la partie')
+  })
+
+  it('paquet du méchant actif vide : seule sa défausse est remélangée, +1 accélération', () => {
+    const s = crewGame()
+    E.encounterPile(s, 'edeck').forEach(c => E.moveCard(s, c, 'discard', {}, true))
+    expect(E.cardsIn(s, 'edeck')).toHaveLength(45)
+    E.revealEncounter(s, L)
+    expect(s.accel).toBe(1)
+    expect(E.encounterPile(s, 'edeck')).toHaveLength(14)
+    expect(E.cardsIn(s, 'edeck')).toHaveLength(59)
   })
 })
 

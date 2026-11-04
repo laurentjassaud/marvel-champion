@@ -27,6 +27,8 @@ export const useGameStore = defineStore('game', () => {
 
   const ready = computed(() => !!s.value?.cards?.length)
   const zone = z => (s.value ? E.cardsIn(s.value, z) : [])
+  // a pile as shown: with several villains, the encounter piles are the active villain's
+  const pile = z => (s.value && (z === 'edeck' || z === 'ediscard') ? E.encounterPile(s.value, z) : zone(z))
   const card = id => (s.value && id ? E.byId(s.value, id) : null)
   const pback = computed(() => s.value?.opt?.pback || 'blue')
   const subtitle = computed(() => {
@@ -53,7 +55,7 @@ export const useGameStore = defineStore('game', () => {
   }
 
   return {
-    s, ready, zone, card, pback, subtitle,
+    s, ready, zone, pile, card, pback, subtitle,
     newGame, defaultGame,
     precon: hero => PRECONS[hero],
     parseO8D: E.parseO8D,
@@ -82,9 +84,14 @@ export const useGameStore = defineStore('game', () => {
     damage: (id, n) => run(E.addDamage, card(id), n),
     threat: (id, n) => run(E.addThreat, card(id), n),
     tokens: (id, n) => run(E.addTokens, card(id), n),
+    setActive: set => run(E.setActive, set),
     untapPlayer: () => { zone('table').filter(c => !E.isEnc(c)).forEach(c => { c.tapped = false }) },
 
-    counterAdd(i, n) { const k = s.value.counters[i]; k.v += n; E.log(s.value, `${k.l} : ${k.v}.`) },
+    counterAdd(i, n) {
+      // several villains: the villain counter mirrors the active villain, so + / − heal or damage it
+      if (i === 1 && s.value.crew) return run(E.addDamage, null, -n)
+      const k = s.value.counters[i]; k.v += n; E.log(s.value, `${k.l} : ${k.v}.`)
+    },
     counterLabel(i, l) { if (l) s.value.counters[i].l = l }
   }
 })

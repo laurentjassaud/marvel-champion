@@ -13,7 +13,7 @@ const props = defineProps({
 
 const game = useGameStore()
 const { activateZone } = useZoneActions()
-const cards = computed(() => game.zone(props.zone))
+const cards = computed(() => game.pile(props.zone))
 const top = computed(() => cards.value.at(-1))
 // draw piles and the set-aside pile keep their top card hidden
 const showFace = computed(() => !['deck', 'edeck', 'aside'].includes(props.zone) && !!top.value?.faceUp)

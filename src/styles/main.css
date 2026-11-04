@@ -107,6 +107,8 @@ input, textarea { -webkit-user-select: text; user-select: text; } /* iOS would n
 .card .mk.dmg { background: #b8402f; }
 .card .mk.thr { background: #6a4bb0; right: auto; left: -7px; }
 .card .mk.tok { background: #56677a; top: auto; bottom: -7px; }
+/* Active token of Les Démolisseurs, centred under the villain */
+.card .mk.act { background: var(--brass); color: var(--brass-ink); top: auto; bottom: -9px; right: auto; left: 50%; transform: translateX(-50%); font-family: var(--f-display); font-weight: 700; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
 /* status cards (stunned, confused, tough) stacked over the card art, they can combine */
 .card .status { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: calc(var(--w) * .02); pointer-events: none; }
 .card .status img { width: calc(var(--w) * 1.04); height: auto; flex: none; filter: drop-shadow(0 2px 3px rgb(0 0 0 / .6)); }

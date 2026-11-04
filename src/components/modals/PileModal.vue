@@ -20,7 +20,7 @@ const HELP = {
   aside: 'Étapes suivantes du méchant et de la manigance, set Némésis. Clic : mettre en jeu (les compteurs se mettent à jour).'
 }
 
-const cards = computed(() => game.zone(props.zone).slice().reverse())
+const cards = computed(() => game.pile(props.zone).slice().reverse())
 const title = computed(() => `${TITLES[props.zone]} · ${cards.value.length}`)
 
 function menu(c, e) {

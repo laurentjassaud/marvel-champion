@@ -48,6 +48,10 @@ export function useCardMenu() {
           ...counter,
           null
         )
+        // several villains (Les Démolisseurs): hand the Active token to another one
+        if (game.s.crew && def(c).t === 'villain' && def(c).s !== game.s.active) {
+          items.push(item('Rendre actif (jeton Actif)', () => game.setActive(def(c).s)), null)
+        }
         if (c.faceUp && isCharacter(c)) {
           items.push(...STATUSES.map(st => check(st.label, !!c[st.id], () => game.status(id, st.id))), null)
         }

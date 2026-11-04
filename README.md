@@ -1,6 +1,6 @@
 # Table Marvel Champions
 
-Table solo pour **Marvel Champions** (boîte de base et paquet de scénarios *Le Bouffon Vert*, version française), en Vue 3.
+Table solo pour **Marvel Champions** (boîte de base, paquets de scénarios *Le Bouffon Vert* et *Les Démolisseurs*, version française), en Vue 3.
 Mise en place automatique, decks préconstruits officiels, import de decks OCTGN `.o8d`, installable en PWA.
 
 ## Démarrer
@@ -46,10 +46,12 @@ src/
   data/
     cards.json         boîte de base, 198 cartes (GUID OCTGN, nom FR, type, set, quantité, PV, menace, taille de main…)
     bouffon-vert.json  paquet Le Bouffon Vert, 49 cartes saisies depuis les cartes imprimées (id gob-<numéro>)
+    demolisseurs.json  paquet Les Démolisseurs, 59 cartes saisies depuis les cartes imprimées (id dem-<numéro>)
     precons.json       les 5 decks préconstruits (40 cartes)
 public/
   cards/base/          209 images de la boîte de base (GUID.jpg, GUID.b.jpg pour les versos)
   cards/bouffon vert/  57 images du paquet Le Bouffon Vert (gob-NN.jpg, gob-NN.b.jpg pour les versos)
+  cards/demolisseurs/  60 images du paquet Les Démolisseurs (dem-NN.jpg, dem-01.b.jpg pour Évasion 1B)
   backs/               dos bleu, violet (joueur) et orange (Rencontre)
   status/              cartes de statut posées sur les personnages (sonné, désorienté, tenace)
   icons/               icônes PWA
@@ -83,6 +85,12 @@ L'ordre du tableau `cards` est l'ordre des piles : le dessus d'une pile est sa d
 - Le Bouffon Vert, deux scénarios et quatre sets modulaires (Gadgets du Bouffon, Un Immense Gâchis, Absorption Électrique, Ingérence en Cours) :
   - *Entreprise à Risques* : l'environnement Entreprise Criminelle est mis en jeu avec 2 jetons Infamie. Retourner Norman Osborn (F) le change en Le Bouffon Vert et renomme le compteur de PV ; Entreprise Criminelle se retourne en Accès de Folie.
   - *Formule Mutagène* : un Esclave Bouffon est mis en jeu engagé avec vous. Sur Nuage Mutagène, l'accélération +X compte les ennemis Bouffon en jeu, Le Bouffon Vert compris.
+- Les Démolisseurs (quatre méchants à la fois, sans set modulaire, Standard, obligation ni Némésis) :
+  - Mise en place : les quatre méchants (versions A, ou B en expert) et leurs manigances annexes avec leur menace de départ, un paquet Rencontre de 15 cartes par méchant, jeton Actif sur Le Démolisseur.
+  - Les piles Rencontre affichées (paquet, défausse, révélation, boost, recherche) sont celles du méchant actif, signalé par un badge « Actif » ; clic droit sur un autre méchant → Rendre actif.
+  - Phase du méchant (Évasion) : +1 menace sur chaque manigance annexe puis jeton Actif au méchant dont la manigance a le plus de menaces ; alerte à 10 menaces.
+  - Chaque méchant garde ses dégâts sur sa carte, le compteur de PV suit le méchant actif. Un méchant défaussé emporte sa manigance annexe (mise de côté) et passe le jeton Actif ; victoire quand les quatre sont tombés.
+  - Paquet du méchant actif vide : seule sa défausse est remélangée, +1 jeton d'accélération.
 
 Les effets des cartes eux-mêmes restent à appliquer à la main.
 
