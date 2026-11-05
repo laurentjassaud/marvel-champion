@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import * as E from '../game/engine.js'
-import { PRECONS, HEROES, VILLAINS, BY_ID, ZONE_LABELS } from '../game/data.js'
+import { PRECONS, VILLAINS, BY_ID, ZONE_LABELS, addDefs, heroName } from '../game/data.js'
 import { useUiStore } from './ui.js'
 
 const KEY = 'mc-table-vue-v1'
@@ -9,7 +9,9 @@ const KEY = 'mc-table-vue-v1'
 function load() {
   try {
     const s = JSON.parse(localStorage.getItem(KEY))
-    return s?.cards?.length && s.counters?.length === 3 ? s : null
+    if (!(s?.cards?.length && s.counters?.length === 3)) return null
+    addDefs(s.opt?.defs) // cards read from MarvelCDB with an imported deck
+    return s
   } catch { return null }
 }
 
@@ -38,9 +40,9 @@ export const useGameStore = defineStore('game', () => {
   const subtitle = computed(() => {
     const o = s.value?.opt
     if (!o) return 'Table solo'
-    const h = HEROES.find(x => x.id === o.hero)
     const v = VILLAINS.find(x => x.id === o.villain)
-    return `${h?.name ?? ''} contre ${v?.name ?? ''}${o.expert ? ' · expert' : ''}`
+    // a difficulty drawn at random is not named
+    return `${heroName(o.hero)} contre ${v?.name ?? ''}${o.expert && !o.drawn?.includes('expert') ? ' · expert' : ''}`
   })
 
   // run an engine function with the state and the current layout
@@ -61,7 +63,7 @@ export const useGameStore = defineStore('game', () => {
    */
   function restart() {
     const o = s.value.opt
-    newGame({ hero: o.hero, list: o.list ?? PRECONS[o.hero], villain: o.villain, modular: o.modular, expert: o.expert, label: o.label, drawn: o.drawn })
+    newGame({ hero: o.hero, list: o.list ?? PRECONS[o.hero], villain: o.villain, modular: o.modular, expert: o.expert, label: o.label, drawn: o.drawn, defs: o.defs })
     s.value.log.unshift({ t: s.value.log[0].t, msg: 'Partie recommencée avec la même mise en place.', sys: true })
   }
   // a villain defeated: its next stage (or the victory) is presented in a window

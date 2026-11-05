@@ -2,8 +2,9 @@
 import { reactive, ref, computed, watch, nextTick, onMounted } from 'vue'
 import BaseModal from './BaseModal.vue'
 import ChoiceOption from './ChoiceOption.vue'
-import { HEROES, VILLAINS, MODULARS, DEFS, BY_ID } from '../../game/data.js'
+import { HEROES, VILLAINS, MODULARS, DEFS, BY_ID, heroName } from '../../game/data.js'
 import { imageById } from '../../composables/useAssets.js'
+import { fetchCdbDeck } from '../../game/marvelcdb.js'
 import { useGameStore } from '../../stores/game.js'
 import { useUiStore } from '../../stores/ui.js'
 
@@ -19,7 +20,7 @@ const form = reactive({
   modular: prev.drawn?.includes('modular') ? 'random' : prev.modular ?? 'bomb_scare',
   diff: prev.drawn?.includes('expert') ? 'random' : prev.expert ? 'exp' : 'std'
 })
-const imported = ref(null) // {list, hero, label, n, unknown, missing}
+const imported = ref(null) // {list, hero, label, n, online, unknown, missing}
 const error = ref('')
 
 const heroImage = id => imageById(DEFS.find(d => d.t === 'hero' && d.s === id).id)
@@ -32,28 +33,56 @@ const hero = computed(() => (custom.value ? imported.value.hero : form.deck))
 const deckName = computed(() => (custom.value ? imported.value.label : `Préconstruit ${heroOf(hero.value).aspect}`))
 const importNote = computed(() => {
   const d = imported.value
-  if (!d?.unknown) return `${d.label} : ${d.n} cartes.`
-  const names = d.missing.slice(0, 4).join(', ') + (d.missing.length > 4 ? '…' : '')
-  return `${d.label} : ${d.n} cartes, ${d.unknown} inconnue${d.unknown > 1 ? 's' : ''} ignorée${d.unknown > 1 ? 's' : ''}${names ? ` : ${names}` : ''}.`
+  const parts = [`${d.n} cartes`]
+  if (d.online) parts.push(`dont ${d.online} lue${d.online > 1 ? 's' : ''} sur MarvelCDB (images du site, en anglais)`)
+  if (d.unknown) {
+    const names = d.missing.slice(0, 4).join(', ') + (d.missing.length > 4 ? '…' : '')
+    parts.push(`${d.unknown} inconnue${d.unknown > 1 ? 's' : ''} ignorée${d.unknown > 1 ? 's' : ''}${names ? ` : ${names}` : ''}`)
+  }
+  return `${d.label} : ${parts.join(', ')}.`
 })
 
 // each villain comes with its advised modular set, unless the set is drawn at random
 watch(() => form.villain, v => { if (form.modular !== 'random') form.modular = VILLAINS.find(x => x.id === v).modular })
 
-// OCTGN .o8d or MarvelCDB text export (.txt); a failed import keeps the previous deck
+// a parsed deck becomes the custom deck; a failed import keeps the previous one
+function keep({ list, hero: id, unknown, missing, title, heroName }, name) {
+  if (!id) {
+    error.value = heroName
+      ? `Deck de ${heroName} : ce héros n'est pas encore disponible sur la table.`
+      : 'Aucune identité reconnue dans ce deck. Choisis un fichier .o8d OCTGN (héros de la boîte de base) ou un export texte MarvelCDB (.txt) d\'un des héros disponibles.'
+    return false
+  }
+  const count = keep => list.reduce((t, [g, q]) => t + (!['hero', 'obligation'].includes(BY_ID[g].t) && keep(BY_ID[g]) ? q : 0), 0)
+  const n = count(() => true)
+  const online = count(d => d.pack === 'marvelcdb') // cards read from MarvelCDB, with the site's images
+  imported.value = { list, hero: id, label: title || name, n, online, unknown, missing }
+  form.deck = 'import'
+  error.value = ''
+  return true
+}
+
+// OCTGN .o8d or MarvelCDB text export (.txt)
 async function importDeck(e) {
   const file = e.target.files[0]
   e.target.value = '' // the same file can be picked again after a fix
-  if (!file) return
-  const { list, hero: id, unknown, missing, title } = game.parseDeck(await file.text())
-  if (!id) {
-    error.value = 'Aucune identité reconnue dans ce deck. Choisis un fichier .o8d OCTGN (héros de la boîte de base) ou un export texte MarvelCDB (.txt) d\'un des héros disponibles.'
-    return
-  }
-  const n = list.reduce((t, [g, q]) => t + (['hero', 'obligation'].includes(BY_ID[g].t) ? 0 : q), 0)
-  imported.value = { list, hero: id, label: title || file.name.replace(/\.[^.]+$/, ''), n, unknown, missing }
-  form.deck = 'import'
+  if (file) keep(game.parseDeck(await file.text()), file.name.replace(/\.[^.]+$/, ''))
+}
+
+// a MarvelCDB deck by its link or number, read from the site's public API
+const cdbLink = ref('')
+const loading = ref(false)
+async function importCdb() {
+  if (loading.value || !cdbLink.value.trim()) return
+  loading.value = true
   error.value = ''
+  try {
+    if (keep(await fetchCdbDeck(cdbLink.value), 'Deck MarvelCDB')) cdbLink.value = ''
+  } catch (err) {
+    error.value = err.message
+  } finally {
+    loading.value = false
+  }
 }
 
 function start() {
@@ -90,19 +119,27 @@ watch(step, async () => {
 
     <div v-if="step === 1" ref="screen" class="screen">
       <p>Choisissez votre héros avec son paquet préconstruit officiel de 40 cartes, ou importez un deck personnalisé
-        (fichier .o8d d'OCTGN ou export texte de MarvelCDB).</p>
+        (fichier .o8d d'OCTGN, export texte de MarvelCDB, ou lien d'un deck MarvelCDB). Par lien, un héros ou des cartes
+        absents de la table sont lus sur MarvelCDB, avec les images du site (en anglais).</p>
       <div class="heroes" role="radiogroup" aria-label="Héros et paquet">
         <ChoiceOption v-for="h in HEROES" :key="h.id" v-model="form.deck" name="deck" :value="h.id" :label="h.name"
           :sub="`Préconstruit ${h.aspect}`" :image="heroImage(h.id)" />
         <!-- custom deck: an import button until a deck is imported, then a choice like the others -->
         <ChoiceOption v-if="imported" v-model="form.deck" name="deck" value="import" :label="imported.label"
-          :sub="`Deck personnalisé · ${heroOf(imported.hero).name}`" :image="heroImage(imported.hero)" />
+          :sub="`Deck personnalisé · ${heroName(imported.hero)}`" :image="heroImage(imported.hero)" />
         <label v-else class="custom">
           <input type="file" accept=".o8d,.xml,.txt" aria-label="Importer un deck personnalisé" @change="importDeck">
           <span class="plus" aria-hidden="true">+</span>
           <span class="txt">Deck personnalisé<small>Importer un .o8d ou un .txt MarvelCDB</small></span>
         </label>
       </div>
+      <form class="cdb" :aria-busy="loading" @submit.prevent="importCdb">
+        <label class="lab" for="cdb-link">Depuis MarvelCDB</label>
+        <input id="cdb-link" v-model="cdbLink" type="text" inputmode="url" enterkeyhint="go" autocomplete="off"
+          autocapitalize="off" spellcheck="false" placeholder="Lien du deck ou numéro de decklist">
+        <button type="submit" class="btn" :disabled="loading || !cdbLink.trim()">{{ loading ? 'Import…' : 'Importer'
+        }}</button>
+      </form>
       <div v-if="imported" class="row">
         <span class="note">{{ importNote }}</span>
         <label class="btn file-btn">Importer un autre deck…<input type="file" accept=".o8d,.xml,.txt"
@@ -114,7 +151,7 @@ watch(step, async () => {
     <div v-else ref="screen" class="screen">
       <button type="button" class="recap" title="Changer de héros" @click="step = 1">
         <img :src="heroImage(hero)" alt="">
-        <span class="txt">{{ heroOf(hero).name }}<small>{{ deckName }}</small></span>
+        <span class="txt">{{ heroName(hero) }}<small>{{ deckName }}</small></span>
         <span class="change">Changer</span>
       </button>
 
@@ -258,6 +295,47 @@ watch(step, async () => {
 @media (hover: hover) and (pointer: fine) {
   .custom:hover {
     border-color: var(--brass);
+  }
+}
+
+.cdb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.cdb .lab {
+  font-family: var(--f-display);
+  font-size: 13px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.cdb input {
+  flex: 1 1 240px;
+  min-width: 0;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+
+.cdb input::placeholder {
+  color: var(--muted);
+}
+
+.cdb input:focus-visible {
+  outline: 2px solid var(--brass);
+  outline-offset: 1px;
+}
+
+/* under 16px, iOS zooms the page when the field gets the focus */
+@media (pointer: coarse) {
+  .cdb input {
+    font-size: 16px;
+    min-height: 36px;
   }
 }
 

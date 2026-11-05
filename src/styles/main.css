@@ -108,6 +108,7 @@ input, textarea { -webkit-user-select: text; user-select: text; } /* iOS would n
 /* card of the hand picked at random (after .sel: it wins when both apply) */
 .card.rand { outline: 3px solid #e5483a; outline-offset: 2px; box-shadow: 0 0 0 5px rgb(229 72 58 / .25), 0 2px 6px rgb(0 0 0 / .5); }
 .card .face, .card .back { position: absolute; inset: 0; border-radius: inherit; background: #0d1015 center / cover no-repeat; }
+.card .face.plain { display: grid; place-items: center; padding: 8%; border: 1px solid var(--line); text-align: center; font-family: var(--f-display); font-size: calc(var(--w) * .13); line-height: 1.1; overflow: hidden; }
 .card .mk { position: absolute; right: -7px; top: -7px; min-width: 22px; height: 22px; padding: 0 5px; border-radius: 11px; font-family: var(--f-mono); font-size: 12px; display: grid; place-items: center; box-shadow: 0 1px 3px rgb(0 0 0 / .6); color: #fff; }
 .card .mk.dmg { background: #b8402f; }
 .card .mk.thr { background: #6a4bb0; right: auto; left: -7px; }

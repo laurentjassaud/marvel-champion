@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { existsSync } from 'node:fs'
 import * as E from './engine.js'
-import { DEFS, PRECONS, HEROES, BY_ID, MODULARS, VICTORY } from './data.js'
+import { DEFS, PRECONS, HEROES, BY_ID, BY_CODE, MODULARS, VICTORY } from './data.js'
 
 const L = { w: 1100, h: 580, cw: 80 }
 
@@ -187,13 +187,18 @@ describe('mise en place', () => {
     expect(other.tough).toBeFalsy()
   })
 
-  it('set modulaire et difficulté au hasard : tirés à la mise en place et annoncés', () => {
+  it('set modulaire et difficulté au hasard : tirés à la mise en place, jamais nommés', () => {
     const s = game({ modular: 'random', expert: 'random' })
     expect(MODULARS.map(m => m.id)).toContain(s.opt.modular)
     expect(typeof s.opt.expert).toBe('boolean')
     expect(s.opt.drawn).toEqual(['modular', 'expert'])
     expect(E.cardsIn(s, 'edeck').some(c => E.def(c).s === s.opt.modular)).toBe(true)
-    expect(s.log.some(e => e.msg.startsWith('Tiré au hasard : module '))).toBe(true)
+    const text = s.log.map(e => e.msg).join(' ')
+    expect(text).toContain('module tiré au hasard, difficulté tirée au hasard')
+    expect(text).not.toMatch(new RegExp(`${MODULARS.find(m => m.id === s.opt.modular).name}|expert|standard`, 'i'))
+    // a choice made by hand is named
+    expect(E.setupText({ modular: 'bomb_scare', expert: true, drawn: ['modular'] })).toBe(', module tiré au hasard, expert')
+    expect(E.setupText({ modular: 'bomb_scare', expert: false, drawn: [] })).toBe(', module Alerte à la Bombe, standard')
     // several draws do not always give the same set
     const sets = new Set(Array.from({ length: 12 }, () => game({ modular: 'random' }).opt.modular))
     expect(sets.size).toBeGreaterThan(1)
@@ -338,6 +343,8 @@ describe('main et partie', () => {
     const again = E.newGame({ hero: o.hero, list: o.list, villain: o.villain, modular: o.modular, expert: o.expert, label: o.label, drawn: o.drawn }, L)
     expect(again.opt).toEqual(o)
     expect(again).toMatchObject({ turn: 1, phase: 'hero', mull: false })
+    // replayed, what was drawn at random is still not named
+    expect(again.log[0].msg).toMatch(/module tiré au hasard, difficulté tirée au hasard\.$/)
     expect(E.cardsIn(again, 'deck').length + E.cardsIn(again, 'hand').length).toBe(E.cardsIn(s, 'deck').length + E.cardsIn(s, 'hand').length + E.cardsIn(s, 'discard').length)
   })
 })
@@ -679,5 +686,33 @@ Allies
 
   it('sans héros connu : pas d\'identité', () => {
     expect(E.parseDeck('Deck\n\nAnt-Man\nPacks: Ant-Man\n\n1x Energy (Core Set)').hero).toBeNull()
+  })
+})
+
+describe('deck MarvelCDB (API)', () => {
+  it('chaque carte a son propre code MarvelCDB : numéro de boîte, numéro de carte, face', () => {
+    const local = DEFS.filter(d => d.pack !== 'marvelcdb')
+    expect(Object.values(BY_CODE).filter(d => d.pack !== 'marvelcdb')).toHaveLength(local.length)
+    expect(BY_CODE['01043a'].n).toBe('Wakanda Éternel !')
+    expect(BY_CODE['08001a']).toMatchObject({ t: 'hero', s: 'black_widow' })
+    expect(BY_CODE['08012'].n).toBe('Quake')
+    expect(BY_CODE['07014']).toMatchObject({ s: 'wrecker', q: 2 })
+  })
+
+  it('lit le héros, le nom et les cartes ; une réimpression passe par sa carte d\'origine ; les inconnues sont listées', () => {
+    const r = E.parseCdbDeck(
+      { name: 'Natasha', hero_code: '08001a', hero_name: 'Black Widow', slots: { '08002': 1, '08012': 1, 12019: 2, '01088': 1, 99001: 3, '08025': 1 } },
+      { 12019: { code: '12019', name: 'Premiers Soins', duplicate_of_code: '01086' }, 99001: { code: '99001', name: 'Carte Future' } }
+    )
+    expect(r).toMatchObject({ hero: 'black_widow', title: 'Natasha', unknown: 3, missing: ['Carte Future'] })
+    // the identity first, its obligation (08025) left to the setup
+    expect(BY_ID[r.list[0][0]].t).toBe('hero')
+    expect(r.list.slice(1).map(([id, q]) => `${q}x ${BY_ID[id].n}`).sort()).toEqual(['1x Le Soldat de l\'Hiver', '1x Quake', '1x Énergie', '2x Premiers Soins'])
+    const s = game({ hero: r.hero, list: r.list })
+    expect(E.cardsIn(s, 'deck').length + E.cardsIn(s, 'hand').length).toBe(5)
+  })
+
+  it('héros absent de la table : pas d\'identité', () => {
+    expect(E.parseCdbDeck({ name: 'Q', hero_code: '14001a', slots: { '01088': 1 } }).hero).toBeNull()
   })
 })

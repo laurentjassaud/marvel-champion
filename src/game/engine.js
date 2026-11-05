@@ -6,7 +6,8 @@
 //   cards: Card[]            // array order = pile order; the top of a pile is its last card
 //   log: {t, msg, sys}[]
 //   counters: [{l, v, c}]    // 0: hero HP, 1: villain HP, 2: main scheme threat ("Menace /7")
-//   opt: {hero, list, villain, modular, expert, label, drawn: ('modular' | 'expert')[] picked at random}
+//   opt: {hero, list, villain, modular, expert, label, drawn: ('modular' | 'expert')[] picked at random,
+//         defs?: card definitions read from MarvelCDB (data.js addDefs)}
 //   turn: number             // round, from 1
 //   phase: 'hero' | 'villain' // the game starts in the hero phase
 //   accel: number            // acceleration tokens
@@ -22,7 +23,7 @@
 //
 // Layout `L` = {w, h, cw}: table size and table card width in px, used to place cards.
 
-import { DEFS, BY_ID, PACKS, HEROES, VILLAINS, MODULARS, TYPE_LABELS, ZONE_LABELS, TOKEN_COLORS, STATUSES, CHARACTER_TYPES, SCHEME_TYPES } from './data.js'
+import { DEFS, BY_ID, BY_CODE, addDefs, PACKS, HEROES, VILLAINS, MODULARS, TYPE_LABELS, ZONE_LABELS, TOKEN_COLORS, STATUSES, CHARACTER_TYPES, SCHEME_TYPES } from './data.js'
 
 let random = Math.random
 /** Replace the random source (tests use a seeded generator). */
@@ -190,11 +191,23 @@ export function clampAll(s, L) {
 const byStage = (a, b) => a.st.length - b.st.length || a.st.localeCompare(b.st)
 
 /**
- * Build a new game. `modular` and `expert` can be 'random': drawn here and announced in the log.
+ * ", module Alerte à la Bombe, standard" for a game's setup (opt). A modular set or a difficulty
+ * drawn at random stays a surprise: it is never named (log, title bar, restart window).
+ */
+export function setupText(o) {
+  const hidden = o.drawn ?? []
+  const modular = MODULARS.find(m => m.id === o.modular)?.name
+  const mod = !modular ? '' : hidden.includes('modular') ? ', module tiré au hasard' : `, module ${modular}`
+  return `${mod}, ${hidden.includes('expert') ? 'difficulté tirée au hasard' : o.expert ? 'expert' : 'standard'}`
+}
+
+/**
+ * Build a new game. `modular` and `expert` can be 'random': drawn here, kept secret (setupText).
  * @param {{hero, list: [gid, qty][], villain, modular, expert, label}} opt
  * @param {{w, h, cw}} L
  */
 export function newGame(opt, L) {
+  addDefs(opt.defs) // cards read from MarvelCDB with an imported deck
   const heroDef = DEFS.find(d => d.t === 'hero' && d.s === opt.hero)
   const villain = VILLAINS.find(v => v.id === opt.villain)
   if (!heroDef) throw new Error(`Héros inconnu : ${opt.hero}`)
@@ -288,15 +301,16 @@ export function newGame(opt, L) {
   shuffleZone(s, 'deck')
   shuffleZone(s, 'edeck')
   shuffleZone(s, 'ideck')
+  // the cards read from MarvelCDB stay with the game: a reload or a restart adds them again
+  const online = [...new Set(s.cards.map(c => c.g))].map(g => BY_ID[g]).filter(d => d?.pack === 'marvelcdb')
+  if (online.length) s.opt.defs = online.map(({ pack, dir, ...d }) => d)
+
   const hs = heroDef.bhs ?? 6
   for (let i = 0; i < hs; i++) drawCard(s, L, true)
   const fetched = heroSetup(s)
 
-  const modular = MODULARS.find(m => m.id === opt.modular)?.name
   const scenario = villain.scenario ? ` (${villain.scenario})` : ''
-  log(s, `Partie : ${heroDef.n} (${opt.label}) contre ${villain.name}${scenario}${modular ? `, module ${modular}` : ''}, ${opt.expert ? 'expert' : 'standard'}.`, true)
-  const luck = { modular: `module ${modular}`, expert: `difficulté ${opt.expert ? 'expert' : 'standard'}` }
-  if (drawn.length) log(s, `Tiré au hasard : ${drawn.map(k => luck[k]).join(', ')}.`, true)
+  log(s, `Partie : ${heroDef.n} (${opt.label}) contre ${villain.name}${scenario}${setupText(s.opt)}.`, true)
   const invocations = cardsIn(s, 'ideck').length
   if (invocations) log(s, `Deck Invocation : ${invocations} cartes mélangées, celle du dessus est visible. Clic sur le deck (ou I) : la lancer.`)
   const start = `Vous commencez en alter ego (${heroDef.bn}) avec ${hs} cartes${fetched ? `, plus « ${nameOf(fetched)} » (mise en place de ${heroDef.bn})` : ''}.`
@@ -362,6 +376,28 @@ export function parseDeckText(text) {
     list.push([d.id, Number(qty)])
   }
   return { list, hero: heroDef?.s ?? null, unknown, missing, title: lines[0] !== heroDef?.en ? lines[0] : null }
+}
+
+/**
+ * Deck from the MarvelCDB API: {name, hero_code, slots: {card code: copies}}. Codes are matched
+ * against the packs (BY_CODE); a reprint coded in another pack is matched through the card it
+ * duplicates. `cards` holds what the API said of the codes not found: {code: {name, duplicate_of_code}}.
+ * Returns {list, hero, unknown, missing, title}, like parseDeckText.
+ */
+export function parseCdbDeck(deck, cards = {}) {
+  const known = code => BY_CODE[code] ?? BY_CODE[cards[code]?.duplicate_of_code]
+  const heroDef = known(deck?.hero_code)
+  const hero = heroDef?.t === 'hero' ? heroDef : null
+  const list = hero ? [[hero.id, 1]] : []
+  const missing = []
+  let unknown = 0
+  for (const [code, n] of Object.entries(deck?.slots ?? {})) {
+    const d = known(code)
+    if (!d) { unknown += Number(n); missing.push(cards[code]?.name ?? code); continue }
+    if (d.t === 'hero' || d.f === 'encounter') continue // the identity is listed already, its obligation and nemesis come with it
+    list.push([d.id, Number(n)])
+  }
+  return { list, hero: hero?.s ?? null, unknown, missing, title: deck?.name || null }
 }
 
 /** Deck file of either format: OCTGN .o8d (XML) or MarvelCDB text. */

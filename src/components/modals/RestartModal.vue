@@ -1,19 +1,19 @@
 <script setup>
 import { computed } from 'vue'
 import BaseModal from './BaseModal.vue'
-import { MODULARS } from '../../game/data.js'
+import { VILLAINS, heroName } from '../../game/data.js'
+import { setupText } from '../../game/engine.js'
 import { useGameStore } from '../../stores/game.js'
 import { useUiStore } from '../../stores/ui.js'
 
 const game = useGameStore()
 const ui = useUiStore()
 
-// "Black Widow (précon Justice) contre Rhino, module Alerte à la Bombe, standard"
+// "Black Widow (précon Justice) contre Rhino, module Alerte à la Bombe, standard"; what was drawn at
+// random stays unnamed
 const setup = computed(() => {
   const o = game.s.opt
-  const modular = MODULARS.find(m => m.id === o.modular)?.name
-  const [hero, villain] = game.subtitle.replace(' · expert', '').split(' contre ')
-  return `${hero} (${o.label}) contre ${villain}${modular ? `, module ${modular}` : ''}, ${o.expert ? 'expert' : 'standard'}`
+  return `${heroName(o.hero)} (${o.label}) contre ${VILLAINS.find(v => v.id === o.villain)?.name ?? ''}${setupText(o)}`
 })
 
 function restart() {

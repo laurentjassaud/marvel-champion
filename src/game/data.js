@@ -20,17 +20,20 @@ import MS_MARVEL from '../data/miss-marvel.json'
 import THOR from '../data/thor.json'
 import CORE_PRECONS from '../data/precons.json'
 
-/** `cdb`: the pack name MarvelCDB writes in brackets after each card of a text deck list. */
+/**
+ * `cdb`: the pack name MarvelCDB writes in brackets after each card of a text deck list.
+ * `num`: the pack number that starts MarvelCDB card codes ("08" + card 1 side A = "08001a").
+ */
 export const PACKS = [
-  { id: 'core', name: 'Boîte de base', cdb: 'Core Set', dir: 'base', cards: CORE },
-  { id: 'green_goblin', name: 'Le Bouffon Vert', cdb: 'The Green Goblin', dir: 'bouffon vert', cards: GREEN_GOBLIN },
-  { id: 'wrecking_crew', name: 'Les Démolisseurs', cdb: 'The Wrecking Crew', dir: 'demolisseurs', cards: WRECKING_CREW },
-  { id: 'black_widow', name: 'Black Widow', cdb: 'Black Widow', dir: 'black widow', cards: BLACK_WIDOW },
-  { id: 'doctor_strange', name: 'Docteur Strange', cdb: 'Doctor Strange', dir: 'docteur strange', cards: DOCTOR_STRANGE },
-  { id: 'captain_america', name: 'Captain America', cdb: 'Captain America', dir: 'captain america', cards: CAPTAIN_AMERICA },
-  { id: 'hulk', name: 'Hulk', cdb: 'Hulk', dir: 'hulk', cards: HULK },
-  { id: 'ms_marvel', name: 'Miss Marvel', cdb: 'Ms. Marvel', dir: 'miss marvel', cards: MS_MARVEL },
-  { id: 'thor', name: 'Thor', cdb: 'Thor', dir: 'thor', cards: THOR }
+  { id: 'core', name: 'Boîte de base', cdb: 'Core Set', num: '01', dir: 'base', cards: CORE },
+  { id: 'green_goblin', name: 'Le Bouffon Vert', cdb: 'The Green Goblin', num: '02', dir: 'bouffon vert', cards: GREEN_GOBLIN },
+  { id: 'wrecking_crew', name: 'Les Démolisseurs', cdb: 'The Wrecking Crew', num: '07', dir: 'demolisseurs', cards: WRECKING_CREW },
+  { id: 'black_widow', name: 'Black Widow', cdb: 'Black Widow', num: '08', dir: 'black widow', cards: BLACK_WIDOW },
+  { id: 'doctor_strange', name: 'Docteur Strange', cdb: 'Doctor Strange', num: '09', dir: 'docteur strange', cards: DOCTOR_STRANGE },
+  { id: 'captain_america', name: 'Captain America', cdb: 'Captain America', num: '03', dir: 'captain america', cards: CAPTAIN_AMERICA },
+  { id: 'hulk', name: 'Hulk', cdb: 'Hulk', num: '10', dir: 'hulk', cards: HULK },
+  { id: 'ms_marvel', name: 'Miss Marvel', cdb: 'Ms. Marvel', num: '05', dir: 'miss marvel', cards: MS_MARVEL },
+  { id: 'thor', name: 'Thor', cdb: 'Thor', num: '06', dir: 'thor', cards: THOR }
 ]
 
 const coreId = code => CORE.find(d => d.code === code).id
@@ -97,6 +100,28 @@ export const DEFS = PACKS.flatMap(p => p.cards.map(d => ({ ...d, pack: p.id, dir
 /** Card id (OCTGN GUID for the core set) → card definition */
 export const BY_ID = Object.fromEntries(DEFS.map(d => [d.id, d]))
 
+// the core set keeps MarvelCDB's codes; the other packs give the printed number ("1A", "17")
+const cdbCode = (p, d) => (/^\d{5}/.test(d.code) ? d.code
+  : p.num + d.code.replace(/\D/g, '').padStart(3, '0') + d.code.replace(/\d/g, '').toLowerCase())
+
+/** MarvelCDB card code ("01043a", "08012") → card definition */
+export const BY_CODE = Object.fromEntries(PACKS.flatMap(p => p.cards.map(d => [cdbCode(p, d), BY_ID[d.id]])))
+
+/**
+ * Cards read from MarvelCDB when a deck is imported by link (a hero or cards of a pack not in the
+ * game): ids "cdb-<code>", French names, `img` / `bimg` the site's images (English scans). They join
+ * DEFS, BY_ID and BY_CODE; a game keeps them in opt.defs, so a reload or a restart finds them again.
+ */
+export function addDefs(defs = []) {
+  for (const d of defs) {
+    if (BY_ID[d.id]) continue
+    const x = { ...d, pack: 'marvelcdb', dir: null }
+    DEFS.push(x)
+    BY_ID[x.id] = x
+    BY_CODE[x.code] ??= x // a card of our packs (French scan) always comes first
+  }
+}
+
 export const HEROES = [
   { id: 'spider_man', name: 'Spider-Man', aspect: 'Justice' },
   { id: 'captain_marvel', name: 'Captain Marvel', aspect: 'Commandement' },
@@ -112,6 +137,9 @@ export const HEROES = [
   { id: 'ms_marvel', name: 'Miss Marvel', aspect: 'Protection' },
   { id: 'thor', name: 'Thor', aspect: 'Agressivité' }
 ]
+
+/** Name of a hero, listed above or read from MarvelCDB (its identity card). */
+export const heroName = id => HEROES.find(h => h.id === id)?.name ?? DEFS.find(d => d.t === 'hero' && d.s === id)?.n ?? ''
 
 /**
  * Scenarios; `id` is also the encounter set of the villain and main schemes.

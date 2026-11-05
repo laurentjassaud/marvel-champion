@@ -45,6 +45,12 @@ export default defineConfig(({ mode }) => {
               options: { cacheName: 'mc-cards', expiration: { maxEntries: 400 } }
             },
             {
+              // images of the cards read from MarvelCDB (decks imported by link): kept for offline play
+              urlPattern: /^https:\/\/(fr\.)?marvelcdb\.com\/bundles\/cards\//,
+              handler: 'CacheFirst',
+              options: { cacheName: 'mc-marvelcdb', expiration: { maxEntries: 600 }, cacheableResponse: { statuses: [0, 200] } }
+            },
+            {
               urlPattern: /^https:\/\/fonts\.(googleapis|gstatic)\.com\/.*/,
               handler: 'StaleWhileRevalidate',
               options: { cacheName: 'google-fonts' }
