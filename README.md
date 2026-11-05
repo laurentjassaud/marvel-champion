@@ -1,7 +1,7 @@
 # Table Marvel Champions
 
-Table solo pour **Marvel Champions** (boîte de base, paquets de scénarios *Le Bouffon Vert* et *Les Démolisseurs*, version française), en Vue 3.
-Mise en place automatique, decks préconstruits officiels, import de decks OCTGN `.o8d`, installable en PWA.
+Table solo pour **Marvel Champions** (boîte de base, paquets de scénarios *Le Bouffon Vert* et *Les Démolisseurs*, paquets héros *Black Widow*, *Docteur Strange*, *Captain America*, *Hulk*, *Miss Marvel* et *Thor*, version française), en Vue 3.
+Mise en place automatique, decks préconstruits officiels, import de decks OCTGN `.o8d` ou texte MarvelCDB `.txt`, installable en PWA.
 
 ## Démarrer
 
@@ -47,11 +47,23 @@ src/
     cards.json         boîte de base, 198 cartes (GUID OCTGN, nom FR, type, set, quantité, PV, menace, taille de main…)
     bouffon-vert.json  paquet Le Bouffon Vert, 49 cartes saisies depuis les cartes imprimées (id gob-<numéro>)
     demolisseurs.json  paquet Les Démolisseurs, 59 cartes saisies depuis les cartes imprimées (id dem-<numéro>)
-    precons.json       les 5 decks préconstruits (40 cartes)
+    black-widow.json   paquet héros Black Widow, 26 cartes (id bw-<numéro>) ; son précon est dans data.js
+    docteur-strange.json  paquet héros Docteur Strange, 33 cartes (id drs-<numéro>) ; son précon est dans data.js
+    captain-america.json  paquet héros Captain America, 27 cartes (id cap-<numéro>) ; son précon est dans data.js
+    hulk.json          paquet héros Hulk, 26 cartes (id hlk-<numéro>) ; son précon est dans data.js
+    miss-marvel.json   paquet héros Miss Marvel, 27 cartes (id msm-<numéro>) ; son précon est dans data.js
+    thor.json          paquet héros Thor, 28 cartes (id thor-<numéro>) ; son précon est dans data.js
+    precons.json       les 5 decks préconstruits de la boîte de base (40 cartes)
 public/
   cards/base/          209 images de la boîte de base (GUID.jpg, GUID.b.jpg pour les versos)
   cards/bouffon vert/  57 images du paquet Le Bouffon Vert (gob-NN.jpg, gob-NN.b.jpg pour les versos)
   cards/demolisseurs/  60 images du paquet Les Démolisseurs (dem-NN.jpg, dem-01.b.jpg pour Évasion 1B)
+  cards/black widow/   27 images du paquet Black Widow (bw-NN.jpg, bw-01.b.jpg pour Natasha Romanoff)
+  cards/docteur strange/  34 images du paquet Docteur Strange (drs-NN.jpg, drs-01.b.jpg pour Stephen Strange)
+  cards/captain america/  28 images du paquet Captain America (cap-NN.jpg, cap-01.b.jpg pour Steve Rogers)
+  cards/hulk/          27 images du paquet Hulk (hlk-NN.jpg, hlk-01.b.jpg pour Bruce Banner)
+  cards/miss marvel/   28 images du paquet Miss Marvel (msm-NN.jpg, msm-01.b.jpg pour Kamala Khan)
+  cards/thor/          29 images du paquet Thor (thor-NN.jpg, thor-01.b.jpg pour Odinson)
   backs/               dos bleu, violet (joueur) et orange (Rencontre)
   status/              cartes de statut posées sur les personnages (sonné, désorienté, tenace)
   icons/               icônes PWA
@@ -73,15 +85,18 @@ L'ordre du tableau `cards` est l'ordre des piles : le dessus d'une pile est sa d
 
 ## Règles automatisées
 
-- Mise en place : identité en alter ego, deck précon ou `.o8d`, méchant (I+II standard, II+III expert) et manigance face A sur la table, paquet Rencontre = set du méchant + module + Standard (+ Expert) + obligation du héros, set Némésis mis de côté.
+- Mise en place : identité en alter ego, deck précon ou importé, méchant (I+II standard, II+III expert) et manigance face A sur la table, paquet Rencontre = set du méchant + module + Standard (+ Expert) + obligation du héros, set Némésis mis de côté.
 - Paquet joueur vide : la défausse est remélangée et une carte Rencontre arrive face cachée.
 - Paquet Rencontre vide : la défausse est remélangée et un jeton d'accélération est ajouté.
-- Phase du méchant : menace d'accélération (+ jetons) puis révélation d'une carte Rencontre.
-- Nouveau tour : vos cartes sont redressées, la main est complétée selon la forme actuelle.
+- Tours et phases : la partie commence au tour 1, en phase du héros. Le compteur de tour et les deux boutons « Phase du héros » / « Phase du méchant » (« des méchants » contre Les Démolisseurs) remplacent « Nouveau tour », « Phase du méchant » et « Révéler rencontre » ; le bouton allumé est la phase en cours.
+  - Passer à la phase du méchant (`V`) termine votre phase : la main est complétée à la taille de la forme en jeu (héros ou alter ego), vos cartes sont redressées ; puis menace d'accélération (+ jetons) sur la manigance principale et révélation d'une carte Rencontre.
+  - Repasser à la phase du héros (`N`) commence le tour suivant.
+  - On ne peut passer qu'à l'autre phase : un second clic sur la phase en cours ne fait rien. Une carte Rencontre se révèle aussi à la main (clic sur le paquet Rencontre ou `E`).
 - Mulligan officiel : défausser des cartes de la main de départ puis repiocher.
 - Dégâts / menace / jetons : les dégâts ne vont que sur les personnages (compteurs PV du héros et du méchant, jeton sur les alliés et sbires), la menace que sur les manigances (compteur avec seuil pour la principale, jeton sur les annexes), et les autres cartes (ou une carte face cachée) reçoivent des jetons génériques.
 - Statuts : clic droit sur un personnage (identité, allié, méchant, sbire) pour le rendre Sonné, Désorienté ou Tenace ; ils se cumulent, s'affichent sur la carte, restent quand l'identité change de forme et disparaissent quand la carte quitte la table.
 - Une nouvelle étape du méchant ou de la manigance posée depuis « De côté » met les compteurs à jour.
+- Ténacité (Géant de Glace) : le personnage entre en jeu avec une carte d'état Tenace.
 - Le Bouffon Vert, deux scénarios et quatre sets modulaires (Gadgets du Bouffon, Un Immense Gâchis, Absorption Électrique, Ingérence en Cours) :
   - *Entreprise à Risques* : l'environnement Entreprise Criminelle est mis en jeu avec 2 jetons Infamie. Retourner Norman Osborn (F) le change en Le Bouffon Vert et renomme le compteur de PV ; Entreprise Criminelle se retourne en Accès de Folie.
   - *Formule Mutagène* : un Esclave Bouffon est mis en jeu engagé avec vous. Sur Nuage Mutagène, l'accélération +X compte les ennemis Bouffon en jeu, Le Bouffon Vert compris.
@@ -91,17 +106,20 @@ L'ordre du tableau `cards` est l'ordre des piles : le dessus d'une pile est sa d
   - Phase du méchant (Évasion) : +1 menace sur chaque manigance annexe puis jeton Actif au méchant dont la manigance a le plus de menaces ; alerte à 10 menaces.
   - Chaque méchant garde ses dégâts sur sa carte, le compteur de PV suit le méchant actif. Un méchant défaussé emporte sa manigance annexe (mise de côté) et passe le jeton Actif ; victoire quand les quatre sont tombés.
   - Paquet du méchant actif vide : seule sa défausse est remélangée, +1 jeton d'accélération.
+- Captain America : la mise en place de Steve Rogers ajoute le Bouclier de Captain America à la main de départ (cherché dans le paquet, qui est mélangé). Comme la règle résout les mises en place après le mulligan, le Bouclier ne compte pas dans la main à compléter, et il est repris dans la défausse s'il a été défaussé au mulligan.
+- Hulk (Enragé) : sous forme de héros, sa main est défaussée à la fin de son tour, c'est-à-dire quand on passe à la phase du méchant, juste avant de la compléter à 4 cartes.
+- Docteur Strange : son deck Invocation (5 cartes) est mélangé à part, face visible, avec sa propre défausse, à droite de la défausse joueur. Clic (ou `I`) : lancer l'invocation du dessus (Maîtrise des Sorts), qui part dans la défausse Invocation ; clic droit ou appui long : la lancer en la gardant (Maître des Arts Mystiques), la défausser sans la lancer (Talent Naturel, Wong), mélanger, chercher. Deck vide : sa défausse est remélangée sans pénalité. Une carte Invocation renvoyée « sur le paquet » retourne sur le deck Invocation ; glissée sur la table, elle arrive face cachée (Ouvrir la Dimension Noire).
 
 Les effets des cartes eux-mêmes restent à appliquer à la main.
 
 ## Raccourcis
 
-`D` piocher · `N` nouveau tour · `V` phase du méchant · `E` révéler · `G`/`⇧G` dégât ± · `M`/`⇧M` menace ± · `J`/`⇧J` jeton ± · `T` épuiser · `F` retourner · `H` en main · `X` de côté · `Suppr` défausser · `Entrée` jouer · `?` aide.
+`D` piocher · `V` phase du méchant · `N` phase du héros (tour suivant) · `E` révéler · `I` invocation (Docteur Strange) · `G`/`⇧G` dégât ± · `M`/`⇧M` menace ± · `J`/`⇧J` jeton ± · `T` épuiser · `F` retourner · `H` en main · `X` de côté · `Suppr` défausser · `Entrée` jouer · `?` aide.
 Les raccourcis de carte visent la carte sous la souris, sinon la carte sélectionnée.
 
 ## Tablette
 
-Toucher une carte l'agrandit, la glisser la déplace, un double tap l'épuise (ou la joue depuis la main), un appui long ouvre ses options avec la carte en grand (aussi sur les paquets et dans les défausses). Une main trop longue défile en glissant horizontalement, une carte glissée vers le haut part sur la table.
+Toucher une carte l'agrandit, la glisser la déplace, un double tap l'épuise (ou la joue depuis la main), un appui long ouvre ses options avec la carte en grand. Sur un paquet ou une défausse, le clic droit ou l'appui long ouvre le menu de la pile : chercher dedans (paquet joueur, paquet Rencontre, deck Invocation et leurs défausses), piocher ou révéler, mélanger, reprendre la carte du dessus d'une défausse. Une main trop longue défile en glissant horizontalement, une carte glissée vers le haut part sur la table.
 
 Côté code (`usePointer`) : l'appui long envoie lui-même un `contextmenu` (iOS n'en émet pas) et ignore celui d'Android ou Windows s'il arrive en plus ; le clic qui suit un geste déjà traité est absorbé (pioche en double, option du menu sous le doigt, pile découverte par une fenêtre qui se ferme) ; le double tap est détecté à la main pour le toucher et le stylet. Le navigateur ne reçoit jamais de glissement horizontal (`touch-action`), sinon il peut le transformer en « page précédente ».
 
@@ -114,4 +132,6 @@ Côté code (`usePointer`) : l'appui long envoie lui-même un `contextmenu` (iOS
 ## Pistes
 
 - Multijoueur : l'état est un objet sérialisable, il suffit de synchroniser les actions du store (WebSocket) ; le moteur reste côté client ou passe côté serveur.
-- Extensions : comme pour Le Bouffon Vert, un fichier `src/data/<boîte>.json` et un dossier d'images `public/cards/<boîte>/` déclarés dans `PACKS` (`data.js`), puis compléter `HEROES` / `VILLAINS` / `MODULARS`. Un scénario peut décrire dans `setup` les cartes que sa manigance 1A met en jeu.
+- Extensions : comme pour Le Bouffon Vert, un fichier `src/data/<boîte>.json` et un dossier d'images `public/cards/<boîte>/` déclarés dans `PACKS` (`data.js`), puis compléter `HEROES` / `VILLAINS` / `MODULARS`. Un scénario peut décrire dans `setup` les cartes que sa manigance 1A met en jeu. Un paquet héros ajoute son précon à `PRECONS` (`data.js`), en reprenant les cartes de la boîte de base qu'il réimprime.
+- Import `.o8d` : il reconnaît les cartes par leur GUID OCTGN, donc seulement les héros de la boîte de base ; les cartes des autres paquets ont des id maison (`bw-…`, `gob-…`, `dem-…`).
+- Import texte MarvelCDB (`.txt`, export « Text file » d'un deck) : les cartes y sont nommées en anglais avec leur paquet entre parenthèses (« 2x Widow's Bite (Black Widow) »). Chaque carte joueur porte donc son nom anglais (`en`, repris de MarvelCDB) et chaque boîte son nom MarvelCDB (`cdb` dans `PACKS`). Les cartes d'un paquet absent sont ignorées et listées à l'import.

@@ -1,7 +1,7 @@
 import { useGameStore } from '../stores/game.js'
 import { useUiStore } from '../stores/ui.js'
 
-const PILES = ['deck', 'edeck', 'discard', 'ediscard', 'aside']
+const PILES = ['deck', 'edeck', 'discard', 'ediscard', 'aside', 'ideck', 'idiscard']
 
 /** What a plain click does on a pile or a card. */
 export function useZoneActions() {
@@ -11,6 +11,7 @@ export function useZoneActions() {
   function activateZone(zone) {
     if (zone === 'deck') game.draw()
     else if (zone === 'edeck') game.reveal()
+    else if (zone === 'ideck') game.invoke()
     else if (PILES.includes(zone)) ui.openModal('pile', { zone })
   }
 

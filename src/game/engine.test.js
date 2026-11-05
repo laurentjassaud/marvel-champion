@@ -79,8 +79,116 @@ describe('mise en place', () => {
     expect(E.cardsIn(s, 'edeck').some(c => E.def(c).s === 'expert')).toBe(true)
   })
 
+  it('Black Widow : précon Justice, obligation dans la Rencontre, Némésis de côté', () => {
+    const s = game({ hero: 'black_widow', list: PRECONS.black_widow })
+    expect(E.nameOf(E.identity(s))).toBe('Natasha Romanoff')
+    expect(E.cardsIn(s, 'hand')).toHaveLength(6)
+    expect(E.cardsIn(s, 'deck').length + 6).toBe(40)
+    expect(s.counters[0]).toMatchObject({ l: 'BLACK WIDOW', v: 9 })
+    expect(E.cardsIn(s, 'edeck').some(c => E.nameOf(c) === 'Désaveu Officiel')).toBe(true)
+    expect(E.cardsIn(s, 'aside').filter(c => E.def(c).s === 'black_widow_nemesis')).toHaveLength(5)
+    // the core cards reprinted in the pack are in the deck
+    expect([...E.cardsIn(s, 'deck'), ...E.cardsIn(s, 'hand')].filter(c => E.nameOf(c) === 'Nick Fury')).toHaveLength(1)
+  })
+
+  it('Docteur Strange : deck Invocation à part, face visible, remélangé sans pénalité', () => {
+    const s = game({ hero: 'doctor_strange', list: PRECONS.doctor_strange })
+    expect(E.nameOf(E.identity(s))).toBe('Stephen Strange')
+    expect(E.cardsIn(s, 'deck').length + 6).toBe(40)
+    expect(E.cardsIn(s, 'ideck')).toHaveLength(5)
+    expect(E.cardsIn(s, 'ideck').every(c => c.faceUp)).toBe(true)
+    expect(E.cardsIn(s, 'edeck').some(c => E.nameOf(c) === 'Séquelle Physique')).toBe(true)
+    expect(E.cardsIn(s, 'aside')).toHaveLength(1 + 5) // étape II de Rhino + Némésis
+    const edeck = E.cardsIn(s, 'edeck').length
+    const first = E.invoke(s)
+    expect(first.zone).toBe('idiscard')
+    E.invokeKeep(s)
+    expect(E.cardsIn(s, 'ideck')).toHaveLength(4)
+    // a cast card sent "to the deck" goes back on top of the Invocation deck, face up
+    E.moveCard(s, first, 'deck')
+    expect(E.cardsIn(s, 'ideck').at(-1)).toBe(first)
+    expect(first.faceUp).toBe(true)
+    for (let i = 0; i < 5; i++) E.invoke(s, i % 2 === 0)
+    expect(E.cardsIn(s, 'ideck')).toHaveLength(5)
+    expect(E.cardsIn(s, 'idiscard')).toHaveLength(0)
+    expect(s.accel).toBe(0)
+    expect(E.cardsIn(s, 'edeck')).toHaveLength(edeck)
+  })
+
+  it('Captain America : le Bouclier est ajouté à la main de départ (mise en place de Steve Rogers)', () => {
+    const s = game({ hero: 'captain_america', list: PRECONS.captain_america })
+    expect(E.nameOf(E.identity(s))).toBe('Steve Rogers')
+    expect(s.counters[0]).toMatchObject({ l: 'CAPTAIN AMERICA', v: 11 })
+    const shield = c => E.nameOf(c) === 'Bouclier de Captain America'
+    expect(E.cardsIn(s, 'hand').filter(shield)).toHaveLength(1)
+    expect(E.cardsIn(s, 'deck').length + E.cardsIn(s, 'hand').length).toBe(40)
+    expect(E.cardsIn(s, 'edeck').some(c => E.nameOf(c) === "Homme d'une Autre Époque")).toBe(true)
+    expect(E.cardsIn(s, 'aside').filter(c => E.def(c).s === 'captain_america_nemesis')).toHaveLength(5)
+  })
+
+  it('Captain America : le Bouclier ne compte pas dans la main du mulligan, et revient s\'il est défaussé', () => {
+    const s = game({ hero: 'captain_america', list: PRECONS.captain_america })
+    const isShield = c => E.nameOf(c) === 'Bouclier de Captain America'
+    const hand = E.cardsIn(s, 'hand')
+    expect(hand).toHaveLength(hand.some(c => c.id === s.setupCard) ? 7 : 6)
+    // keep the shield, discard 2 others: back to 6 + the shield
+    E.mulligan(s, L, hand.filter(c => !isShield(c)).slice(0, 2).map(c => c.id))
+    expect(E.cardsIn(s, 'hand')).toHaveLength(7)
+    // discard the shield too: it comes back from the discard pile
+    const s2 = game({ hero: 'captain_america', list: PRECONS.captain_america })
+    E.mulligan(s2, L, E.cardsIn(s2, 'hand').filter(isShield).map(c => c.id))
+    expect(E.cardsIn(s2, 'hand').filter(isShield)).toHaveLength(1)
+    expect(E.cardsIn(s2, 'hand')).toHaveLength(7)
+  })
+
+  it('Hulk : sous forme de héros, il défausse sa main à la fin de son tour (Enragé)', () => {
+    const s = game({ hero: 'hulk', list: PRECONS.hulk })
+    expect(E.nameOf(E.identity(s))).toBe('Bruce Banner')
+    expect(s.counters[0]).toMatchObject({ l: 'HULK', v: 18 })
+    expect(E.cardsIn(s, 'hand')).toHaveLength(5)
+    expect(E.cardsIn(s, 'aside').filter(c => E.def(c).s === 'hulk_nemesis')).toHaveLength(5)
+    // alter ego: the hand stays
+    E.toVillainPhase(s, L)
+    expect(E.cardsIn(s, 'hand')).toHaveLength(5)
+    E.toHeroPhase(s)
+    // hero form: the hand is discarded, then drawn up to 4 at the end of the hero phase
+    E.flipCard(s, E.identity(s))
+    const hand = E.cardsIn(s, 'hand')
+    E.toVillainPhase(s, L)
+    expect(hand.every(c => c.zone === 'discard')).toBe(true)
+    expect(E.cardsIn(s, 'hand')).toHaveLength(4)
+  })
+
+  it('Miss Marvel : précon Protection, obligation dans la Rencontre, Némésis de côté', () => {
+    const s = game({ hero: 'ms_marvel', list: PRECONS.ms_marvel })
+    expect(E.nameOf(E.identity(s))).toBe('Kamala Khan')
+    expect(E.cardsIn(s, 'hand')).toHaveLength(6)
+    expect(E.cardsIn(s, 'deck').length + 6).toBe(40)
+    expect(s.counters[0]).toMatchObject({ l: 'MISS MARVEL', v: 10 })
+    expect(E.cardsIn(s, 'edeck').some(c => E.nameOf(c) === "Rentrer Avant l'Aube")).toBe(true)
+    expect(E.cardsIn(s, 'aside').filter(c => E.def(c).s === 'ms_marvel_nemesis')).toHaveLength(5)
+  })
+
+  it('Thor : précon Agressivité, Némésis de côté, le Géant de Glace entre en jeu Tenace', () => {
+    const s = game({ hero: 'thor', list: PRECONS.thor })
+    expect(E.nameOf(E.identity(s))).toBe('Odinson')
+    expect(E.cardsIn(s, 'hand')).toHaveLength(5)
+    expect(E.cardsIn(s, 'deck').length + 5).toBe(40)
+    expect(s.counters[0]).toMatchObject({ l: 'THOR', v: 14 })
+    expect(E.cardsIn(s, 'edeck').some(c => E.nameOf(c) === "Colère d'Odin")).toBe(true)
+    const nemesis = E.cardsIn(s, 'aside').filter(c => E.def(c).s === 'thor_nemesis')
+    expect(nemesis).toHaveLength(5)
+    const giant = nemesis.find(c => E.nameOf(c) === 'Géant de Glace')
+    E.takeFromPile(s, L, giant, 'aside')
+    expect(giant.tough).toBe(true)
+    // a boost (face down) is not a character entering play
+    const other = nemesis.find(c => c !== giant && E.nameOf(c) === 'Géant de Glace')
+    E.moveCard(s, other, 'table', { faceDown: true }, true)
+    expect(other.tough).toBeFalsy()
+  })
+
   it('refuse un héros inconnu', () => {
-    expect(() => game({ hero: 'hulk' })).toThrow()
+    expect(() => game({ hero: 'heros_inconnu' })).toThrow()
   })
 })
 
@@ -120,15 +228,49 @@ describe('paquets', () => {
     expect(E.cardsIn(s, 'edeck')).toHaveLength(before - 1)
   })
 
-  it('nouveau tour : redresse et complète la main', () => {
+  it('passage à la phase du méchant : redresse et complète la main selon la forme', () => {
     const s = game()
-    const [a, b] = E.cardsIn(s, 'hand')
+    const [a, b, c] = E.cardsIn(s, 'hand')
     E.playToTable(s, L, a)
     E.toggleTap(s, a)
+    E.toggleTap(s, E.identity(s))
     E.moveCard(s, b, 'discard')
-    E.newTurn(s, L)
+    E.moveCard(s, c, 'discard')
+    E.toVillainPhase(s, L)
     expect(a.tapped).toBe(false)
-    expect(E.cardsIn(s, 'hand')).toHaveLength(6)
+    expect(E.identity(s).tapped).toBe(false)
+    expect(E.cardsIn(s, 'hand')).toHaveLength(6) // Peter Parker, alter ego
+    // in hero form (Spider-Man, hand size 5) a hand of 3 is drawn up to 5 only
+    E.toHeroPhase(s)
+    E.flipCard(s, E.identity(s))
+    E.cardsIn(s, 'hand').slice(0, 3).forEach(x => E.moveCard(s, x, 'discard', {}, true))
+    E.toVillainPhase(s, L)
+    expect(E.cardsIn(s, 'hand')).toHaveLength(5)
+  })
+
+  it('tours et phases : on commence au tour 1 en phase du héros, le tour avance au retour du héros', () => {
+    const s = game()
+    expect(s).toMatchObject({ turn: 1, phase: 'hero' })
+    expect(E.toHeroPhase(s)).toBe(false) // already in the hero phase
+    expect(s.turn).toBe(1)
+    const edeck = E.cardsIn(s, 'edeck').length
+    expect(E.toVillainPhase(s, L)).toBe(true)
+    expect(s).toMatchObject({ turn: 1, phase: 'villain' })
+    expect(s.counters[2].v).toBe(1)
+    expect(E.cardsIn(s, 'edeck')).toHaveLength(edeck - 1)
+    // a second click on the phase in play does nothing: no second threat or encounter card
+    expect(E.toVillainPhase(s, L)).toBe(false)
+    expect(s.counters[2].v).toBe(1)
+    expect(E.cardsIn(s, 'edeck')).toHaveLength(edeck - 1)
+    expect(E.toHeroPhase(s)).toBe(true)
+    expect(s).toMatchObject({ turn: 2, phase: 'hero' })
+    // a game saved before turns existed starts from round 1, hero phase
+    delete s.turn
+    delete s.phase
+    expect(E.phaseOf(s)).toBe('hero')
+    E.toVillainPhase(s, L)
+    E.toHeroPhase(s)
+    expect(s.turn).toBe(2)
   })
 })
 
@@ -375,9 +517,76 @@ describe('import .o8d', () => {
     const ally = PRECONS.she_hulk.find(([g]) => BY_ID[g].t === 'ally')[0]
     const xml = `<?xml version="1.0"?><deck game="055c536f"><section name="Hero"><card qty="1" id="${heroId}">She-Hulk</card></section>
       <section name="Main"><card id="${ally}" qty="2">Allié</card><card qty="3" id="00000000-0000-0000-0000-000000000000">Inconnue</card></section></deck>`
-    const r = E.parseO8D(xml)
+    const r = E.parseDeck(xml)
     expect(r.hero).toBe('she_hulk')
     expect(r.list).toEqual([[heroId, 1], [ally, 2]])
     expect(r.unknown).toBe(3)
+  })
+})
+
+describe('import texte MarvelCDB', () => {
+  // export "Text file" of a MarvelCDB deck, as downloaded
+  const POKER = `Playing Poker with Natasha Romanoff
+
+Black Widow
+Packs: From Core Set to Hulk
+
+Upgrades
+1x Under Surveillance (Thor)
+2x Attacrobatics (Black Widow)
+2x Black Widow's Gauntlet (Black Widow)
+2x Grappling Hook (Black Widow)
+1x Synth-Suit (Black Widow)
+2x Widow's Bite (Black Widow)
+2x Counterintelligence (Black Widow)
+3x Spycraft (Black Widow)
+3x Espionage (Black Widow)
+
+Events
+2x Covert Ops (Black Widow)
+2x Dance of Death (Black Widow)
+3x Foiled! (Doctor Strange)
+
+Supports
+3x Beat Cop (Hulk)
+1x Safe House #29 (Black Widow)
+
+Resources
+2x The Power of Justice (Core Set)
+1x Energy (Core Set)
+1x Genius (Core Set)
+1x Strength (Core Set)
+
+
+Allies
+1x Daredevil (Core Set)
+1x Nick Fury (Core Set)
+1x Lockjaw (Ms. Marvel)
+1x Winter Soldier (Black Widow)
+1x Agent Coulson (Black Widow)
+1x Quake (Black Widow)
+`
+
+  it('lit le héros, le titre et les 40 cartes, noms anglais et paquets', () => {
+    const r = E.parseDeck(POKER.replace(/\n/g, '\r\n'))
+    expect(r).toMatchObject({ hero: 'black_widow', title: 'Playing Poker with Natasha Romanoff', unknown: 0, missing: [] })
+    expect(r.list.reduce((n, [id, q]) => n + (BY_ID[id].t === 'hero' ? 0 : q), 0)).toBe(40)
+    const name = n => r.list.find(([id]) => BY_ID[id].en === n)
+    expect(BY_ID[name('Lockjaw')[0]].n).toBe("Gueule d'Or")
+    expect(BY_ID[name('Under Surveillance')[0]].n).toBe('Sous Surveillance')
+    expect(name('Spycraft')[1]).toBe(3)
+    const s = game({ hero: r.hero, list: r.list })
+    expect(E.cardsIn(s, 'deck').length + E.cardsIn(s, 'hand').length).toBe(40)
+  })
+
+  it('le paquet entre parenthèses départage les homonymes, les cartes inconnues sont listées', () => {
+    const r = E.parseDeck(`Test\n\nDoctor Strange\nPacks: Core Set\n\nAllies\n1x Iron Man (Doctor Strange)\n1x Black Widow (Core Set)\n2x Inconnue (Ant-Man)\n`)
+    expect(r.hero).toBe('doctor_strange')
+    expect(r.list.slice(1).map(([id, q]) => [BY_ID[id].n, BY_ID[id].t, q])).toEqual([['Iron Man', 'ally', 1], ['Black Widow', 'ally', 1]])
+    expect(r).toMatchObject({ unknown: 2, missing: ['Inconnue (Ant-Man)'] })
+  })
+
+  it('sans héros connu : pas d\'identité', () => {
+    expect(E.parseDeck('Deck\n\nAnt-Man\nPacks: Ant-Man\n\n1x Energy (Core Set)').hero).toBeNull()
   })
 })

@@ -28,9 +28,10 @@ export function useKeyboard() {
 
     if (e.key === '?') ui.openModal('help')
     else if (k === 'd') game.draw()
-    else if (k === 'n') game.newTurn()
-    else if (k === 'v') game.villainPhase()
+    else if (k === 'n') game.toHeroPhase()
+    else if (k === 'v') game.toVillainPhase()
     else if (k === 'e') game.reveal()
+    else if (k === 'i' && game.hasInvocation) game.invoke()
     else if (k === 'g') game.damage(id, sh ? -1 : 1)
     else if (k === 'm') game.threat(id, sh ? -1 : 1)
     else if (e.key === '+' || e.key === '=') game.damage(id, 1)

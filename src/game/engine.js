@@ -7,6 +7,8 @@
 //   log: {t, msg, sys}[]
 //   counters: [{l, v, c}]    // 0: hero HP, 1: villain HP, 2: main scheme threat ("Menace /7")
 //   opt: {hero, villain, modular, expert, label, pback}
+//   turn: number             // round, from 1
+//   phase: 'hero' | 'villain' // the game starts in the hero phase
 //   accel: number            // acceleration tokens
 //   mull: boolean            // mulligan already taken
 //   zTop: number             // highest z-index on the table
@@ -20,7 +22,7 @@
 //
 // Layout `L` = {w, h, cw}: table size and table card width in px, used to place cards.
 
-import { DEFS, BY_ID, VILLAINS, MODULARS, TYPE_LABELS, ZONE_LABELS, TOKEN_COLORS, STATUSES, CHARACTER_TYPES, SCHEME_TYPES } from './data.js'
+import { DEFS, BY_ID, PACKS, HEROES, VILLAINS, MODULARS, TYPE_LABELS, ZONE_LABELS, TOKEN_COLORS, STATUSES, CHARACTER_TYPES, SCHEME_TYPES } from './data.js'
 
 let random = Math.random
 /** Replace the random source (tests use a seeded generator). */
@@ -53,8 +55,12 @@ export function counterOf(c) {
   if (!c.faceUp) return 'tok'
   return isCharacter(c) ? 'dmg' : SCHEME_TYPES.includes(def(c).t) ? 'thr' : 'tok'
 }
-const deckOf = c => (isEnc(c) ? 'edeck' : 'deck')
-const discardOf = c => (isEnc(c) ? 'ediscard' : 'discard')
+/** Card of a hero's separate Invocation deck (Docteur Strange): set "<hero>_invocation". */
+export const isInvocation = c => !!def(c).s?.endsWith('_invocation')
+const DECKS = ['deck', 'edeck', 'ideck']
+const DISCARDS = ['discard', 'ediscard', 'idiscard']
+const deckOf = c => (isInvocation(c) ? 'ideck' : isEnc(c) ? 'edeck' : 'deck')
+export const discardOf = c => (isInvocation(c) ? 'idiscard' : isEnc(c) ? 'ediscard' : 'discard')
 
 /* ---------- several villains (Les Démolisseurs) ---------- */
 /** Encounter deck or discard in use: with several villains, only the active villain's cards. */
@@ -195,7 +201,7 @@ export function newGame(opt, L) {
   if (!villain) throw new Error(`Méchant inconnu : ${opt.villain}`)
 
   const s = {
-    cards: [], log: [], counters: [], accel: 0, mull: false, zTop: 10,
+    cards: [], log: [], counters: [], turn: 1, phase: 'hero', accel: 0, mull: false, zTop: 10,
     opt: { hero: opt.hero, villain: opt.villain, modular: opt.modular, expert: !!opt.expert, label: opt.label, pback: opt.pback || 'blue' }
   }
   const add = (g, o, zone, extra) => s.cards.push(makeCard(g, o, zone, extra))
@@ -206,7 +212,7 @@ export function newGame(opt, L) {
   // player deck (identity and obligation are handled separately)
   for (const [g, q] of opt.list) {
     const d = BY_ID[g]
-    if (!d || d.t === 'hero' || d.t === 'obligation') continue
+    if (!d || d.t === 'hero' || d.t === 'obligation' || d.s?.endsWith('_invocation')) continue
     for (let i = 0; i < q; i++) add(g, 'p', 'deck')
   }
 
@@ -270,21 +276,28 @@ export function newGame(opt, L) {
     { l: `Menace /${schemes[0].th ?? '?'}`, v: schemes[0].bth ?? 0, c: 'var(--threat)' }
   ]
 
+  // Docteur Strange: separate Invocation deck, face up (its top card is always visible)
+  for (const d of DEFS) if (d.s === `${opt.hero}_invocation`) for (let i = 0; i < d.q; i++) add(d.id, 'p', 'ideck', { faceUp: true })
+
   shuffleZone(s, 'deck')
   shuffleZone(s, 'edeck')
+  shuffleZone(s, 'ideck')
   const hs = heroDef.bhs ?? 6
   for (let i = 0; i < hs; i++) drawCard(s, L, true)
+  const fetched = heroSetup(s)
 
   const modular = MODULARS.find(m => m.id === opt.modular)?.name
   const scenario = villain.scenario ? ` (${villain.scenario})` : ''
   log(s, `Partie : ${heroDef.n} (${opt.label}) contre ${villain.name}${scenario}${modular ? `, module ${modular}` : ''}, ${opt.expert ? 'expert' : 'standard'}.`, true)
-  const start = `Vous commencez en alter ego (${heroDef.bn}) avec ${hs} cartes.`
+  const invocations = cardsIn(s, 'ideck').length
+  if (invocations) log(s, `Deck Invocation : ${invocations} cartes mélangées, celle du dessus est visible. Clic sur le deck (ou I) : la lancer.`)
+  const start = `Vous commencez en alter ego (${heroDef.bn}) avec ${hs} cartes${fetched ? `, plus « ${nameOf(fetched)} » (mise en place de ${heroDef.bn})` : ''}.`
   if (s.crew) {
-    log(s, `Paquet : ${cardsIn(s, 'deck').length + hs} cartes · un paquet Rencontre de 15 cartes par méchant, ni obligation ni Némésis.`)
+    log(s, `Paquet : ${cardsIn(s, 'deck').length + cardsIn(s, 'hand').length} cartes · un paquet Rencontre de 15 cartes par méchant, ni obligation ni Némésis.`)
     log(s, `${start} Les quatre méchants et leurs manigances annexes sont en jeu, jeton Actif sur « ${first.n} » : les piles Rencontre affichées sont les siennes. Retournez la manigance (F) pour passer au stade 1B.`, true)
     return s
   }
-  log(s, `Paquet : ${cardsIn(s, 'deck').length + hs} cartes · Rencontre : ${cardsIn(s, 'edeck').length} cartes · Némésis mis de côté.`)
+  log(s, `Paquet : ${cardsIn(s, 'deck').length + cardsIn(s, 'hand').length} cartes · Rencontre : ${cardsIn(s, 'edeck').length} cartes · Némésis mis de côté.`)
   if (inPlay.length) {
     const cards = inPlay.map(c => `« ${nameOf(c)} »${c.tok ? ` avec ${plural(c.tok, 'jeton')}` : ''}`).join(', ')
     log(s, `${start} Mise en place de la manigance faite (${cards} en jeu) : retournez-la (F) pour passer au stade 1B.`, true)
@@ -307,8 +320,44 @@ export function parseO8D(xml) {
     if (d.t === 'hero') hero = d.s
     list.push([id, qty])
   }
-  return { list, hero, unknown }
+  return { list, hero, unknown, missing: [] }
 }
+
+// names compared without accents, case, quotes or punctuation ("Widow's Bite" = "Widow’s Bite")
+const norm = s => s.normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '')
+
+/**
+ * Parse a MarvelCDB text deck: a title, the hero name above a "Packs:" line, then
+ * "2x Card name (Pack name)" lines under section headers. Cards are matched by English name,
+ * in the pack named in brackets (reprints are listed as Core Set), else in any pack.
+ * Returns {list, hero, unknown, missing, title}; hero is null if no known identity is named.
+ */
+export function parseDeckText(text) {
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean)
+  const heroes = DEFS.filter(d => d.t === 'hero' && d.en)
+  const heroNamed = line => heroes.find(d => norm(d.en) === norm(line))
+  const packsAt = lines.findIndex(l => /^packs\s*:/i.test(l))
+  const heroDef = (packsAt > 0 && heroNamed(lines[packsAt - 1])) || lines.map(heroNamed).find(Boolean)
+
+  const playable = DEFS.filter(d => d.en && d.f !== 'encounter' && d.t !== 'hero')
+  const list = heroDef ? [[heroDef.id, 1]] : []
+  const missing = []
+  let unknown = 0
+  for (const line of lines) {
+    const m = /^(\d+)\s*x\s+(.+?)(?:\s*\(([^()]*)\))?$/i.exec(line)
+    if (!m) continue
+    const [, qty, name, packName] = m
+    const pack = PACKS.find(p => packName && norm(p.cdb) === norm(packName))
+    const named = playable.filter(d => norm(d.en) === norm(name))
+    const d = named.find(x => x.pack === pack?.id) ?? named[0]
+    if (!d) { unknown += Number(qty); missing.push(packName ? `${name} (${packName})` : name); continue }
+    list.push([d.id, Number(qty)])
+  }
+  return { list, hero: heroDef?.s ?? null, unknown, missing, title: lines[0] !== heroDef?.en ? lines[0] : null }
+}
+
+/** Deck file of either format: OCTGN .o8d (XML) or MarvelCDB text. */
+export const parseDeck = text => (/<deck\b/i.test(text) ? parseO8D(text) : parseDeckText(text))
 
 /* ---------- player deck ---------- */
 export function drawCard(s, L, quiet = false) {
@@ -383,6 +432,51 @@ function goblinEnemies(s) {
   return cardsIn(s, 'table').filter(c => c.faceUp && ['villain', 'minion'].includes(def(c).t) && traitsOf(c).includes('bouffon')).length
 }
 
+/** Phase of the round: 'hero' (the game starts there) or 'villain'. Saved games from before have none. */
+export const phaseOf = s => s.phase ?? 'hero'
+
+/** End of the player's turn: Hulk's "Enragé" discards the hand when he is in hero form. */
+function enraged(s) {
+  const id = identity(s)
+  if (!id || id.side || !HEROES.find(h => h.id === s.opt.hero)?.rage) return
+  const hand = cardsIn(s, 'hand')
+  if (!hand.length) return
+  hand.forEach(c => moveCard(s, c, 'discard', {}, true))
+  log(s, `Fin de votre tour (Enragé) : ${nameOf(id)} défausse sa main (${plural(hand.length, 'carte')}).`, true)
+}
+
+/**
+ * End of the player phase: the hand is drawn up to the hand size of the form in play
+ * (hero or alter ego), then every player card is readied.
+ */
+function endPlayerPhase(s, L) {
+  enraged(s)
+  const hs = handSize(s)
+  let n = 0
+  while (cardsIn(s, 'hand').length < hs && drawCard(s, L, true)) n++
+  cardsIn(s, 'table').filter(c => !isEnc(c)).forEach(c => { c.tapped = false })
+  log(s, `Fin de la phase du héros : +${plural(n, 'carte')} (main de ${hs} en ${nameOf(identity(s))}), vos cartes sont redressées.`, true)
+}
+
+/** "Phase du méchant": from the hero phase only. Ends the player phase, then runs the villain phase. */
+export function toVillainPhase(s, L) {
+  if (phaseOf(s) === 'villain') return false
+  s.phase = 'villain'
+  endPlayerPhase(s, L)
+  villainPhase(s, L)
+  return true
+}
+
+/** "Phase du héros": from the villain phase only; it starts the next round. */
+export function toHeroPhase(s) {
+  if (phaseOf(s) !== 'villain') return false
+  s.phase = 'hero'
+  s.turn = (s.turn ?? 1) + 1
+  log(s, `Tour ${s.turn} : phase du héros.`, true)
+  return true
+}
+
+/** Villain phase steps: acceleration threat on the main scheme, then an encounter card for the player. */
 export function villainPhase(s, L) {
   // the stage placed last, in case the previous one is still on the table
   const scheme = cardsIn(s, 'table').filter(c => def(c).t === 'main_scheme').at(-1)
@@ -405,29 +499,42 @@ export function villainPhase(s, L) {
     full.push(...sides.filter(c => c.thr >= 10))
   }
   const who = s.crew ? `« ${activeName(s)} »` : 'Le méchant'
-  log(s, `Phase du méchant : +${add} menace sur la manigance principale (${k.v}${why}).${crew} ${who} active (en alter ego, il manigance).`, true)
+  log(s, `${s.crew ? 'Phase des méchants' : 'Phase du méchant'} : +${add} menace sur la manigance principale (${k.v}${why}).${crew} ${who} active (en alter ego, il manigance).`, true)
   for (const c of full) log(s, `« ${nameOf(c)} » a ${c.thr} menaces : appliquez sa Réponse forcée, puis retirez toutes ses menaces sauf 3.`, true)
   warnThreshold(s)
   revealEncounter(s, L)
 }
 
-export function newTurn(s, L) {
-  cardsIn(s, 'table').filter(c => !isEnc(c)).forEach(c => { c.tapped = false })
-  const hs = handSize(s)
-  let n = 0
-  while (cardsIn(s, 'hand').length < hs && drawCard(s, L, true)) n++
-  log(s, `Nouveau tour : vos cartes sont redressées, +${plural(n, 'carte')} (main de ${hs}).`, true)
+/**
+ * Identity "Mise en place" (setup) adding a card to the hand: Captain America's shield,
+ * searched in the deck or the discard pile, then the deck is shuffled. Returns the card fetched.
+ */
+function heroSetup(s, loud = false) {
+  const g = HEROES.find(h => h.id === s.opt.hero)?.setup
+  if (!g || cardsIn(s, 'hand').some(c => c.g === g)) return null
+  const c = [...cardsIn(s, 'deck'), ...cardsIn(s, 'discard')].find(x => x.g === g)
+  if (!c) return null
+  moveCard(s, c, 'hand', {}, true)
+  shuffleZone(s, 'deck')
+  s.setupCard = c.id
+  if (loud) log(s, `Mise en place de l'identité : « ${nameOf(c)} » revient dans votre main.`, true)
+  return c
 }
 
-/** Official mulligan: discard the chosen cards, then draw back up to hand size. */
+/**
+ * Official mulligan: discard the chosen cards, then draw back up to hand size.
+ * Setup abilities come after the mulligan: a card fetched by the identity's setup is not part
+ * of the opening hand, and is fetched again if it was discarded.
+ */
 export function mulligan(s, L, ids) {
   const picked = cardsIn(s, 'hand').filter(c => ids.includes(c.id))
   if (!picked.length) { log(s, 'Main de départ conservée.'); return 0 }
   picked.forEach(c => moveCard(s, c, 'discard', {}, true))
-  const hs = handSize(s)
+  const hs = handSize(s) + (cardsIn(s, 'hand').some(c => c.id === s.setupCard) ? 1 : 0)
   let k = 0
   while (cardsIn(s, 'hand').length < hs && drawCard(s, L, true)) k++
   log(s, `Mulligan : ${plural(picked.length, 'carte')} défaussée${picked.length > 1 ? 's' : ''}, ${k} piochée${k > 1 ? 's' : ''}.`, true)
+  heroSetup(s, true)
   s.mull = true
   return picked.length
 }
@@ -435,7 +542,7 @@ export function mulligan(s, L, ids) {
 /* ---------- moving cards ---------- */
 /**
  * Move a card to a zone. "deck"/"discard" are routed to the card's own deck/discard
- * (player or encounter). opts: {x, y, faceDown, bottom}
+ * (player, encounter or Invocation). opts: {x, y, faceDown, bottom}
  */
 export function moveCard(s, c, zone, opts = {}, quiet = false) {
   if (c.kind === 'token') {
@@ -443,13 +550,13 @@ export function moveCard(s, c, zone, opts = {}, quiet = false) {
     else { c.x = opts.x ?? c.x; c.y = opts.y ?? c.y; c.z = ++s.zTop }
     return
   }
-  if (zone === 'deck' || zone === 'edeck') zone = deckOf(c)
-  if (zone === 'discard' || zone === 'ediscard') zone = discardOf(c)
+  if (DECKS.includes(zone)) zone = deckOf(c)
+  if (DISCARDS.includes(zone)) zone = discardOf(c)
   const from = c.zone
   c.zone = zone
   if (zone !== 'table') { c.tapped = false; c.dmg = 0; c.thr = 0; c.tok = 0; STATUSES.forEach(st => delete c[st.id]) }
-  if (zone === 'deck' || zone === 'edeck') {
-    c.faceUp = false
+  if (DECKS.includes(zone)) {
+    c.faceUp = zone === 'ideck'
     c.side = c.hero ? 1 : 0
     opts.bottom ? toBottom(s, c) : toTop(s, c)
   } else {
@@ -457,6 +564,8 @@ export function moveCard(s, c, zone, opts = {}, quiet = false) {
     toTop(s, c)
   }
   if (zone === 'table') { c.x = opts.x ?? c.x; c.y = opts.y ?? c.y; c.z = ++s.zTop }
+  // keyword Ténacité (Géant de Glace): the character enters play with a Tenace status card
+  if (zone === 'table' && from !== 'table' && c.faceUp && def(c).toughness) c.tough = true
 
   // a new villain stage or main scheme entering play updates the counters
   if (zone === 'table' && from === 'aside') {
@@ -472,10 +581,11 @@ export function moveCard(s, c, zone, opts = {}, quiet = false) {
   }
   if (!quiet && from !== zone) {
     const name = c.faceUp || from === 'hand' ? `« ${nameOf(c)} »` : 'Une carte face cachée'
-    const where = zone === 'deck' || zone === 'edeck' ? `${opts.bottom ? 'sous le' : 'sur le'} ${ZONE_LABELS[zone]}` : `→ ${ZONE_LABELS[zone]}`
+    const where = DECKS.includes(zone) ? `${opts.bottom ? 'sous le' : 'sur le'} ${ZONE_LABELS[zone]}` : `→ ${ZONE_LABELS[zone]}`
     log(s, `${name} : ${ZONE_LABELS[from]} ${where}.`)
   }
   if (s.crew && from === 'table' && zone !== 'table' && def(c).t === 'villain') crewVillainGone(s, c)
+  if (from === 'ideck' && zone !== 'ideck' && !cardsIn(s, 'ideck').length) refillInvocation(s)
 }
 
 export function playToTable(s, L, c, faceDown = false) {
@@ -501,6 +611,35 @@ export function reorderHand(s, id, beforeId) {
   s.cards.splice(s.cards.indexOf(c), 1)
   const before = beforeId && byId(s, beforeId)
   s.cards.splice(before ? s.cards.indexOf(before) : s.cards.length, 0, c)
+}
+
+/* ---------- Invocation deck (Docteur Strange) ---------- */
+// Face up, its top card always visible; used cards go to its own discard, which is
+// shuffled back without penalty as soon as the deck is empty (moveCard).
+function refillInvocation(s) {
+  const discard = cardsIn(s, 'idiscard')
+  if (!discard.length) return
+  discard.forEach(c => { c.zone = 'ideck'; c.faceUp = true })
+  shuffleZone(s, 'ideck')
+  log(s, 'Deck Invocation vide : sa défausse est remélangée (sans pénalité).', true)
+}
+
+/**
+ * Top Invocation card to its discard: cast it (Maîtrise des Sorts) or only discard it
+ * (Talent Naturel, Wong). The cost and the "Spécial" ability are resolved by hand.
+ */
+export function invoke(s, cast = true) {
+  const c = cardsIn(s, 'ideck').at(-1)
+  if (!c) { log(s, 'Deck Invocation vide.'); return null }
+  log(s, cast ? `Invocation lancée : « ${nameOf(c)} ». Payez son coût et résolvez sa capacité Spécial.` : `« ${nameOf(c)} » défaussée du deck Invocation.`)
+  moveCard(s, c, 'idiscard', {}, true)
+  return c
+}
+
+/** Maître des Arts Mystiques: the top card is resolved and stays on top of the deck. */
+export function invokeKeep(s) {
+  const c = cardsIn(s, 'ideck').at(-1)
+  if (c) log(s, `Invocation lancée : « ${nameOf(c)} », qui reste sur le deck Invocation. Payez son coût et résolvez sa capacité Spécial.`)
 }
 
 export function discardTop(s) {

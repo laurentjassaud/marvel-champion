@@ -33,27 +33,30 @@ watch(() => form.villain, v => { form.modular = VILLAINS.find(x => x.id === v).m
 // picking another hero drops the imported deck
 watch(() => form.hero, h => { if (imported.value && h !== imported.value.hero) form.src = 'precon' })
 
+// OCTGN .o8d or MarvelCDB text export (.txt)
 async function importDeck(e) {
   const file = e.target.files[0]
+  e.target.value = '' // the same file can be picked again after a fix
   if (!file) return
-  const { list, hero, unknown } = game.parseO8D(await file.text())
+  const { list, hero, unknown, missing, title } = game.parseDeck(await file.text())
   if (!hero) {
     imported.value = null
     info.value = ''
-    error.value = 'Ce deck ne contient pas d\'identité de la boîte de base. Choisis un fichier .o8d Marvel Champions avec un des 5 héros.'
+    error.value = 'Aucune identité reconnue dans ce deck. Choisis un fichier .o8d OCTGN (héros de la boîte de base) ou un export texte MarvelCDB (.txt) d\'un des héros disponibles.'
     return
   }
-  const label = file.name.replace(/\.[^.]+$/, '')
+  const label = title || file.name.replace(/\.[^.]+$/, '')
   imported.value = { list, hero, label }
   form.hero = hero
-  form.src = 'o8d'
+  form.src = 'import'
   error.value = ''
   const n = list.reduce((t, [id, q]) => t + (['hero', 'obligation'].includes(BY_ID[id].t) ? 0 : q), 0)
-  info.value = `${label} : ${n} cartes${unknown ? `, ${unknown} hors boîte de base ignorée${unknown > 1 ? 's' : ''}` : ''}.`
+  const skipped = missing.length ? ` : ${missing.slice(0, 4).join(', ')}${missing.length > 4 ? '…' : ''}` : ''
+  info.value = `${label} : ${n} cartes${unknown ? `, ${unknown} inconnue${unknown > 1 ? 's' : ''} ignorée${unknown > 1 ? 's' : ''}${skipped}` : ''}.`
 }
 
 function start() {
-  const useImport = form.src === 'o8d' && imported.value
+  const useImport = form.src === 'import' && imported.value
   game.newGame({
     hero: form.hero,
     list: useImport ? imported.value.list : game.precon(form.hero),
@@ -69,7 +72,7 @@ function start() {
 
 <template>
   <BaseModal title="Nouvelle partie">
-    <p>Mise en place automatique (boîte de base et scénarios du Bouffon Vert) : identité en alter ego, paquet préconstruit de 40 cartes, méchant et manigance sur la table, paquet Rencontre mélangé avec l'obligation du héros, set Némésis mis de côté.</p>
+    <p>Mise en place automatique : identité en alter ego, paquet préconstruit de 40 cartes, méchant et manigance sur la table, paquet Rencontre mélangé avec l'obligation du héros, set Némésis mis de côté.</p>
 
     <div class="fieldset">
       <div class="lab">Héros</div>
@@ -82,8 +85,8 @@ function start() {
       <div class="lab">Paquet</div>
       <div class="row">
         <ChoiceOption v-model="form.src" name="src" value="precon" label="Préconstruit officiel" sub="Héros + aspect + basiques" />
-        <ChoiceOption v-if="imported" v-model="form.src" name="src" value="o8d" :label="imported.label" sub="Deck importé" />
-        <label class="btn file-btn">Importer un deck OCTGN .o8d<input type="file" accept=".o8d,.xml" @change="importDeck"></label>
+        <ChoiceOption v-if="imported" v-model="form.src" name="src" value="import" :label="imported.label" sub="Deck importé" />
+        <label class="btn file-btn">Importer un deck (.o8d OCTGN ou .txt MarvelCDB)<input type="file" accept=".o8d,.xml,.txt" @change="importDeck"></label>
         <span class="note">{{ info }}</span>
       </div>
     </div>

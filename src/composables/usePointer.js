@@ -2,9 +2,10 @@ import { onMounted, onBeforeUnmount } from 'vue'
 import { useGameStore } from '../stores/game.js'
 import { useUiStore } from '../stores/ui.js'
 import { useZoneActions } from './useZoneActions.js'
-import { useCardMenu } from './useCardMenu.js'
+import { useCardMenu, DRAW_PILES, MENU_PILES } from './useCardMenu.js'
 
 const LONG_PRESS = 500
+const PILE_SELECTOR = MENU_PILES.map(z => `[data-zone="${z}"]`).join(', ')
 const DOUBLE_TAP = 350
 // a finger wobbles more than a mouse: below this distance a press is still a tap
 const SLOP = { mouse: 5, pen: 8, touch: 10 }
@@ -40,9 +41,9 @@ export function usePointer() {
     const c = game.card(el.dataset.id)
     return c ? { el, c } : null
   }
-  // long press works like a right click on any card (also in a pile viewer) and on the draw piles;
+  // long press works like a right click on any card (also in a pile viewer), on the draw and discard piles;
   // the hand strip itself is pressable so that a finger can scroll it from the gaps too
-  const pressable = target => target.closest?.('.card, .hand-row, [data-zone="deck"], [data-zone="edeck"]')
+  const pressable = target => target.closest?.(`.card, .hand-row, ${PILE_SELECTOR}`)
   // Touch and pen: an overflowing hand scrolls sideways under the finger. We scroll it ourselves:
   // a native pan that reaches the end of the row can turn into the browser's "back" swipe.
   const handScroller = target => {
@@ -154,8 +155,8 @@ export function usePointer() {
       const h = d.el.offsetHeight
       const x = Math.max(0, Math.min(tr.width - w, e.clientX - tr.left - d.ox))
       const y = Math.max(0, Math.min(tr.height - h, e.clientY - tr.top - d.oy))
-      // a card dragged off a draw pile lands face down
-      game.move(d.c.id, 'table', { x, y, faceDown: d.c.zone === 'deck' || d.c.zone === 'edeck' })
+      // a card dragged off a draw pile lands face down (an Invocation card is then put under a scheme)
+      game.move(d.c.id, 'table', { x, y, faceDown: DRAW_PILES.includes(d.c.zone) })
     } else if (zone === 'hand' && d.c.zone === 'hand') {
       const others = [...zoneEl.querySelectorAll('.card[data-id]')].filter(n => n.dataset.id !== d.c.id)
       const before = others.find(n => { const r = n.getBoundingClientRect(); return e.clientX < r.left + r.width / 2 })
@@ -210,11 +211,13 @@ export function usePointer() {
     if (hit && hit.c.kind !== 'token') ui.showPreview(hit.c.id)
   }
 
+  // a pile on the board (its top card included) opens the pile's menu; a card in a pile viewer
+  // keeps its own menu (PileModal)
   function onContext(e) {
+    const pile = e.target.closest?.(PILE_SELECTOR)
+    if (pile && !inert(pile)) { e.preventDefault(); openPileMenu(pile.dataset.zone, e.clientX, e.clientY); return }
     const hit = cardFrom(e.target)
-    if (hit) { e.preventDefault(); openCardMenu(hit.c, e.clientX, e.clientY); return }
-    const pile = e.target.closest?.('[data-zone="deck"], [data-zone="edeck"]')
-    if (pile && !inert(pile)) { e.preventDefault(); openPileMenu(pile.dataset.zone, e.clientX, e.clientY) }
+    if (hit) { e.preventDefault(); openCardMenu(hit.c, e.clientX, e.clientY) }
   }
 
   // window capture runs before anything on the page; iOS only applies :active with a touch listener

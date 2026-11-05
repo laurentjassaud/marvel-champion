@@ -40,10 +40,14 @@ onMounted(() => { if (!game.ready) game.defaultGame() })
         <GameLog />
       </aside>
     </main>
-    <footer class="bottom">
+    <footer class="bottom" :class="{ inv: game.hasInvocation }">
       <CardPile zone="deck" label="Paquet" variant="p" title="Clic : piocher" />
       <HandStrip />
       <CardPile zone="discard" label="Défausse" variant="p" title="Clic : voir" />
+      <template v-if="game.hasInvocation">
+        <CardPile zone="ideck" label="Invocation" variant="i" title="Clic : lancer l'invocation du dessus · appui long ou clic droit : autres choix" />
+        <CardPile zone="idiscard" label="Défausse I." variant="i" title="Clic : voir" />
+      </template>
     </footer>
 
     <ContextMenu />

@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import * as E from '../game/engine.js'
-import { PRECONS, HEROES, VILLAINS, BY_ID } from '../game/data.js'
+import { PRECONS, HEROES, VILLAINS, BY_ID, ZONE_LABELS } from '../game/data.js'
 import { useUiStore } from './ui.js'
 
 const KEY = 'mc-table-vue-v1'
@@ -30,6 +30,11 @@ export const useGameStore = defineStore('game', () => {
   // a pile as shown: with several villains, the encounter piles are the active villain's
   const pile = z => (s.value && (z === 'edeck' || z === 'ediscard') ? E.encounterPile(s.value, z) : zone(z))
   const card = id => (s.value && id ? E.byId(s.value, id) : null)
+  // Docteur Strange: the Invocation deck and its discard are shown next to the player piles
+  const hasInvocation = computed(() => !!s.value?.cards.some(E.isInvocation))
+  // round and phase (a game saved before they existed is in round 1, hero phase)
+  const turn = computed(() => s.value?.turn ?? 1)
+  const phase = computed(() => (s.value ? E.phaseOf(s.value) : 'hero'))
   const pback = computed(() => s.value?.opt?.pback || 'blue')
   const subtitle = computed(() => {
     const o = s.value?.opt
@@ -55,21 +60,24 @@ export const useGameStore = defineStore('game', () => {
   }
 
   return {
-    s, ready, zone, pile, card, pback, subtitle,
+    s, ready, zone, pile, card, hasInvocation, turn, phase, pback, subtitle,
     newGame, defaultGame,
     precon: hero => PRECONS[hero],
-    parseO8D: E.parseO8D,
+    parseDeck: E.parseDeck,
     isCoreCard: id => !!BY_ID[id],
 
     draw: () => run(E.drawCard, L()),
     drawMany: n => run(E.drawMany, L(), n),
     discardTop: () => run(E.discardTop),
-    shuffle: z => { run(E.shuffleZone, z); run(E.log, z === 'deck' ? 'Paquet mélangé.' : 'Paquet Rencontre mélangé.') },
-    searched: z => { run(E.shuffleZone, z); run(E.log, `Vous cherchez dans le ${z === 'deck' ? 'paquet' : 'paquet Rencontre'}, puis le mélangez.`) },
+    shuffle: z => { run(E.shuffleZone, z); run(E.log, `${ZONE_LABELS[z][0].toUpperCase()}${ZONE_LABELS[z].slice(1)} mélangé.`) },
+    searched: z => { run(E.shuffleZone, z); run(E.log, `Vous cherchez dans le ${ZONE_LABELS[z]}, puis le mélangez.`) },
+    invoke: () => run(E.invoke),
+    invokeKeep: () => run(E.invokeKeep),
+    discardInvocation: () => run(E.invoke, false),
     reveal: () => run(E.revealEncounter, L()),
     boost: () => { if (run(E.dealFaceDown, L())) run(E.log, 'Carte Rencontre posée face cachée (boost).') },
-    villainPhase: () => run(E.villainPhase, L()),
-    newTurn: () => run(E.newTurn, L()),
+    toVillainPhase: () => run(E.toVillainPhase, L()),
+    toHeroPhase: () => run(E.toHeroPhase),
     mulligan: ids => run(E.mulligan, L(), ids),
     addToken: () => run(E.addToken, L()),
     clamp: () => run(E.clampAll, L()),

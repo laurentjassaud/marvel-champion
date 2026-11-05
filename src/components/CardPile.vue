@@ -15,7 +15,7 @@ const game = useGameStore()
 const { activateZone } = useZoneActions()
 const cards = computed(() => game.pile(props.zone))
 const top = computed(() => cards.value.at(-1))
-// draw piles and the set-aside pile keep their top card hidden
+// draw piles and the set-aside pile keep their top card hidden (not the Invocation deck: its top card is face up)
 const showFace = computed(() => !['deck', 'edeck', 'aside'].includes(props.zone) && !!top.value?.faceUp)
 
 function onClick(e) {

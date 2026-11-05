@@ -4,20 +4,22 @@ import BaseModal from './BaseModal.vue'
 import GameCard from '../GameCard.vue'
 import { useGameStore } from '../../stores/game.js'
 import { useUiStore } from '../../stores/ui.js'
-import { useCardMenu } from '../../composables/useCardMenu.js'
+import { useCardMenu, DRAW_PILES } from '../../composables/useCardMenu.js'
 
 const props = defineProps({ zone: { type: String, required: true } })
 const game = useGameStore()
 const ui = useUiStore()
 const { openCardMenu } = useCardMenu()
 
-const TITLES = { deck: 'Chercher dans le paquet', edeck: 'Chercher dans le paquet Rencontre', discard: 'Défausse', ediscard: 'Défausse Rencontre', aside: 'Cartes mises de côté' }
+const TITLES = { deck: 'Chercher dans le paquet', edeck: 'Chercher dans le paquet Rencontre', discard: 'Défausse', ediscard: 'Défausse Rencontre', aside: 'Cartes mises de côté', ideck: 'Chercher dans le deck Invocation', idiscard: 'Défausse Invocation' }
 const HELP = {
   deck: 'Du dessus vers le dessous. Clic : prendre en main. Le paquet est mélangé à la fermeture.',
   edeck: 'Du dessus vers le dessous. Clic : mettre en jeu. Le paquet est mélangé à la fermeture.',
   discard: 'Clic : reprendre en main. Clic droit ou appui long : autres choix.',
   ediscard: 'Clic : remettre en jeu. Clic droit ou appui long : autres choix.',
-  aside: 'Étapes suivantes du méchant et de la manigance, set Némésis. Clic : mettre en jeu (les compteurs se mettent à jour).'
+  aside: 'Étapes suivantes du méchant et de la manigance, set Némésis. Clic : mettre en jeu (les compteurs se mettent à jour).',
+  ideck: 'Du dessus vers le dessous. Clic : poser sur la table. Le deck est mélangé à la fermeture.',
+  idiscard: 'Invocations déjà lancées. Clic : poser sur la table. Clic droit ou appui long : autres choix (sur le deck…).'
 }
 
 const cards = computed(() => game.pile(props.zone).slice().reverse())
@@ -29,7 +31,7 @@ function menu(c, e) {
 }
 
 // searching a draw pile always ends with a shuffle, however the window is closed
-onBeforeUnmount(() => { if (props.zone === 'deck' || props.zone === 'edeck') game.searched(props.zone) })
+onBeforeUnmount(() => { if (DRAW_PILES.includes(props.zone)) game.searched(props.zone) })
 </script>
 
 <template>

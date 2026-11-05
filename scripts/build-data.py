@@ -88,6 +88,10 @@ def main():
                     d[kk] = b[k]
         if c['type_code'] == 'obligation':
             d['f'] = 'encounter'
+        else:
+            # English name: MarvelCDB text deck lists name the cards in English
+            if d['f'] != 'encounter':
+                d['en'] = c['name']
         defs.append(d)
 
     # precon lists from the OCTGN module (dicts named after each hero, code -> qty)
@@ -104,7 +108,7 @@ def main():
         precons[hero] = lst
 
     os.makedirs(a.out, exist_ok=True)
-    json.dump(defs, open(f'{a.out}/cards.json', 'w', encoding='utf-8'), ensure_ascii=False, separators=(',', ':'))
+    json.dump(defs, open(f'{a.out}/cards.json', 'w', encoding='utf-8'), ensure_ascii=False, indent=4)
     json.dump(precons, open(f'{a.out}/precons.json', 'w', encoding='utf-8'))
     print(f'{len(defs)} cartes, {len(precons)} précons → {a.out}')
 
