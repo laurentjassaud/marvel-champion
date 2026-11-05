@@ -9,7 +9,7 @@ const ui = useUiStore()
 
 const card = computed(() => {
   const c = ui.preview && game.card(ui.preview.id)
-  return c && c.kind !== 'token' ? c : null
+  return c && c.kind !== 'token' && c.zone !== 'removed' ? c : null // a defeated villain stage is out of the game
 })
 const visible = computed(() => card.value && (ui.preview.face || card.value.zone === 'hand' || card.value.faceUp))
 const shown = computed(() => card.value && bareCard(card.value))

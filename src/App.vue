@@ -12,6 +12,7 @@ import PileModal from './components/modals/PileModal.vue'
 import MulliganModal from './components/modals/MulliganModal.vue'
 import HelpModal from './components/modals/HelpModal.vue'
 import RestartModal from './components/modals/RestartModal.vue'
+import VillainModal from './components/modals/VillainModal.vue'
 import { useGameStore } from './stores/game.js'
 import { useUiStore } from './stores/ui.js'
 import { usePointer } from './composables/usePointer.js'
@@ -57,5 +58,6 @@ onMounted(() => { if (!game.ready) game.defaultGame() })
     <MulliganModal v-else-if="ui.modal?.type === 'mulligan' && game.ready" />
     <HelpModal v-else-if="ui.modal?.type === 'help'" />
     <RestartModal v-else-if="ui.modal?.type === 'restart' && game.ready" />
+    <VillainModal v-else-if="ui.modal?.type === 'villain' && game.ready" :key="ui.modal.result.kind + ui.modal.result.from" />
   </div>
 </template>

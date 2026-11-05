@@ -147,10 +147,26 @@ export const TYPE_LABELS = {
   obligation: 'Obligation', environment: 'Environnement'
 }
 
+/** Shown when the last villain falls, for the main scheme in play: what the heroes prevented. */
+export const VICTORY = {
+  '1687b8a9-9630-4800-b297-03c5001e8ee9': 'L\'effraction a échoué : Rhino repart les mains vides, et menotté.', // L'Effraction !
+  '77e9fb39-e38c-4b35-bf58-39072e9c6c10': 'Le réseau de Klaw est démantelé : aucune de ses armes soniques n\'arrivera dans les rues.', // Trafic Clandestin
+  '76806fd2-3552-44be-98a5-17ab83880eca': 'Le rendez-vous secret n\'aura jamais lieu : Klaw ne livrera pas sa technologie aux pires criminels du monde.', // Rendez-Vous Secret
+  '741ee538-008d-4f5b-8b54-be47c3b37160': 'Le masque du Crimson Cowl est tombé : les plans d\'Ultron sont exposés avant d\'avoir pu aboutir.', // Le Crimson Cowl
+  '79ae1bd9-628f-40f7-8e00-049526f13041': 'Le NORAD tient bon : Ultron ne prendra pas le contrôle des défenses du continent.', // Assaut sur le NORAD
+  'af49444f-d93e-4ef5-b2fb-2035cd386d41': 'Le compte à rebours est stoppé à temps : Ultron n\'anéantira pas l\'humanité.', // Compte à Rebours pour l'Enfer
+  'gob-04': 'La prise de contrôle hostile échoue : Norman Osborn ne mettra pas la main sur la ville.', // Prise de Contrôle Hostile
+  'gob-05': 'L\'acquisition est annulée : l\'empire d\'Osborn s\'effondre avant d\'avoir englouti ses rivaux.', // Acquisition d'Entreprise
+  'gob-17': 'Le mutagène ne se répandra pas : aucun habitant ne deviendra l\'esclave du Bouffon.', // Répandre le Mutagène
+  'gob-18': 'Le nuage mutagène se dissipe : la ville respire, et l\'armée de Bouffons ne verra jamais le jour.', // Nuage Mutagène
+  'dem-01': 'L\'évasion a échoué : les Démolisseurs retournent derrière les barreaux.' // Évasion
+}
+
 export const ZONE_LABELS = {
   deck: 'paquet', hand: 'main', table: 'table', discard: 'défausse',
   edeck: 'paquet Rencontre', ediscard: 'défausse Rencontre', aside: 'de côté',
-  ideck: 'deck Invocation', idiscard: 'défausse Invocation'
+  ideck: 'deck Invocation', idiscard: 'défausse Invocation',
+  removed: 'hors jeu' // defeated villain stages, side schemes of a defeated villain: shown nowhere
 }
 
 export const TOKEN_COLORS = ['#d9705c', '#4f7fc9', '#6fbf73', '#d1a356', '#a77ad9']

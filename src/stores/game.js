@@ -64,6 +64,8 @@ export const useGameStore = defineStore('game', () => {
     newGame({ hero: o.hero, list: o.list ?? PRECONS[o.hero], villain: o.villain, modular: o.modular, expert: o.expert, label: o.label, drawn: o.drawn })
     s.value.log.unshift({ t: s.value.log[0].t, msg: 'Partie recommencée avec la même mise en place.', sys: true })
   }
+  // a villain defeated: its next stage (or the victory) is presented in a window
+  const announce = r => { if (r) ui.openModal('villain', { result: r }) }
   // the mulligan is taken once, in the hero phase of round 1
   const canMulligan = computed(() => !!s.value && !s.value.mull && turn.value === 1 && phase.value === 'hero')
   function defaultGame() {
@@ -103,15 +105,15 @@ export const useGameStore = defineStore('game', () => {
     tap: id => withCard(id, c => run(E.toggleTap, c)),
     flip: id => withCard(id, c => run(E.flipCard, c)),
     status: (id, st) => withCard(id, c => run(E.toggleStatus, c, st)),
-    damage: (id, n) => run(E.addDamage, card(id), n),
+    damage: (id, n) => announce(run(E.addDamage, card(id), n)),
     threat: (id, n) => run(E.addThreat, card(id), n),
     tokens: (id, n) => run(E.addTokens, card(id), n),
     setActive: set => run(E.setActive, set),
     untapPlayer: () => { zone('table').filter(c => !E.isEnc(c)).forEach(c => { c.tapped = false }) },
 
     counterAdd(i, n) {
-      // several villains: the villain counter mirrors the active villain, so + / − heal or damage it
-      if (i === 1 && s.value.crew) return run(E.addDamage, null, -n)
+      // the villain counter: − damages, + heals, so that a stage falling to 0 is noticed (next stage, victory)
+      if (i === 1) return announce(run(E.addDamage, null, -n))
       const k = s.value.counters[i]; k.v += n; E.log(s.value, `${k.l} : ${k.v}.`)
     },
     counterLabel(i, l) { if (l) s.value.counters[i].l = l }

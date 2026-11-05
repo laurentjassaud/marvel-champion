@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { existsSync } from 'node:fs'
 import * as E from './engine.js'
-import { DEFS, PRECONS, HEROES, BY_ID, MODULARS } from './data.js'
+import { DEFS, PRECONS, HEROES, BY_ID, MODULARS, VICTORY } from './data.js'
 
 const L = { w: 1100, h: 580, cw: 80 }
 
@@ -401,6 +401,36 @@ describe('dégâts et menace', () => {
     E.takeFromPile(s, L, next, 'aside')
     expect(s.counters[1]).toMatchObject({ v: 15, l: 'Rhino II' })
   })
+
+  it('méchant vaincu : l\'étape suivante le remplace, au même endroit, avec ses cartes d\'état', () => {
+    const s = game()
+    const rhino = E.cardsIn(s, 'table').find(c => E.def(c).t === 'villain')
+    const { x, y } = rhino
+    E.toggleStatus(s, rhino, 'stunned')
+    E.addDamage(s, null, 10)
+    expect(E.addDamage(s, null, 3)).toBeUndefined() // 1 PV left
+    const r = E.addDamage(s, rhino, 5)
+    expect(r.kind).toBe('stage')
+    const next = E.byId(s, r.to)
+    expect(next).toMatchObject({ zone: 'table', x, y, stunned: true, dmg: 0 })
+    expect(E.def(next).st).toBe('II')
+    expect(rhino.zone).toBe('removed')
+    expect(E.cardsIn(s, 'aside').some(c => E.def(c).t === 'villain')).toBe(false)
+    expect(s.counters[1]).toMatchObject({ v: 15, l: 'Rhino II' })
+  })
+
+  it('dernière étape vaincue : victoire, avec la manigance en jeu ; pas de second déclenchement', () => {
+    const s = game()
+    E.addDamage(s, null, 14)
+    const r = E.addDamage(s, null, 15)
+    const scheme = E.cardsIn(s, 'table').find(c => E.def(c).t === 'main_scheme')
+    expect(r).toMatchObject({ kind: 'victory', scheme: scheme.id })
+    expect(VICTORY[scheme.g]).toMatch(/Rhino/)
+    expect(s.log.at(-1).msg).toBe('Victoire : « Rhino » est vaincu en 1 tour !')
+    expect(E.addDamage(s, null, 1)).toBeUndefined() // already at 0
+    // every main scheme has its victory text
+    expect(DEFS.filter(d => d.t === 'main_scheme').filter(d => !VICTORY[d.id]).map(d => d.n)).toEqual([])
+  })
 })
 
 describe('scénarios du Bouffon Vert', () => {
@@ -503,6 +533,23 @@ describe('Les Démolisseurs', () => {
     expect(s.active).toBe('bulldozer')
     for (const c of villains(s)) E.moveCard(s, c, 'discard')
     expect(s.log.at(-1).msg).toContain('vous gagnez la partie')
+  })
+
+  it('méchant à 0 PV : il quitte la partie seul, sa manigance hors jeu ; victoire au dernier', () => {
+    const s = crewGame()
+    sideOf(s, 'piledriver').thr = 9
+    const wrecker = villainOf(s, 'wrecker')
+    const side = sideOf(s, 'wrecker')
+    const r = E.addDamage(s, null, 14) // the active villain, Le Démolisseur A
+    expect(r).toMatchObject({ kind: 'crew', from: wrecker.id, side: side.id, active: villainOf(s, 'piledriver').id })
+    expect([wrecker.zone, side.zone]).toEqual(['removed', 'removed'])
+    expect(s.counters[1]).toMatchObject({ l: 'Le Compresseur A', v: 11 })
+    let last
+    for (const v of villains(s)) last = E.addDamage(s, v, E.def(v).hp)
+    expect(last).toMatchObject({ kind: 'victory', scheme: E.cardsIn(s, 'table').find(c => E.def(c).t === 'main_scheme').id })
+    expect(villains(s)).toHaveLength(0)
+    // the defeated villains are not shuffled back into an encounter deck
+    expect(E.cardsIn(s, 'ediscard').some(c => E.def(c).t === 'villain')).toBe(false)
   })
 
   it('paquet du méchant actif vide : seule sa défausse est remélangée, +1 accélération', () => {

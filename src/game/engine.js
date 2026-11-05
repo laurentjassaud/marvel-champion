@@ -94,12 +94,12 @@ export function setActive(s, set) {
   log(s, `Jeton Actif sur « ${activeName(s)} » : les piles Rencontre affichées sont les siennes.`, true)
 }
 
-/** A defeated villain leaves with its side scheme; the Active token moves on if it was on it. */
+/** A defeated villain leaves with its side scheme (out of the game); the Active token moves on if it was on it. */
 function crewVillainGone(s, c) {
   const set = def(c).s
   const side = sideSchemeOf(s, set)
-  if (side) moveCard(s, side, 'aside', {}, true)
-  log(s, `« ${def(c).n} » quitte la partie${side ? ` avec sa manigance « ${def(side).n} » (mise de côté)` : ''}.`, true)
+  if (side) moveCard(s, side, 'removed', {}, true)
+  log(s, `« ${def(c).n} » quitte la partie${side ? ` avec sa manigance « ${def(side).n} »` : ''}.`, true)
   const next = mostThreatened(s)
   if (!next.set) { log(s, 'Les quatre Démolisseurs sont vaincus : vous gagnez la partie !', true); return }
   if (s.active !== set) return
@@ -674,6 +674,7 @@ export function flipCard(s, c) {
 /**
  * Damage (+n) or heal (−n), characters only. The villain and the identity use the HP counters,
  * allies and minions get a damage token. No card = the villain.
+ * Returns what a villain's defeat led to (see defeatVillain), for the UI to show it.
  */
 export function addDamage(s, c, n) {
   if (c && counterOf(c) !== 'dmg') return
@@ -681,16 +682,19 @@ export function addDamage(s, c, n) {
     // several villains: each keeps its damage on its card, the counter shows the active one
     const v = c ?? activeVillain(s)
     if (!v) return
+    const was = def(v).hp - v.dmg
     v.dmg = Math.max(0, v.dmg + n)
     const left = Math.max(0, def(v).hp - v.dmg)
     log(s, `${n > 0 ? 'Dégât' : 'Soin'} sur ${nameOf(v)} : ${left} PV.`)
-    if (n > 0 && left === 0) log(s, `« ${nameOf(v)} » est vaincu : défaussez-le, sa manigance annexe quitte la partie avec lui.`, true)
     syncCrewCounter(s)
+    if (was > 0 && left === 0) return defeatVillain(s, v)
   } else if (!c || def(c).t === 'villain') {
     const k = s.counters[1]
+    const was = k.v
     k.v = Math.max(0, k.v - n)
     log(s, `${n > 0 ? 'Dégât' : 'Soin'} sur ${k.l} : ${k.v} PV.`)
-    if (n > 0 && k.v === 0) log(s, 'Étape du méchant vaincue : posez la suivante depuis « De côté » (victoire s\'il n\'y en a plus).', true)
+    const v = c ?? cardsIn(s, 'table').find(x => def(x).t === 'villain')
+    if (was > 0 && k.v === 0 && v) return defeatVillain(s, v)
   } else if (c.hero) {
     const k = s.counters[0]
     k.v = Math.max(0, k.v - n)
@@ -700,6 +704,39 @@ export function addDamage(s, c, n) {
     c.dmg = Math.max(0, c.dmg + n)
     log(s, `${label(c)} : ${plural(c.dmg, 'dégât')}.`)
   }
+}
+
+/**
+ * A villain falls to 0 HP. Its next stage, set aside, takes its place: same spot and form,
+ * status cards kept (attachments are separate cards and stay), damage not. With several villains
+ * (Les Démolisseurs) it leaves the game with its side scheme and the Active token moves on.
+ * No villain left: victory. Returns {kind: 'stage', from, to} | {kind: 'crew', from, active, side}
+ * | {kind: 'victory', villain, scheme} (card ids).
+ */
+export function defeatVillain(s, v) {
+  const d = def(v)
+  const scheme = cardsIn(s, 'table').filter(c => def(c).t === 'main_scheme').at(-1)
+  const victory = () => {
+    log(s, `Victoire : ${s.crew ? 'les Démolisseurs sont vaincus' : `« ${nameOf(v)} » est vaincu`} en ${plural(s.turn ?? 1, 'tour')} !`, true)
+    return { kind: 'victory', villain: v.id, scheme: scheme?.id }
+  }
+  if (s.crew) {
+    const side = sideSchemeOf(s, d.s)
+    moveCard(s, v, 'removed', {}, true) // crewVillainGone: side scheme out, Active token moved
+    if (!cardsIn(s, 'table').some(c => def(c).t === 'villain')) return victory()
+    return { kind: 'crew', from: v.id, active: activeVillain(s)?.id, side: side?.id }
+  }
+  const next = cardsIn(s, 'aside').filter(c => def(c).t === 'villain' && def(c).s === d.s).sort((a, b) => byStage(def(a), def(b)))[0]
+  if (!next) return victory()
+  const kept = STATUSES.filter(st => v[st.id]).map(st => st.id)
+  const { x, y, side } = v
+  log(s, `« ${nameOf(v)} » ${d.st} est vaincu${kept.length ? ', ses cartes d\'état passent à l\'étape suivante' : ''}.`, true)
+  moveCard(s, v, 'removed', {}, true)
+  next.side = side
+  moveCard(s, next, 'table', { x, y }, true) // from "De côté": new HP counter, "Nouvelle étape du méchant" logged
+  kept.forEach(id => { next[id] = true })
+  s.counters[1].l = `${nameOf(next)} ${def(next).st}`
+  return { kind: 'stage', from: v.id, to: next.id }
 }
 
 /**

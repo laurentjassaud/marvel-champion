@@ -16,7 +16,7 @@ export const useUiStore = defineStore('ui', () => {
   const hover = ref(null) // card id under the pointer
   const preview = ref(null) // {id, face} card shown enlarged
   const menu = ref(null) // {x, y, title, items: [{label, key, run, checked?} | null], card?: id}
-  const modal = ref(null) // {type: 'setup'|'pile'|'mulligan'|'help'|'restart', zone?}
+  const modal = ref(null) // {type: 'setup'|'pile'|'mulligan'|'help'|'restart'|'villain', zone?, result?}
 
   watch(cw, v => { try { localStorage.setItem(SIZE_KEY, String(v)) } catch { /* storage unavailable */ } })
 

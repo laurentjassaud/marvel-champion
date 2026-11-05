@@ -66,7 +66,7 @@ public/
   cards/thor/          29 images du paquet Thor (thor-NN.jpg, thor-01.b.jpg pour Odinson)
   backs/               dos bleu (cartes du héros), violet (cartes de type Méchant) et jaune orangé (autres cartes Rencontre)
   status/              cartes de statut posées sur les personnages (sonné, désorienté, tenace)
-  icons/               icônes PWA
+  icons/               icône d'onglet (favicon-32), icône iPad (apple-touch-icon) et icônes PWA, tirées du visuel Marvel Champions
 scripts/
   build-data.py        régénère cards.json / precons.json (voir l'en-tête du script)
   inline-artifact.mjs  post-traitement du build artefact
@@ -99,6 +99,7 @@ L'ordre du tableau `cards` est l'ordre des piles : le dessus d'une pile est sa d
 - Dégâts / menace / jetons : les dégâts ne vont que sur les personnages (compteurs PV du héros et du méchant, jeton sur les alliés et sbires), la menace que sur les manigances (compteur avec seuil pour la principale, jeton sur les annexes), et les autres cartes (ou une carte face cachée) reçoivent des jetons génériques.
 - Statuts : clic droit sur un personnage (identité, allié, méchant, sbire) pour le rendre Sonné, Désorienté ou Tenace ; ils se cumulent, s'affichent sur la carte, restent quand l'identité change de forme et disparaissent quand la carte quitte la table.
 - Une nouvelle étape du méchant ou de la manigance posée depuis « De côté » met les compteurs à jour.
+- Méchant vaincu (PV à 0, par dégât ou par le « − » du compteur) : l'étape suivante, mise de côté, le remplace automatiquement, au même endroit et dans la même forme, avec ses cartes d'état (les attachements restent, les dégâts non) ; une fenêtre la présente avec sa carte. L'étape vaincue passe hors jeu. S'il n'y a plus d'étape : fenêtre de victoire, avec le méchant marqué « Vaincu », le nombre de tours et un texte propre à la manigance principale en jeu (ce que vous avez empêché, `VICTORY` dans `data.js`), et les boutons Nouvelle partie / Recommencer.
 - Ténacité (Géant de Glace) : le personnage entre en jeu avec une carte d'état Tenace.
 - Le Bouffon Vert, deux scénarios et quatre sets modulaires (Gadgets du Bouffon, Un Immense Gâchis, Absorption Électrique, Ingérence en Cours) :
   - *Entreprise à Risques* : l'environnement Entreprise Criminelle est mis en jeu avec 2 jetons Infamie. Retourner Norman Osborn (F) le change en Le Bouffon Vert et renomme le compteur de PV ; Entreprise Criminelle se retourne en Accès de Folie.
@@ -107,7 +108,7 @@ L'ordre du tableau `cards` est l'ordre des piles : le dessus d'une pile est sa d
   - Mise en place : les quatre méchants (versions A, ou B en expert) et leurs manigances annexes avec leur menace de départ, un paquet Rencontre de 15 cartes par méchant, jeton Actif sur Le Démolisseur.
   - Les piles Rencontre affichées (paquet, défausse, révélation, boost, recherche) sont celles du méchant actif, signalé par un badge « Actif » ; clic droit sur un autre méchant → Rendre actif.
   - Phase des méchants (Évasion) : à jouer à la main, menace sur les manigances annexes et jeton Actif compris (clic droit sur un méchant → Rendre actif).
-  - Chaque méchant garde ses dégâts sur sa carte, le compteur de PV suit le méchant actif. Un méchant défaussé emporte sa manigance annexe (mise de côté) et passe le jeton Actif ; victoire quand les quatre sont tombés.
+  - Chaque méchant garde ses dégâts sur sa carte, le compteur de PV suit le méchant actif. Un méchant à 0 PV quitte la partie automatiquement (une fenêtre présente le nouveau méchant actif) ; défaussé à la main, de même : il emporte sa manigance annexe (hors jeu) et passe le jeton Actif ; victoire quand les quatre sont tombés.
   - Paquet du méchant actif vide : seule sa défausse est remélangée, +1 jeton d'accélération.
 - Captain America : la mise en place de Steve Rogers ajoute le Bouclier de Captain America à la main de départ (cherché dans le paquet, qui est mélangé). Comme la règle résout les mises en place après le mulligan, le Bouclier ne compte pas dans la main à compléter, et il est repris dans la défausse s'il a été défaussé au mulligan.
 - Hulk (Enragé) : sous forme de héros, sa main est défaussée à la fin de son tour, c'est-à-dire quand on passe à la phase du méchant, juste avant de la compléter à 4 cartes.
