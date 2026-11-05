@@ -30,7 +30,8 @@ const classes = computed(() => ({
   token: token.value,
   land: !token.value && showFace.value && !!def(props.card).l,
   tapped: props.positioned && props.card.tapped,
-  sel: !props.inert && ui.sel === props.card.id
+  sel: !props.inert && ui.sel === props.card.id,
+  rand: !props.inert && ui.randomPick === props.card.id
 }))
 const style = computed(() => {
   const st = {}
@@ -38,6 +39,10 @@ const style = computed(() => {
   if (token.value) st['--tok'] = props.card.color
   return st
 })
+// A playable card is driven by pointer events only (usePointer). Its touches must not start a
+// browser gesture (tap, long press): when the card leaves the page during that gesture (drawn,
+// played, dragged out of the hand), the unfinished gesture swallows the next tap elsewhere.
+const onTouchStart = e => { if (!props.inert) e.preventDefault() }
 const statuses = computed(() => STATUSES.filter(st => props.card[st.id]))
 // several villains (Les Démolisseurs): the one holding the Active token
 const active = computed(() => props.positioned && !!game.s?.active && def(props.card).t === 'villain' && def(props.card).s === game.s.active)
@@ -57,10 +62,11 @@ const label = computed(() => {
     :tabindex="inert ? -1 : 0"
     :role="inert ? 'img' : 'button'"
     :aria-label="label"
+    @touchstart="onTouchStart"
   >
     <template v-if="!token">
       <div v-if="showFace" class="face" :style="{ backgroundImage: `url('${cardImage(card)}')` }" />
-      <div v-else class="back" :style="{ backgroundImage: `url('${backImage(card, game.pback)}')` }" />
+      <div v-else class="back" :style="{ backgroundImage: `url('${backImage(card)}')` }" />
     </template>
     <div v-if="statuses.length" class="status">
       <img v-for="st in statuses" :key="st.id" :src="statusImage(st.id)" alt="" draggable="false">

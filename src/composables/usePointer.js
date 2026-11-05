@@ -85,9 +85,13 @@ export function usePointer() {
     el?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, view: window, clientX: p.sx, clientY: p.sy }))
   }
 
+  // the card picked at random loses its red outline once clicked, tapped or moved
+  const unmark = c => { if (ui.randomPick === c.id) ui.randomPick = null }
+
   function startDrag() {
     clearTimeout(press.timer)
     const { el, c } = press.hit
+    unmark(c)
     const ghost = el.cloneNode(true)
     ghost.classList.add('ghost')
     ghost.classList.remove('sel', 'tapped')
@@ -135,6 +139,7 @@ export function usePointer() {
       if (scrolling) { swallowClick = true; return }
       if (!hit) return // pile or pile viewer: their own click handler does the job
       swallowClick = true
+      unmark(hit.c)
       if (pointerType !== 'mouse' && isDoubleTap(hit.c, e)) doubleActivate(hit.c)
       else activateCard(hit.c)
       return

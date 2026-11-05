@@ -33,7 +33,7 @@ const villains = computed(() => (game.s?.crew ? 'Phase des méchants' : 'Phase d
           class="btn phase villain"
           :class="{ on: game.phase === 'villain' }"
           :aria-pressed="game.phase === 'villain'"
-          :title="game.phase === 'villain' ? 'Phase en cours' : 'Complète votre main, redresse vos cartes, puis menace d\'accélération et carte Rencontre'"
+          :title="game.phase === 'villain' ? 'Phase en cours' : 'Complète votre main et redresse vos cartes ; la phase du méchant se joue ensuite à la main'"
           @click="game.toVillainPhase()"
         >
           {{ villains }}<kbd>V</kbd>
@@ -48,7 +48,7 @@ const villains = computed(() => (game.s?.crew ? 'Phase des méchants' : 'Phase d
       <label class="btn" for="card-size">Taille</label>
       <input id="card-size" v-model.number="ui.cw" type="range" min="56" max="130" aria-label="Taille des cartes sur la table">
       <button type="button" class="btn" @click="game.addToken()">+ Pion</button>
-      <button type="button" class="btn" title="Défausser des cartes de la main de départ et repiocher" @click="ui.openModal('mulligan')">Mulligan</button>
+      <button type="button" class="btn" :disabled="!game.ready" title="Même héros, même deck, même scénario, depuis le début" @click="ui.openModal('restart')">Recommencer la partie</button>
       <button type="button" class="btn" title="Raccourcis clavier (?)" aria-label="Raccourcis clavier" @click="ui.openModal('help')">?</button>
       <button type="button" class="btn primary" @click="ui.openModal('setup')">Nouvelle partie</button>
     </div>

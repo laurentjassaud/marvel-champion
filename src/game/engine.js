@@ -6,7 +6,7 @@
 //   cards: Card[]            // array order = pile order; the top of a pile is its last card
 //   log: {t, msg, sys}[]
 //   counters: [{l, v, c}]    // 0: hero HP, 1: villain HP, 2: main scheme threat ("Menace /7")
-//   opt: {hero, villain, modular, expert, label, pback}
+//   opt: {hero, list, villain, modular, expert, label, drawn: ('modular' | 'expert')[] picked at random}
 //   turn: number             // round, from 1
 //   phase: 'hero' | 'villain' // the game starts in the hero phase
 //   accel: number            // acceleration tokens
@@ -190,8 +190,8 @@ export function clampAll(s, L) {
 const byStage = (a, b) => a.st.length - b.st.length || a.st.localeCompare(b.st)
 
 /**
- * Build a new game.
- * @param {{hero, list: [gid, qty][], villain, modular, expert, label, pback}} opt
+ * Build a new game. `modular` and `expert` can be 'random': drawn here and announced in the log.
+ * @param {{hero, list: [gid, qty][], villain, modular, expert, label}} opt
  * @param {{w, h, cw}} L
  */
 export function newGame(opt, L) {
@@ -200,9 +200,15 @@ export function newGame(opt, L) {
   if (!heroDef) throw new Error(`Héros inconnu : ${opt.hero}`)
   if (!villain) throw new Error(`Méchant inconnu : ${opt.villain}`)
 
+  const drawn = []
+  if (villain.crew) opt = { ...opt, modular: null } // Les Démolisseurs: no modular set
+  else if (opt.modular === 'random') { opt = { ...opt, modular: MODULARS[Math.floor(random() * MODULARS.length)].id }; drawn.push('modular') }
+  if (opt.expert === 'random') { opt = { ...opt, expert: random() < 0.5 }; drawn.push('expert') }
+
   const s = {
     cards: [], log: [], counters: [], turn: 1, phase: 'hero', accel: 0, mull: false, zTop: 10,
-    opt: { hero: opt.hero, villain: opt.villain, modular: opt.modular, expert: !!opt.expert, label: opt.label, pback: opt.pback || 'blue' }
+    // the setup as played (random choices resolved) and the deck list: "Recommencer la partie" replays it
+    opt: { hero: opt.hero, list: opt.list, villain: opt.villain, modular: opt.modular, expert: !!opt.expert, label: opt.label, drawn: [...(opt.drawn ?? []), ...drawn] }
   }
   const add = (g, o, zone, extra) => s.cards.push(makeCard(g, o, zone, extra))
 
@@ -289,6 +295,8 @@ export function newGame(opt, L) {
   const modular = MODULARS.find(m => m.id === opt.modular)?.name
   const scenario = villain.scenario ? ` (${villain.scenario})` : ''
   log(s, `Partie : ${heroDef.n} (${opt.label}) contre ${villain.name}${scenario}${modular ? `, module ${modular}` : ''}, ${opt.expert ? 'expert' : 'standard'}.`, true)
+  const luck = { modular: `module ${modular}`, expert: `difficulté ${opt.expert ? 'expert' : 'standard'}` }
+  if (drawn.length) log(s, `Tiré au hasard : ${drawn.map(k => luck[k]).join(', ')}.`, true)
   const invocations = cardsIn(s, 'ideck').length
   if (invocations) log(s, `Deck Invocation : ${invocations} cartes mélangées, celle du dessus est visible. Clic sur le deck (ou I) : la lancer.`)
   const start = `Vous commencez en alter ego (${heroDef.bn}) avec ${hs} cartes${fetched ? `, plus « ${nameOf(fetched)} » (mise en place de ${heroDef.bn})` : ''}.`
@@ -427,11 +435,6 @@ export function dealFaceDown(s, L) {
 }
 
 /* ---------- turn structure ---------- */
-/** Number of BOUFFON enemies in play, the villain included (the "X" of Nuage Mutagène). */
-function goblinEnemies(s) {
-  return cardsIn(s, 'table').filter(c => c.faceUp && ['villain', 'minion'].includes(def(c).t) && traitsOf(c).includes('bouffon')).length
-}
-
 /** Phase of the round: 'hero' (the game starts there) or 'villain'. Saved games from before have none. */
 export const phaseOf = s => s.phase ?? 'hero'
 
@@ -458,12 +461,16 @@ function endPlayerPhase(s, L) {
   log(s, `Fin de la phase du héros : +${plural(n, 'carte')} (main de ${hs} en ${nameOf(identity(s))}), vos cartes sont redressées.`, true)
 }
 
-/** "Phase du méchant": from the hero phase only. Ends the player phase, then runs the villain phase. */
+/**
+ * "Phase du méchant": from the hero phase only. Ends the player phase; the villain phase itself
+ * (threat, activations, encounter cards) is played by hand, the log only reminds its steps.
+ */
 export function toVillainPhase(s, L) {
   if (phaseOf(s) === 'villain') return false
   s.phase = 'villain'
   endPlayerPhase(s, L)
-  villainPhase(s, L)
+  const accel = s.accel ? ` (+${s.accel} d'accélération)` : ''
+  log(s, `${s.crew ? 'Phase des méchants' : 'Phase du méchant'} : à jouer à la main (menace sur la manigance principale${accel}, activations, cartes Rencontre).`, true)
   return true
 }
 
@@ -474,35 +481,6 @@ export function toHeroPhase(s) {
   s.turn = (s.turn ?? 1) + 1
   log(s, `Tour ${s.turn} : phase du héros.`, true)
   return true
-}
-
-/** Villain phase steps: acceleration threat on the main scheme, then an encounter card for the player. */
-export function villainPhase(s, L) {
-  // the stage placed last, in case the previous one is still on the table
-  const scheme = cardsIn(s, 'table').filter(c => def(c).t === 'main_scheme').at(-1)
-  const esc = scheme && def(scheme).esc
-  const x = esc === 'X' ? goblinEnemies(s) : null
-  const add = (x ?? (esc || 1)) + s.accel
-  const k = s.counters[2]
-  k.v += add
-  const why = x === null ? '' : `, dont X = ${x} ennemi${x > 1 ? 's' : ''} Bouffon`
-  let crew = ''
-  const full = []
-  if (s.crew) {
-    // Évasion, forced response after step one: 1 threat on each side scheme,
-    // then the Active token goes to the villain whose side scheme has the most threat
-    const sides = cardsIn(s, 'table').filter(c => def(c).t === 'side_scheme')
-    sides.forEach(c => { c.thr += 1 })
-    const next = mostThreatened(s)
-    if (next.set) { s.active = next.set; syncCrewCounter(s) }
-    crew = ` +1 menace sur chaque manigance annexe, jeton Actif sur « ${activeName(s)} »${next.tie ? TIE : ''}.`
-    full.push(...sides.filter(c => c.thr >= 10))
-  }
-  const who = s.crew ? `« ${activeName(s)} »` : 'Le méchant'
-  log(s, `${s.crew ? 'Phase des méchants' : 'Phase du méchant'} : +${add} menace sur la manigance principale (${k.v}${why}).${crew} ${who} active (en alter ego, il manigance).`, true)
-  for (const c of full) log(s, `« ${nameOf(c)} » a ${c.thr} menaces : appliquez sa Réponse forcée, puis retirez toutes ses menaces sauf 3.`, true)
-  warnThreshold(s)
-  revealEncounter(s, L)
 }
 
 /**
@@ -528,7 +506,8 @@ function heroSetup(s, loud = false) {
  */
 export function mulligan(s, L, ids) {
   const picked = cardsIn(s, 'hand').filter(c => ids.includes(c.id))
-  if (!picked.length) { log(s, 'Main de départ conservée.'); return 0 }
+  // keeping the opening hand is the mulligan decision too: it is taken once
+  if (!picked.length) { log(s, 'Main de départ conservée.'); s.mull = true; return 0 }
   picked.forEach(c => moveCard(s, c, 'discard', {}, true))
   const hs = handSize(s) + (cardsIn(s, 'hand').some(c => c.id === s.setupCard) ? 1 : 0)
   let k = 0
@@ -640,6 +619,15 @@ export function invoke(s, cast = true) {
 export function invokeKeep(s) {
   const c = cardsIn(s, 'ideck').at(-1)
   if (c) log(s, `Invocation lancée : « ${nameOf(c)} », qui reste sur le deck Invocation. Payez son coût et résolvez sa capacité Spécial.`)
+}
+
+/** A card of the hand at random (for the effects that say so): logged, returned for the UI to mark it. */
+export function randomHandCard(s) {
+  const hand = cardsIn(s, 'hand')
+  if (!hand.length) return null
+  const c = hand[Math.floor(random() * hand.length)]
+  log(s, `Carte de la main au hasard : « ${nameOf(c)} ».`)
+  return c
 }
 
 export function discardTop(s) {

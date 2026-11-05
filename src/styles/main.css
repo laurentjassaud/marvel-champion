@@ -61,9 +61,10 @@ input, textarea { -webkit-user-select: text; user-select: text; } /* iOS would n
 
 /* ---------- buttons & labels ---------- */
 .btn { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; line-height: 1.1; white-space: nowrap; transition: transform .1s ease-out; }
-.btn:active { transform: scale(.96); }
+.btn:active:not(:disabled) { transform: scale(.96); }
+.btn:disabled { opacity: .45; cursor: default; }
 @media (hover: hover) and (pointer: fine) {
-  .btn:hover { border-color: var(--brass); }
+  .btn:hover:not(:disabled) { border-color: var(--brass); }
 }
 .btn.primary { background: var(--brass); color: var(--brass-ink); border-color: var(--brass); font-weight: 600; }
 .btn.enc { border-color: color-mix(in srgb, var(--enc) 60%, var(--line)); }
@@ -104,6 +105,8 @@ input, textarea { -webkit-user-select: text; user-select: text; } /* iOS would n
 .card:not([data-id]) { touch-action: manipulation; }
 .card.land { width: calc(var(--w) * 1.4); height: var(--w); }
 .card.sel { outline: 2px solid var(--brass); outline-offset: 2px; }
+/* card of the hand picked at random (after .sel: it wins when both apply) */
+.card.rand { outline: 3px solid #e5483a; outline-offset: 2px; box-shadow: 0 0 0 5px rgb(229 72 58 / .25), 0 2px 6px rgb(0 0 0 / .5); }
 .card .face, .card .back { position: absolute; inset: 0; border-radius: inherit; background: #0d1015 center / cover no-repeat; }
 .card .mk { position: absolute; right: -7px; top: -7px; min-width: 22px; height: 22px; padding: 0 5px; border-radius: 11px; font-family: var(--f-mono); font-size: 12px; display: grid; place-items: center; box-shadow: 0 1px 3px rgb(0 0 0 / .6); color: #fff; }
 .card .mk.dmg { background: #b8402f; }

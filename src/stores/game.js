@@ -35,7 +35,6 @@ export const useGameStore = defineStore('game', () => {
   // round and phase (a game saved before they existed is in round 1, hero phase)
   const turn = computed(() => s.value?.turn ?? 1)
   const phase = computed(() => (s.value ? E.phaseOf(s.value) : 'hero'))
-  const pback = computed(() => s.value?.opt?.pback || 'blue')
   const subtitle = computed(() => {
     const o = s.value?.opt
     if (!o) return 'Table solo'
@@ -53,15 +52,30 @@ export const useGameStore = defineStore('game', () => {
     s.value = E.newGame(opt, L())
     ui.select(null)
     ui.preview = null
+    ui.randomPick = null
   }
+  /**
+   * Same setup from the start: same hero and deck, same scenario (a module or difficulty drawn at
+   * random stays the one drawn), decks shuffled again. A game saved before the deck list was kept
+   * replays the hero's precon.
+   */
+  function restart() {
+    const o = s.value.opt
+    newGame({ hero: o.hero, list: o.list ?? PRECONS[o.hero], villain: o.villain, modular: o.modular, expert: o.expert, label: o.label, drawn: o.drawn })
+    s.value.log.unshift({ t: s.value.log[0].t, msg: 'Partie recommencée avec la même mise en place.', sys: true })
+  }
+  // the mulligan is taken once, in the hero phase of round 1
+  const canMulligan = computed(() => !!s.value && !s.value.mull && turn.value === 1 && phase.value === 'hero')
   function defaultGame() {
     newGame({ hero: 'spider_man', list: PRECONS.spider_man, villain: 'rhino', modular: 'bomb_scare', expert: false, label: 'précon Justice' })
     s.value.log.unshift({ t: s.value.log[0].t, msg: 'Bienvenue. Une partie d\'exemple est prête : Spider-Man contre Rhino. « Nouvelle partie » pour changer de héros ou de méchant.', sys: true })
   }
 
   return {
-    s, ready, zone, pile, card, hasInvocation, turn, phase, pback, subtitle,
-    newGame, defaultGame,
+    s, ready, zone, pile, card, hasInvocation, turn, phase, subtitle, canMulligan,
+    newGame, defaultGame, restart,
+    // a card of the hand at random, marked in red until it is clicked or moved (usePointer)
+    randomHandCard: () => { ui.randomPick = run(E.randomHandCard)?.id ?? null },
     precon: hero => PRECONS[hero],
     parseDeck: E.parseDeck,
     isCoreCard: id => !!BY_ID[id],

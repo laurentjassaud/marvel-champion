@@ -42,7 +42,7 @@ src/
     useAssets.js       URL des images (respecte BASE_URL)
   components/
     GameTable, GameCard, CardPile, HandStrip, TopBar, CounterBox, CardPreview, GameLog, ContextMenu
-    modals/            BaseModal, ChoiceOption, SetupModal, PileModal, MulliganModal, HelpModal
+    modals/            BaseModal, ChoiceOption, SetupModal, PileModal, MulliganModal, RestartModal, HelpModal
   data/
     cards.json         boîte de base, 198 cartes (GUID OCTGN, nom FR, type, set, quantité, PV, menace, taille de main…)
     bouffon-vert.json  paquet Le Bouffon Vert, 49 cartes saisies depuis les cartes imprimées (id gob-<numéro>)
@@ -64,7 +64,7 @@ public/
   cards/hulk/          27 images du paquet Hulk (hlk-NN.jpg, hlk-01.b.jpg pour Bruce Banner)
   cards/miss marvel/   28 images du paquet Miss Marvel (msm-NN.jpg, msm-01.b.jpg pour Kamala Khan)
   cards/thor/          29 images du paquet Thor (thor-NN.jpg, thor-01.b.jpg pour Odinson)
-  backs/               dos bleu, violet (joueur) et orange (Rencontre)
+  backs/               dos bleu (cartes du héros), violet (cartes de type Méchant) et jaune orangé (autres cartes Rencontre)
   status/              cartes de statut posées sur les personnages (sonné, désorienté, tenace)
   icons/               icônes PWA
 scripts/
@@ -85,25 +85,28 @@ L'ordre du tableau `cards` est l'ordre des piles : le dessus d'une pile est sa d
 
 ## Règles automatisées
 
+- Nouvelle partie en deux écrans. 1 · Héros : une tuile de même largeur par héros (son préconstruit), plus une tuile « Deck personnalisé » qui importe un .o8d ou un .txt MarvelCDB et affiche ensuite la miniature du héros et le nom du deck ; un seul choix est allumé à la fois. 2 · Scénario : méchant, set modulaire et difficulté ; le set modulaire et la difficulté ont un choix « Au hasard », tiré à la mise en place et annoncé dans le journal. Les dos ne se choisissent plus : bleu pour les cartes du héros, violet pour les cartes de type Méchant, jaune orangé pour toutes les autres cartes Rencontre.
 - Mise en place : identité en alter ego, deck précon ou importé, méchant (I+II standard, II+III expert) et manigance face A sur la table, paquet Rencontre = set du méchant + module + Standard (+ Expert) + obligation du héros, set Némésis mis de côté.
 - Paquet joueur vide : la défausse est remélangée et une carte Rencontre arrive face cachée.
 - Paquet Rencontre vide : la défausse est remélangée et un jeton d'accélération est ajouté.
 - Tours et phases : la partie commence au tour 1, en phase du héros. Le compteur de tour et les deux boutons « Phase du héros » / « Phase du méchant » (« des méchants » contre Les Démolisseurs) remplacent « Nouveau tour », « Phase du méchant » et « Révéler rencontre » ; le bouton allumé est la phase en cours.
-  - Passer à la phase du méchant (`V`) termine votre phase : la main est complétée à la taille de la forme en jeu (héros ou alter ego), vos cartes sont redressées ; puis menace d'accélération (+ jetons) sur la manigance principale et révélation d'une carte Rencontre.
+  - Passer à la phase du méchant (`V`) termine votre phase : la main est complétée à la taille de la forme en jeu (héros ou alter ego), vos cartes sont redressées. La phase du méchant elle-même se joue à la main (menace, activations, cartes Rencontre) : le journal en rappelle les étapes et le nombre de jetons d'accélération.
   - Repasser à la phase du héros (`N`) commence le tour suivant.
   - On ne peut passer qu'à l'autre phase : un second clic sur la phase en cours ne fait rien. Une carte Rencontre se révèle aussi à la main (clic sur le paquet Rencontre ou `E`).
-- Mulligan officiel : défausser des cartes de la main de départ puis repiocher.
+- Mulligan officiel : bouton à côté de « Main », actif seulement au tour 1 en phase du héros et une fois par partie (garder sa main compte aussi) ; défausser des cartes de la main de départ puis repiocher.
+- Carte au hasard (à côté du mulligan) : une carte de la main tirée au hasard est entourée de rouge et annoncée au journal ; elle perd sa bordure dès qu'on la touche, la clique ou la déplace, ou qu'elle quitte la main.
+- Recommencer la partie (barre du haut) : après confirmation, même héros, même deck (précon ou importé), même scénario, module et difficulté compris même s'ils avaient été tirés au hasard ; la partie repart du tour 1, paquets remélangés.
 - Dégâts / menace / jetons : les dégâts ne vont que sur les personnages (compteurs PV du héros et du méchant, jeton sur les alliés et sbires), la menace que sur les manigances (compteur avec seuil pour la principale, jeton sur les annexes), et les autres cartes (ou une carte face cachée) reçoivent des jetons génériques.
 - Statuts : clic droit sur un personnage (identité, allié, méchant, sbire) pour le rendre Sonné, Désorienté ou Tenace ; ils se cumulent, s'affichent sur la carte, restent quand l'identité change de forme et disparaissent quand la carte quitte la table.
 - Une nouvelle étape du méchant ou de la manigance posée depuis « De côté » met les compteurs à jour.
 - Ténacité (Géant de Glace) : le personnage entre en jeu avec une carte d'état Tenace.
 - Le Bouffon Vert, deux scénarios et quatre sets modulaires (Gadgets du Bouffon, Un Immense Gâchis, Absorption Électrique, Ingérence en Cours) :
   - *Entreprise à Risques* : l'environnement Entreprise Criminelle est mis en jeu avec 2 jetons Infamie. Retourner Norman Osborn (F) le change en Le Bouffon Vert et renomme le compteur de PV ; Entreprise Criminelle se retourne en Accès de Folie.
-  - *Formule Mutagène* : un Esclave Bouffon est mis en jeu engagé avec vous. Sur Nuage Mutagène, l'accélération +X compte les ennemis Bouffon en jeu, Le Bouffon Vert compris.
+  - *Formule Mutagène* : un Esclave Bouffon est mis en jeu engagé avec vous. Nuage Mutagène posé depuis « De côté » met le compteur de menace à 4 /11 ; son accélération +X se compte à la main.
 - Les Démolisseurs (quatre méchants à la fois, sans set modulaire, Standard, obligation ni Némésis) :
   - Mise en place : les quatre méchants (versions A, ou B en expert) et leurs manigances annexes avec leur menace de départ, un paquet Rencontre de 15 cartes par méchant, jeton Actif sur Le Démolisseur.
   - Les piles Rencontre affichées (paquet, défausse, révélation, boost, recherche) sont celles du méchant actif, signalé par un badge « Actif » ; clic droit sur un autre méchant → Rendre actif.
-  - Phase du méchant (Évasion) : +1 menace sur chaque manigance annexe puis jeton Actif au méchant dont la manigance a le plus de menaces ; alerte à 10 menaces.
+  - Phase des méchants (Évasion) : à jouer à la main, menace sur les manigances annexes et jeton Actif compris (clic droit sur un méchant → Rendre actif).
   - Chaque méchant garde ses dégâts sur sa carte, le compteur de PV suit le méchant actif. Un méchant défaussé emporte sa manigance annexe (mise de côté) et passe le jeton Actif ; victoire quand les quatre sont tombés.
   - Paquet du méchant actif vide : seule sa défausse est remélangée, +1 jeton d'accélération.
 - Captain America : la mise en place de Steve Rogers ajoute le Bouclier de Captain America à la main de départ (cherché dans le paquet, qui est mélangé). Comme la règle résout les mises en place après le mulligan, le Bouclier ne compte pas dans la main à compléter, et il est repris dans la défausse s'il a été défaussé au mulligan.
@@ -121,7 +124,7 @@ Les raccourcis de carte visent la carte sous la souris, sinon la carte sélectio
 
 Toucher une carte l'agrandit, la glisser la déplace, un double tap l'épuise (ou la joue depuis la main), un appui long ouvre ses options avec la carte en grand. Sur un paquet ou une défausse, le clic droit ou l'appui long ouvre le menu de la pile : chercher dedans (paquet joueur, paquet Rencontre, deck Invocation et leurs défausses), piocher ou révéler, mélanger, reprendre la carte du dessus d'une défausse. Une main trop longue défile en glissant horizontalement, une carte glissée vers le haut part sur la table.
 
-Côté code (`usePointer`) : l'appui long envoie lui-même un `contextmenu` (iOS n'en émet pas) et ignore celui d'Android ou Windows s'il arrive en plus ; le clic qui suit un geste déjà traité est absorbé (pioche en double, option du menu sous le doigt, pile découverte par une fenêtre qui se ferme) ; le double tap est détecté à la main pour le toucher et le stylet. Le navigateur ne reçoit jamais de glissement horizontal (`touch-action`), sinon il peut le transformer en « page précédente ».
+Côté code (`usePointer`) : l'appui long envoie lui-même un `contextmenu` (iOS n'en émet pas) et ignore celui d'Android ou Windows s'il arrive en plus ; le clic qui suit un geste déjà traité est absorbé (pioche en double, option du menu sous le doigt, pile découverte par une fenêtre qui se ferme) ; le double tap est détecté à la main pour le toucher et le stylet. Le navigateur ne reçoit jamais de glissement horizontal (`touch-action`), sinon il peut le transformer en « page précédente ». Les cartes jouables annulent leur `touchstart` (`GameCard`) : tout se joue en événements de pointeur, et aucun geste du navigateur ne reste en suspens quand la carte touchée quitte la page (piochée, jouée, glissée hors de la main), ce qui faisait perdre le tap suivant.
 
 ## Données et droits
 

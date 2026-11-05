@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { existsSync } from 'node:fs'
 import * as E from './engine.js'
-import { DEFS, PRECONS, HEROES, BY_ID } from './data.js'
+import { DEFS, PRECONS, HEROES, BY_ID, MODULARS } from './data.js'
 
 const L = { w: 1100, h: 580, cw: 80 }
 
@@ -187,6 +187,21 @@ describe('mise en place', () => {
     expect(other.tough).toBeFalsy()
   })
 
+  it('set modulaire et difficulté au hasard : tirés à la mise en place et annoncés', () => {
+    const s = game({ modular: 'random', expert: 'random' })
+    expect(MODULARS.map(m => m.id)).toContain(s.opt.modular)
+    expect(typeof s.opt.expert).toBe('boolean')
+    expect(s.opt.drawn).toEqual(['modular', 'expert'])
+    expect(E.cardsIn(s, 'edeck').some(c => E.def(c).s === s.opt.modular)).toBe(true)
+    expect(s.log.some(e => e.msg.startsWith('Tiré au hasard : module '))).toBe(true)
+    // several draws do not always give the same set
+    const sets = new Set(Array.from({ length: 12 }, () => game({ modular: 'random' }).opt.modular))
+    expect(sets.size).toBeGreaterThan(1)
+    // Les Démolisseurs have no modular set: nothing to draw
+    const crew = game({ villain: 'wrecking_crew', modular: 'random' })
+    expect(crew.opt).toMatchObject({ modular: null, drawn: [] })
+  })
+
   it('refuse un héros inconnu', () => {
     expect(() => game({ hero: 'heros_inconnu' })).toThrow()
   })
@@ -219,13 +234,16 @@ describe('paquets', () => {
     expect(c.zone).toBe('ediscard')
   })
 
-  it('phase du méchant : accélération + révélation', () => {
+  it('phase du méchant : aucun automatisme côté méchant, seul un rappel au journal', () => {
     const s = game()
     s.accel = 1
-    const before = E.cardsIn(s, 'edeck').length
-    E.villainPhase(s, L)
-    expect(s.counters[2].v).toBe(2)
-    expect(E.cardsIn(s, 'edeck')).toHaveLength(before - 1)
+    const edeck = E.cardsIn(s, 'edeck').length
+    const table = E.cardsIn(s, 'table').length
+    E.toVillainPhase(s, L)
+    expect(s.counters[2].v).toBe(0)
+    expect(E.cardsIn(s, 'edeck')).toHaveLength(edeck)
+    expect(E.cardsIn(s, 'table')).toHaveLength(table)
+    expect(s.log.at(-1).msg).toBe("Phase du méchant : à jouer à la main (menace sur la manigance principale (+1 d'accélération), activations, cartes Rencontre).")
   })
 
   it('passage à la phase du méchant : redresse et complète la main selon la forme', () => {
@@ -256,12 +274,12 @@ describe('paquets', () => {
     const edeck = E.cardsIn(s, 'edeck').length
     expect(E.toVillainPhase(s, L)).toBe(true)
     expect(s).toMatchObject({ turn: 1, phase: 'villain' })
-    expect(s.counters[2].v).toBe(1)
-    expect(E.cardsIn(s, 'edeck')).toHaveLength(edeck - 1)
-    // a second click on the phase in play does nothing: no second threat or encounter card
+    // a second click on the phase in play does nothing: no second refill
+    const hand = E.cardsIn(s, 'hand').length
+    E.moveCard(s, E.cardsIn(s, 'hand')[0], 'discard', {}, true)
     expect(E.toVillainPhase(s, L)).toBe(false)
-    expect(s.counters[2].v).toBe(1)
-    expect(E.cardsIn(s, 'edeck')).toHaveLength(edeck - 1)
+    expect(E.cardsIn(s, 'hand')).toHaveLength(hand - 1)
+    expect(E.cardsIn(s, 'edeck')).toHaveLength(edeck)
     expect(E.toHeroPhase(s)).toBe(true)
     expect(s).toMatchObject({ turn: 2, phase: 'hero' })
     // a game saved before turns existed starts from round 1, hero phase
@@ -285,10 +303,42 @@ describe('mulligan', () => {
     expect(s.mull).toBe(true)
   })
 
-  it('sans sélection, garde la main', () => {
+  it('sans sélection, garde la main : la décision est prise, le mulligan est passé', () => {
     const s = game()
+    const hand = E.cardsIn(s, 'hand').map(c => c.id)
     expect(E.mulligan(s, L, [])).toBe(0)
-    expect(s.mull).toBe(false)
+    expect(E.cardsIn(s, 'hand').map(c => c.id)).toEqual(hand)
+    expect(s.mull).toBe(true)
+  })
+})
+
+describe('main et partie', () => {
+  it('carte de la main au hasard : une carte de la main, annoncée au journal', () => {
+    const s = game()
+    const picks = new Set()
+    for (let i = 0; i < 20; i++) {
+      const c = E.randomHandCard(s)
+      expect(c.zone).toBe('hand')
+      expect(s.log.at(-1).msg).toBe(`Carte de la main au hasard : « ${E.nameOf(c)} ».`)
+      picks.add(c.id)
+    }
+    expect(picks.size).toBeGreaterThan(1)
+    E.cardsIn(s, 'hand').forEach(c => E.moveCard(s, c, 'discard', {}, true))
+    expect(E.randomHandCard(s)).toBeNull()
+  })
+
+  it('la mise en place jouée est mémorisée : la rejouer (Recommencer) redonne la même', () => {
+    const list = PRECONS.black_widow.slice(0, -2)
+    const s = game({ hero: 'black_widow', list, modular: 'random', expert: 'random', label: 'mon deck' })
+    E.mulligan(s, L, [])
+    E.toVillainPhase(s, L)
+    E.toHeroPhase(s)
+    const o = s.opt
+    expect(o.list).toBe(list)
+    const again = E.newGame({ hero: o.hero, list: o.list, villain: o.villain, modular: o.modular, expert: o.expert, label: o.label, drawn: o.drawn }, L)
+    expect(again.opt).toEqual(o)
+    expect(again).toMatchObject({ turn: 1, phase: 'hero', mull: false })
+    expect(E.cardsIn(again, 'deck').length + E.cardsIn(again, 'hand').length).toBe(E.cardsIn(s, 'deck').length + E.cardsIn(s, 'hand').length + E.cardsIn(s, 'discard').length)
   })
 })
 
@@ -387,15 +437,11 @@ describe('scénarios du Bouffon Vert', () => {
     expect(s.counters.map(k => k.v)).toEqual([10, 16, 2])
   })
 
-  it('Nuage Mutagène : la menace monte de X = ennemis Bouffon en jeu, le méchant compris', () => {
+  it('Nuage Mutagène posé depuis « De côté » : menace de départ et seuil de la manigance', () => {
     const s = game({ villain: 'mutagen_formula', modular: 'goblin_gimmicks' })
     const cloud = E.cardsIn(s, 'aside').find(c => E.def(c).t === 'main_scheme')
     E.takeFromPile(s, L, cloud, 'aside')
     expect(s.counters[2]).toMatchObject({ v: 4, l: 'Menace /11' })
-    const soldier = E.cardsIn(s, 'edeck').find(c => E.nameOf(c) === 'Soldat Bouffon')
-    E.moveCard(s, soldier, 'table', {}, true)
-    E.villainPhase(s, L) // Le Bouffon Vert + Esclave Bouffon + Soldat Bouffon
-    expect(s.counters[2].v).toBe(4 + 3)
   })
 })
 
@@ -424,19 +470,17 @@ describe('Les Démolisseurs', () => {
     expect(s.counters[1].v).toBe(18)
   })
 
-  it('phase du méchant : +1 menace par manigance annexe, le jeton Actif va au méchant le plus menaçant', () => {
+  it('phase des méchants : ni menace ni jeton Actif déplacé, tout se joue à la main', () => {
     const s = crewGame()
     sideOf(s, 'thunderball').thr = 9
-    E.villainPhase(s, L)
-    expect(s.counters[2].v).toBe(1)
-    expect(sideOf(s, 'thunderball').thr).toBe(10)
-    expect(sideOf(s, 'wrecker').thr).toBe(7)
-    expect(s.active).toBe('thunderball')
-    expect(s.counters[1]).toMatchObject({ l: 'Le Boulet A', v: 13 })
-    // la carte révélée vient du paquet du Boulet
-    const revealed = E.cardsIn(s, 'table').at(-1)
-    expect(E.def(revealed).s).toBe('thunderball')
-    expect(s.log.some(e => e.msg.includes('« Envoyer Bouler » a 10 menaces'))).toBe(true)
+    const edeck = E.cardsIn(s, 'edeck').length
+    E.toVillainPhase(s, L)
+    expect(sideOf(s, 'thunderball').thr).toBe(9)
+    expect(sideOf(s, 'wrecker').thr).toBe(6)
+    expect(s.active).toBe('wrecker')
+    expect(s.counters[2].v).toBe(0)
+    expect(E.cardsIn(s, 'edeck')).toHaveLength(edeck)
+    expect(s.log.at(-1).msg).toMatch(/^Phase des méchants : à jouer à la main/)
   })
 
   it('dégâts : chaque méchant garde les siens, le compteur suit le méchant actif', () => {

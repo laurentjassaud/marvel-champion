@@ -12,10 +12,11 @@ export const useUiStore = defineStore('ui', () => {
   const tableW = ref(0)
   const tableH = ref(0)
   const sel = ref(null) // selected card id
+  const randomPick = ref(null) // card of the hand picked at random, outlined in red
   const hover = ref(null) // card id under the pointer
   const preview = ref(null) // {id, face} card shown enlarged
   const menu = ref(null) // {x, y, title, items: [{label, key, run, checked?} | null], card?: id}
-  const modal = ref(null) // {type: 'setup'|'pile'|'mulligan'|'help', zone?}
+  const modal = ref(null) // {type: 'setup'|'pile'|'mulligan'|'help'|'restart', zone?}
 
   watch(cw, v => { try { localStorage.setItem(SIZE_KEY, String(v)) } catch { /* storage unavailable */ } })
 
@@ -29,5 +30,5 @@ export const useUiStore = defineStore('ui', () => {
   const openModal = (type, extra = {}) => { menu.value = null; modal.value = { type, ...extra } }
   const closeModal = () => { modal.value = null }
 
-  return { cw, tableW, tableH, sel, hover, preview, menu, modal, layout, setTable, select, showPreview, openMenu, closeMenu, openModal, closeModal }
+  return { cw, tableW, tableH, sel, randomPick, hover, preview, menu, modal, layout, setTable, select, showPreview, openMenu, closeMenu, openModal, closeModal }
 })
