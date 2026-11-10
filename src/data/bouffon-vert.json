@@ -4,7 +4,7 @@
   {"id": "gob-03", "code": "3A", "n": "Norman Osborn", "t": "villain", "f": "encounter", "s": "risky_business", "q": 1, "l": 0, "st": "III", "hp": 22, "tr": ["homme d'affaires", "génie"], "bn": "Le Bouffon Vert", "bt": "villain", "btr": ["bouffon"]},
   {"id": "gob-04", "code": "4A", "n": "Prise de Contrôle Hostile", "t": "main_scheme", "f": "encounter", "s": "risky_business", "q": 1, "l": 1, "st": "1A", "bn": "Prise de Contrôle Hostile", "bt": "main_scheme", "th": 7, "esc": 1, "bth": 2, "bst": "1B"},
   {"id": "gob-05", "code": "5A", "n": "Acquisition d'Entreprise", "t": "main_scheme", "f": "encounter", "s": "risky_business", "q": 1, "l": 1, "st": "2A", "bn": "Acquisition d'Entreprise", "bt": "main_scheme", "th": 10, "esc": 2, "bth": 1, "bst": "2B"},
-  {"id": "gob-06", "code": "6A", "n": "Entreprise Criminelle", "t": "environment", "f": "encounter", "s": "risky_business", "q": 1, "l": 0, "bn": "Accès de Folie", "bt": "environment"},
+  {"id": "gob-06", "code": "6A", "n": "Entreprise Criminelle", "t": "environment", "f": "encounter", "s": "risky_business", "q": 1, "l": 0, "bn": "Accès de Folie", "bt": "environment", "tk": 2, "tkn": "Infamie", "btk": 2, "btkn": "Folie"},
   {"id": "gob-07", "code": "7", "n": "Homme de Main", "t": "minion", "f": "encounter", "s": "risky_business", "q": 3, "l": 0, "hp": 3, "tr": ["criminel"]},
   {"id": "gob-08", "code": "8", "n": "Agent de Sécurité Privé", "t": "minion", "f": "encounter", "s": "risky_business", "q": 4, "l": 0, "hp": 4, "tr": ["mercenaire"]},
   {"id": "gob-09", "code": "9", "n": "Effondrement d'un Pont", "t": "side_scheme", "f": "encounter", "s": "risky_business", "q": 1, "l": 1, "bth": 2},

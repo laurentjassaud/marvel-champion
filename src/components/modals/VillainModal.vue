@@ -1,66 +1,86 @@
 <script setup>
+// La fenêtre du méchant : ce qu'a donné la défaite d'un méchant (moteur, defeatVillain) — l'étape suivante,
+// le nouveau méchant actif des Démolisseurs, un changement de stade de Kang en attente, ou la victoire.
 import { computed } from 'vue'
 import BaseModal from './BaseModal.vue'
-import GameCard, { bareCard } from '../GameCard.vue'
-import { def, nameOf } from '../../game/engine.js'
-import { STATUSES, VICTORY } from '../../game/data.js'
+import GameCard, { printedCard } from '../GameCard.vue'
+import { definitionOf, cardName } from '../../game/engine.js'
+import { STATUS_CARDS, VICTORY_TEXTS } from '../../game/data.js'
 import { useGameStore } from '../../stores/game.js'
 import { useUiStore } from '../../stores/ui.js'
 
-// what a villain's defeat led to (engine defeatVillain): the next stage, the next active villain, or the victory
-const game = useGameStore()
+const gameStore = useGameStore()
 const ui = useUiStore()
-const r = computed(() => ui.modal.result)
-const card = id => game.card(id)
-const stage = c => `${nameOf(c)} ${def(c).st}`
+/** Le résultat à présenter (voir defeatVillain dans engine/villains.js). */
+const result = computed(() => ui.modal.result)
+const cardById = cardId => gameStore.cardById(cardId)
+/** "Rhino II" : le nom et l'étape. */
+const nameWithStage = card => `${cardName(card)} ${definitionOf(card).stage}`
 
-const from = computed(() => card(r.value.from ?? r.value.villain))
-// the card presented: the stage entering play, the villain now active, or the last one defeated
-const shown = computed(() => card(r.value.kind === 'stage' ? r.value.to : r.value.kind === 'crew' ? r.value.active : r.value.villain))
+/** La carte d'où part le résultat : l'étape vaincue (ou le stade de Kang achevé). */
+const fromCard = computed(() => cardById(result.value.fromCardId ?? result.value.villainId))
+// la carte présentée : l'étape qui entre en jeu, le méchant maintenant actif, le dernier vaincu, ou (Kang,
+// changement de stade en attente de la fin de la phase) le méchant vaincu ou le stade achevé
+const shownCard = computed(() => {
+  const shownId = { stage: result.value.toCardId, crew: result.value.activeVillainId, pending: result.value.fromCardId }[result.value.kind]
+  return cardById(shownId ?? result.value.villainId)
+})
 const title = computed(() => ({
-  stage: `${nameOf(shown.value)} passe à l'étape ${def(shown.value).st}`,
-  crew: `${nameOf(from.value)} est vaincu`,
+  stage: `${cardName(shownCard.value)} passe à l'étape ${definitionOf(shownCard.value).stage}`,
+  crew: `${cardName(fromCard.value)} est vaincu`,
+  pending: result.value.title ?? `${nameWithStage(fromCard.value)} est vaincu`,
   victory: 'Victoire !'
-})[r.value.kind])
-const kept = computed(() => STATUSES.filter(st => shown.value[st.id]).map(st => st.label))
-const scheme = computed(() => r.value.scheme && card(r.value.scheme))
-const prevented = computed(() => (scheme.value && VICTORY[scheme.value.g]) || `Vous avez déjoué les plans de ${nameOf(from.value)}.`)
-const side = computed(() => r.value.side && card(r.value.side))
+})[result.value.kind])
+// un méchant vaincu est montré grisé, avec le tampon « Vaincu »
+const isDefeatedShown = computed(() => result.value.kind === 'victory' || (result.value.kind === 'pending' && definitionOf(shownCard.value).type === 'villain'))
+// les cartes d'état reportées de l'étape vaincue (une étape avec Ténacité apporte sa propre carte Tenace)
+const keptStatusLabels = computed(() => STATUS_CARDS
+  .filter(status => (result.value.keptStatuses ? result.value.keptStatuses.includes(status.id) : shownCard.value[status.id]))
+  .map(status => status.label))
+const mainScheme = computed(() => result.value.mainSchemeId && cardById(result.value.mainSchemeId))
+const victoryText = computed(() => (mainScheme.value && VICTORY_TEXTS[mainScheme.value.definitionId]) || `Vous avez déjoué les plans de ${cardName(fromCard.value)}.`)
+const sideScheme = computed(() => result.value.sideSchemeId && cardById(result.value.sideSchemeId))
 
 function restart() {
-  game.restart()
+  gameStore.restartGame()
   ui.closeModal()
 }
 </script>
 
 <template>
   <BaseModal :title="title">
-    <div class="show" :class="r.kind">
-      <div class="art" :class="{ defeated: r.kind === 'victory' }">
-        <GameCard :card="bareCard(shown)" :face="true" inert />
-        <span v-if="r.kind === 'victory'" class="stamp">Vaincu</span>
+    <div class="show" :class="result.kind">
+      <div class="art" :class="{ defeated: isDefeatedShown }">
+        <GameCard :card="printedCard(shownCard)" :show-face="true" inert />
+        <span v-if="isDefeatedShown" class="stamp">Vaincu</span>
       </div>
       <div class="txt">
-        <template v-if="r.kind === 'stage'">
-          <p>{{ stage(from) }} est vaincu. <strong>{{ stage(shown) }}</strong> entre en jeu avec <strong>{{ def(shown).hp }} PV</strong>.</p>
-          <p v-if="kept.length">Ses cartes d'état restent : {{ kept.join(', ') }}.</p>
+        <template v-if="result.kind === 'pending'">
+          <p>{{ result.note }}</p>
+          <p class="note">Terminez la phase en cours : le changement de stade se fait au passage à la phase suivante.</p>
+        </template>
+        <template v-else-if="result.kind === 'stage'">
+          <p>{{ nameWithStage(fromCard) }} {{ result.stageLeft ? 'quitte la partie' : 'est vaincu' }}. <strong>{{ nameWithStage(shownCard) }}</strong> entre en jeu avec <strong>{{ definitionOf(shownCard).hitPoints }} PV</strong>.</p>
+          <!-- Kang : ce qu'a amené le changement de stade (stade 3 tiré, pions Accélération, Empire de Kang) -->
+          <p v-if="result.note">{{ result.note }}</p>
+          <p v-if="keptStatusLabels.length">Ses cartes d'état restent : {{ keptStatusLabels.join(', ') }}.</p>
           <p class="note">Les attachements du méchant restent en jeu ; les dégâts ne sont pas reportés.</p>
         </template>
-        <template v-else-if="r.kind === 'crew'">
-          <p>{{ nameOf(from) }} quitte la partie<template v-if="side"> avec sa manigance annexe « {{ nameOf(side) }} »</template>.</p>
-          <p>Jeton Actif sur <strong>{{ nameOf(shown) }}</strong> : les piles Rencontre affichées sont désormais les siennes.</p>
+        <template v-else-if="result.kind === 'crew'">
+          <p>{{ cardName(fromCard) }} quitte la partie<template v-if="sideScheme"> avec sa manigance annexe « {{ cardName(sideScheme) }} »</template>.</p>
+          <p>Jeton Actif sur <strong>{{ cardName(shownCard) }}</strong> : les piles Rencontre affichées sont désormais les siennes.</p>
         </template>
         <template v-else>
-          <p><strong>{{ game.s.crew ? 'Les Démolisseurs sont vaincus' : `${nameOf(shown)} est vaincu` }}</strong> en {{ game.turn }} tour{{ game.turn > 1 ? 's' : '' }}.</p>
+          <p><strong>{{ gameStore.game.crew ? 'Les Démolisseurs sont vaincus' : `${cardName(shownCard)} est vaincu` }}</strong> en {{ gameStore.turn }} tour{{ gameStore.turn > 1 ? 's' : '' }}.</p>
           <blockquote>
-            <span v-if="scheme" class="scheme">{{ nameOf(scheme) }}</span>
-            {{ prevented }}
+            <span v-if="mainScheme" class="scheme">{{ cardName(mainScheme) }}</span>
+            {{ victoryText }}
           </blockquote>
         </template>
       </div>
     </div>
     <div class="row">
-      <template v-if="r.kind === 'victory'">
+      <template v-if="result.kind === 'victory'">
         <button type="button" class="btn primary" @click="ui.openModal('setup')">Nouvelle partie</button>
         <button type="button" class="btn" @click="restart">Recommencer la partie</button>
         <span class="sp" />

@@ -1,21 +1,33 @@
 <script setup>
-// A radio button styled as a selectable tile.
-const model = defineModel({ type: String })
+// Un bouton radio présenté comme une tuile à choisir, relié par v-model. Si `checked` est donné, c'est le
+// parent qui tient l'état et écoute l'événement `pick` ; `multiple` en fait alors une case à cocher.
+const selectedValue = defineModel({ type: String })
 defineProps({
+  /** Nom du groupe de choix (attribut name du bouton). */
   name: { type: String, required: true },
+  /** Valeur de ce choix. */
   value: { type: String, required: true },
+  /** Texte principal de la tuile. */
   label: { type: String, required: true },
-  sub: { type: String, default: '' },
-  image: { type: String, default: '' }
+  /** Petite ligne sous le texte (affinité, niveau…). */
+  detail: { type: String, default: '' },
+  /** Miniature à gauche du texte. */
+  imageUrl: { type: String, default: '' },
+  /** Case à cocher plutôt que bouton radio (avec `checked`). */
+  multiple: Boolean,
+  /** État coché tenu par le parent ; null : relié par v-model. */
+  checked: { type: Boolean, default: null }
 })
+defineEmits(['pick'])
 </script>
 
 <template>
   <label class="choice">
-    <input v-model="model" type="radio" :name="name" :value="value">
-    <span class="tile" :class="{ withImage: image }">
-      <img v-if="image" :src="image" alt="">
-      <span class="txt">{{ label }}<small v-if="sub">{{ sub }}</small></span>
+    <input v-if="checked === null" v-model="selectedValue" type="radio" :name="name" :value="value">
+    <input v-else :type="multiple ? 'checkbox' : 'radio'" :name="name" :value="value" :checked="checked" @change="$emit('pick')">
+    <span class="tile" :class="{ withImage: imageUrl }">
+      <img v-if="imageUrl" :src="imageUrl" alt="">
+      <span class="txt">{{ label }}<small v-if="detail">{{ detail }}</small></span>
     </span>
   </label>
 </template>

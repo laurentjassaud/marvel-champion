@@ -25,6 +25,7 @@
         "q": 1,
         "l": 0,
         "hp": 2,
+        "cost": 2,
         "en": "Black Cat"
     },
     {
@@ -80,7 +81,11 @@
         "s": "spider_man",
         "q": 2,
         "l": 0,
-        "en": "Spider-Tracer"
+        "en": "Spider-Tracer",
+        "tr": [
+            "objet",
+            "tech"
+        ]
     },
     {
         "id": "ab2d0f0d-5df7-4269-876d-99fe1f1d25d4",
@@ -91,7 +96,13 @@
         "s": "spider_man",
         "q": 2,
         "l": 0,
-        "en": "Web-Shooter"
+        "en": "Web-Shooter",
+        "tr": [
+            "objet",
+            "tech"
+        ],
+        "tk": 3,
+        "tkn": "Toile"
     },
     {
         "id": "6bd78cc3-bc7f-4382-b063-5d69a70a0cdc",
@@ -102,7 +113,10 @@
         "s": "spider_man",
         "q": 2,
         "l": 0,
-        "en": "Webbed Up"
+        "en": "Webbed Up",
+        "tr": [
+            "condition"
+        ]
     },
     {
         "id": "78343f41-6bfd-456d-965a-d6456a01a581",
@@ -130,6 +144,7 @@
         "q": 1,
         "l": 0,
         "hp": 2,
+        "cost": 3,
         "en": "Spider-Woman"
     },
     {
@@ -185,7 +200,11 @@
         "s": "captain_marvel",
         "q": 1,
         "l": 0,
-        "en": "Captain Marvel's Helmet"
+        "en": "Captain Marvel's Helmet",
+        "tr": [
+            "armure",
+            "tech"
+        ]
     },
     {
         "id": "5b294403-a4c7-4786-867e-cc8bced674f6",
@@ -196,7 +215,10 @@
         "s": "captain_marvel",
         "q": 2,
         "l": 0,
-        "en": "Cosmic Flight"
+        "en": "Cosmic Flight",
+        "tr": [
+            "super-pouvoir"
+        ]
     },
     {
         "id": "88a66ea4-d071-463e-8c43-24f53350ea4c",
@@ -207,7 +229,10 @@
         "s": "captain_marvel",
         "q": 2,
         "l": 0,
-        "en": "Energy Channel"
+        "en": "Energy Channel",
+        "tr": [
+            "super-pouvoir"
+        ]
     },
     {
         "id": "d46d5e03-c8b7-4ff5-8633-3941c0561812",
@@ -235,6 +260,7 @@
         "q": 1,
         "l": 0,
         "hp": 3,
+        "cost": 3,
         "en": "Hellcat"
     },
     {
@@ -312,7 +338,10 @@
         "s": "she_hulk",
         "q": 2,
         "l": 0,
-        "en": "Focused Rage"
+        "en": "Focused Rage",
+        "tr": [
+            "compétence"
+        ]
     },
     {
         "id": "562fbca4-2d38-4b65-96ba-4e933b0cea2f",
@@ -323,7 +352,10 @@
         "s": "she_hulk",
         "q": 2,
         "l": 0,
-        "en": "Superhuman Strength"
+        "en": "Superhuman Strength",
+        "tr": [
+            "super-pouvoir"
+        ]
     },
     {
         "id": "9780ba79-44e4-4530-b865-5983a60372b0",
@@ -351,6 +383,7 @@
         "q": 1,
         "l": 0,
         "hp": 4,
+        "cost": 4,
         "en": "War Machine"
     },
     {
@@ -406,7 +439,11 @@
         "s": "iron_man",
         "q": 1,
         "l": 0,
-        "en": "Arc Reactor"
+        "en": "Arc Reactor",
+        "tr": [
+            "objet",
+            "tech"
+        ]
     },
     {
         "id": "43b510f4-1d90-42d4-b414-c7e27ff8e824",
@@ -417,7 +454,11 @@
         "s": "iron_man",
         "q": 1,
         "l": 0,
-        "en": "Mark V Armor"
+        "en": "Mark V Armor",
+        "tr": [
+            "armure",
+            "tech"
+        ]
     },
     {
         "id": "2cd0b387-5223-484f-8cfe-2d8d7a7cc7e8",
@@ -428,7 +469,11 @@
         "s": "iron_man",
         "q": 1,
         "l": 0,
-        "en": "Mark V Helmet"
+        "en": "Mark V Helmet",
+        "tr": [
+            "armure",
+            "tech"
+        ]
     },
     {
         "id": "13e64917-d277-44e7-a649-90e69df67ba9",
@@ -439,7 +484,11 @@
         "s": "iron_man",
         "q": 2,
         "l": 0,
-        "en": "Powered Gauntlets"
+        "en": "Powered Gauntlets",
+        "tr": [
+            "armure",
+            "tech"
+        ]
     },
     {
         "id": "fd37efd8-d1fd-49c1-9ded-9ef3ebb763b2",
@@ -450,7 +499,11 @@
         "s": "iron_man",
         "q": 2,
         "l": 0,
-        "en": "Rocket Boots"
+        "en": "Rocket Boots",
+        "tr": [
+            "armure",
+            "tech"
+        ]
     },
     {
         "id": "ced52353-61f7-4ed1-8469-01d396904d61",
@@ -478,6 +531,7 @@
         "q": 1,
         "l": 0,
         "hp": 3,
+        "cost": 2,
         "en": "Shuri"
     },
     {
@@ -566,7 +620,11 @@
         "s": "black_panther",
         "q": 1,
         "l": 0,
-        "en": "Energy Daggers"
+        "en": "Energy Daggers",
+        "tr": [
+            "black panther",
+            "arme"
+        ]
     },
     {
         "id": "576fa771-26be-497f-b5b2-ff86edb09bfa",
@@ -577,7 +635,11 @@
         "s": "black_panther",
         "q": 1,
         "l": 0,
-        "en": "Panther Claws"
+        "en": "Panther Claws",
+        "tr": [
+            "black panther",
+            "arme"
+        ]
     },
     {
         "id": "6f0c70e1-1b39-4ec8-89f5-62dcd9b406a7",
@@ -588,7 +650,11 @@
         "s": "black_panther",
         "q": 1,
         "l": 0,
-        "en": "Tactical Genius"
+        "en": "Tactical Genius",
+        "tr": [
+            "black panther",
+            "compétence"
+        ]
     },
     {
         "id": "a9469ef7-c792-4b2b-a2ed-d46684cf67a5",
@@ -599,7 +665,11 @@
         "s": "black_panther",
         "q": 1,
         "l": 0,
-        "en": "Vibranium Suit"
+        "en": "Vibranium Suit",
+        "tr": [
+            "armure",
+            "black panther"
+        ]
     },
     {
         "id": "a690f1b8-7ffc-4330-b715-298e76851f71",
@@ -678,7 +748,9 @@
         "s": "",
         "q": 3,
         "l": 0,
-        "en": "Tac Team"
+        "en": "Tac Team",
+        "tk": 3,
+        "tkn": "Attaque"
     },
     {
         "id": "55102c6c-0197-41af-999d-47df7f8ce521",
@@ -689,7 +761,10 @@
         "s": "",
         "q": 3,
         "l": 0,
-        "en": "Combat Training"
+        "en": "Combat Training",
+        "tr": [
+            "compétence"
+        ]
     },
     {
         "id": "0edd43ce-a861-4352-aea7-8a53a100f6cd",
@@ -768,7 +843,9 @@
         "s": "",
         "q": 3,
         "l": 0,
-        "en": "Surveillance Team"
+        "en": "Surveillance Team",
+        "tk": 3,
+        "tkn": "Mouchard"
     },
     {
         "id": "c7bb3cde-ddd6-415d-a999-29fc98c841d8",
@@ -779,7 +856,10 @@
         "s": "",
         "q": 3,
         "l": 0,
-        "en": "Heroic Intuition"
+        "en": "Heroic Intuition",
+        "tr": [
+            "compétence"
+        ]
     },
     {
         "id": "132a6e25-8d70-416a-aede-2e9cc243de66",
@@ -791,7 +871,9 @@
         "q": 1,
         "l": 0,
         "hp": 3,
-        "en": "Hawkeye"
+        "en": "Hawkeye",
+        "tk": 4,
+        "tkn": "Flèche"
     },
     {
         "id": "ae2b89a1-2c67-4207-9281-21bdae5c176b",
@@ -881,7 +963,10 @@
         "s": "",
         "q": 3,
         "l": 0,
-        "en": "Inspired"
+        "en": "Inspired",
+        "tr": [
+            "condition"
+        ]
     },
     {
         "id": "5a7fee35-ad78-4763-ae4a-8455f8872289",
@@ -905,7 +990,8 @@
         "q": 1,
         "l": 0,
         "hp": 5,
-        "en": "Luke Cage"
+        "en": "Luke Cage",
+        "toughness": true
     },
     {
         "id": "d9099ad2-c654-411f-8e9b-080bee245ef4",
@@ -949,7 +1035,9 @@
         "s": "",
         "q": 3,
         "l": 0,
-        "en": "Med Team"
+        "en": "Med Team",
+        "tk": 3,
+        "tkn": "Soin"
     },
     {
         "id": "2bd1068a-73f7-4c58-a212-55cde44e09b1",
@@ -960,7 +1048,10 @@
         "s": "",
         "q": 3,
         "l": 0,
-        "en": "Armored Vest"
+        "en": "Armored Vest",
+        "tr": [
+            "armure"
+        ]
     },
     {
         "id": "0b68b17c-bf82-446c-933a-e6fafbca360e",
@@ -971,7 +1062,10 @@
         "s": "",
         "q": 3,
         "l": 0,
-        "en": "Indomitable"
+        "en": "Indomitable",
+        "tr": [
+            "condition"
+        ]
     },
     {
         "id": "07bcfd3b-b6a0-4d70-8f6e-b5f152adf98d",
@@ -1094,7 +1188,10 @@
         "s": "",
         "q": 3,
         "l": 0,
-        "en": "Tenacity"
+        "en": "Tenacity",
+        "tr": [
+            "condition"
+        ]
     },
     {
         "id": "fce46ea8-8d92-4ddc-8ef0-9c923fcf6afd",
@@ -1130,7 +1227,8 @@
         "q": 1,
         "l": 0,
         "st": "III",
-        "hp": 16
+        "hp": 16,
+        "toughness": true
     },
     {
         "id": "1687b8a9-9630-4800-b297-03c5001e8ee9",
@@ -1199,7 +1297,8 @@
         "s": "rhino",
         "q": 1,
         "l": 0,
-        "hp": 4
+        "hp": 4,
+        "toughness": true
     },
     {
         "id": "4543fce4-1833-4654-877c-f2e5b9948807",
@@ -1340,7 +1439,8 @@
         "q": 1,
         "l": 0,
         "st": "III",
-        "hp": 22
+        "hp": 22,
+        "toughness": true
     },
     {
         "id": "77e9fb39-e38c-4b35-bf58-39072e9c6c10",
@@ -1405,7 +1505,8 @@
         "s": "klaw",
         "q": 3,
         "l": 0,
-        "hp": 3
+        "hp": 3,
+        "toughness": true
     },
     {
         "id": "c3479be7-4227-4f32-a049-0f33bc8f5b37",

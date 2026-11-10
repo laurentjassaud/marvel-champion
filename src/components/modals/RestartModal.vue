@@ -1,30 +1,32 @@
 <script setup>
+// La fenêtre « Recommencer la partie » : rappelle la mise en place qui sera rejouée, puis confirme.
 import { computed } from 'vue'
 import BaseModal from './BaseModal.vue'
-import { VILLAINS, heroName } from '../../game/data.js'
-import { setupText } from '../../game/engine.js'
+import { SCENARIOS, heroName } from '../../game/data.js'
+import { setupSummary } from '../../game/engine.js'
 import { useGameStore } from '../../stores/game.js'
 import { useUiStore } from '../../stores/ui.js'
 
-const game = useGameStore()
+const gameStore = useGameStore()
 const ui = useUiStore()
 
-// "Black Widow (précon Justice) contre Rhino, module Alerte à la Bombe, standard"; what was drawn at
-// random stays unnamed
-const setup = computed(() => {
-  const o = game.s.opt
-  return `${heroName(o.hero)} (${o.label}) contre ${VILLAINS.find(v => v.id === o.villain)?.name ?? ''}${setupText(o)}`
+// "Black Widow (précon Justice) contre Rhino, module Alerte à la Bombe, standard" ; ce qui a été tiré au
+// hasard reste sans nom
+const setupDescription = computed(() => {
+  const setup = gameStore.game.setup
+  const villainName = SCENARIOS.find(scenario => scenario.id === setup.scenario)?.villainName ?? ''
+  return `${heroName(setup.hero)} (${setup.deckLabel}) contre ${villainName}${setupSummary(setup)}`
 })
 
 function restart() {
-  game.restart()
+  gameStore.restartGame()
   ui.closeModal()
 }
 </script>
 
 <template>
   <BaseModal title="Recommencer la partie">
-    <p>Même mise en place : {{ setup }}. La partie repart du tour 1 avec des paquets remélangés et une nouvelle main.</p>
+    <p>Même mise en place : {{ setupDescription }}. La partie repart du tour 1 avec des paquets remélangés et une nouvelle main.</p>
     <p class="err">La partie en cours sera perdue.</p>
     <div class="row">
       <button type="button" class="btn primary" @click="restart">Recommencer</button>

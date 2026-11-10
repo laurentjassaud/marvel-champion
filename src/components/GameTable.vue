@@ -1,39 +1,44 @@
 <script setup>
+// La table de jeu : la zone du méchant en haut, celle du héros en bas, et toutes les cartes posées dessus.
+// Sa taille est mesurée en continu pour que le moteur place les cartes (ui.layout).
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import GameCard from './GameCard.vue'
 import { useGameStore } from '../stores/game.js'
 import { useUiStore } from '../stores/ui.js'
 
-const game = useGameStore()
+const gameStore = useGameStore()
 const ui = useUiStore()
-const el = ref(null)
-const cards = computed(() => game.zone('table'))
+const tableElement = ref(null)
+const tableCards = computed(() => gameStore.cardsIn('table'))
 
-let ro
-function measure() {
-  const r = el.value.getBoundingClientRect()
-  ui.setTable(r.width, r.height)
+let resizeObserver
+/** Mesure la table et donne sa taille à l'interface. */
+function measureTable() {
+  const rect = tableElement.value.getBoundingClientRect()
+  ui.setTableSize(rect.width, rect.height)
 }
 onMounted(() => {
-  measure()
-  ro = new ResizeObserver(() => { measure(); game.clamp() })
-  ro.observe(el.value)
+  measureTable()
+  // après un redimensionnement, les cartes qui dépassent sont ramenées sur la table
+  resizeObserver = new ResizeObserver(() => { measureTable(); gameStore.keepCardsOnTable() })
+  resizeObserver.observe(tableElement.value)
 })
-onBeforeUnmount(() => ro?.disconnect())
-watch(() => ui.cw, () => game.clamp())
+onBeforeUnmount(() => resizeObserver?.disconnect())
+watch(() => ui.cardWidth, () => gameStore.keepCardsOnTable())
 
-function onDown(e) {
-  if (!e.target.closest('.card')) ui.select(null)
+/** Un appui sur la table hors d'une carte retire la sélection. */
+function onPointerDown(event) {
+  if (!event.target.closest('.card')) ui.selectCard(null)
 }
 </script>
 
 <template>
-  <section ref="el" class="table" data-zone="table" aria-label="Table de jeu" :style="{ '--cw': `${ui.cw}px` }" @pointerdown="onDown">
+  <section ref="tableElement" class="table" data-zone="table" aria-label="Table de jeu" :style="{ '--cw': `${ui.cardWidth}px` }" @pointerdown="onPointerDown">
     <div class="area v">Zone du méchant</div>
     <div class="area h">
       Zone du héros<span class="hint on-mouse"> · glisser, double-clic pour épuiser, clic droit pour le menu, ? pour les raccourcis</span><span class="hint on-touch"> · glisser, double tap pour épuiser, appui long pour le menu</span>
     </div>
-    <GameCard v-for="c in cards" :key="c.id" :card="c" positioned />
+    <GameCard v-for="card in tableCards" :key="card.id" :card="card" positioned />
   </section>
 </template>
 

@@ -1,6 +1,7 @@
-/* Layout: one-screen tabletop — toolbar, free table (villain row on top, hero row at bottom)
-   + side column (encounter piles, preview, log), player strip (deck, hand, discard) at the bottom.
-   Deliberately a single dark look: it is a game table. */
+/* Mise en page : une table de jeu sur un seul écran — la barre d'outils, puis deux colonnes : à gauche la table
+   libre (rangée du méchant en haut, rangée du héros en bas) au-dessus du bandeau du joueur (paquet, main,
+   défausse) ; à droite, jusqu'en bas, la colonne latérale (piles Rencontre, puis la carte agrandie et le
+   journal en onglets). Volontairement un seul thème sombre : c'est une table de jeu. */
 :root {
   color-scheme: dark;
   --bg: #12161c;
@@ -19,47 +20,54 @@
   --f-display: "Saira Condensed", "Arial Narrow", system-ui, sans-serif;
   --f-body: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   --f-mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
-  --cw: 80px;  /* table card width (set from the size slider) */
-  --hw: 76px;  /* hand and player pile card width */
-  --sw: 58px;  /* side pile card width */
+  --cw: 80px;  /* largeur d'une carte sur la table (curseur « Taille ») */
+  --hw: 76px;  /* largeur d'une carte de la main et des piles du joueur */
+  --sw: 58px;  /* largeur d'une carte des piles de la colonne de droite */
 }
 
 * { box-sizing: border-box; }
-/* touch: no grey tap flash, no font inflation, no pull-to-refresh or page bounce */
+/* tactile : pas de flash gris au toucher, pas d'agrandissement du texte, pas de « tirer pour rafraîchir » ni de rebond de page */
 html { height: 100%; -webkit-tap-highlight-color: transparent; -webkit-text-size-adjust: 100%; overscroll-behavior: none; }
 body {
   height: 100%; margin: 0;
   background: var(--bg); color: var(--fg); font: 14px/1.4 var(--f-body); overflow: hidden; overscroll-behavior: none;
-  touch-action: manipulation; /* no double-tap zoom (pinch zoom stays available) */
+  touch-action: manipulation; /* pas de zoom au double toucher (le pincement reste possible) */
   padding-left: max(16px, env(safe-area-inset-left, 0px));
   padding-right: max(16px, env(safe-area-inset-right, 0px));
 }
 #app { height: 100%; height: 100dvh; }
 button, input, select, textarea { font: inherit; color: inherit; }
 button { cursor: pointer; touch-action: manipulation; }
-/* controls are not text: a long press must not select their label */
+/* les commandes ne sont pas du texte : un appui long ne doit pas sélectionner leur libellé */
 button, label, .bar, .drop, .zone-label, .menu, .table { -webkit-user-select: none; user-select: none; }
-input, textarea { -webkit-user-select: text; user-select: text; } /* iOS would not let you type in them otherwise */
+input, textarea { -webkit-user-select: text; user-select: text; } /* sinon iOS ne laisserait pas y taper */
 :focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
 [hidden] { display: none !important; }
-/* wording for one kind of pointer (mouse and keyboard, or finger) */
+/* textes propres à un type de pointeur (souris et clavier, ou doigt) */
 .on-touch { display: none; }
 @media (pointer: coarse) {
   .on-touch { display: inline; }
   .on-mouse { display: none; }
 }
 
-/* ---------- shell ---------- */
-.app { height: 100%; display: grid; grid-template-rows: auto 1fr auto; gap: 10px; padding-block: max(10px, env(safe-area-inset-top, 0px)) max(10px, env(safe-area-inset-bottom, 0px)); }
-/* the side column narrows on tablets so the table keeps its room */
-.mid { display: grid; grid-template-columns: minmax(0, 1fr) clamp(240px, 30vw, 440px); gap: 10px; min-height: 0; }
-/* the preview takes what the encounter piles leave, the log keeps a readable strip */
-.side { display: grid; grid-template-rows: auto minmax(0, 1fr) minmax(64px, .4fr); gap: 10px; min-height: 0; }
+/* ---------- structure de la page ---------- */
+.app { height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 10px; padding-block: max(10px, env(safe-area-inset-top, 0px)) max(10px, env(safe-area-inset-bottom, 0px)); }
+/* la colonne de droite se rétrécit sur tablette pour laisser sa place à la table ; son bord gauche se
+   glisse (SideResizer règle --side), et la table garde toujours 420 px */
+.mid { --side: clamp(240px, 30vw, 440px); display: grid; grid-template-columns: minmax(0, 1fr) min(var(--side), max(240px, calc(100% - 430px))); gap: 10px; min-height: 0; }
+/* colonne de gauche : la table prend la hauteur que lui laisse le bandeau du joueur */
+.play { display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 10px; min-height: 0; min-width: 0; }
+/* les onglets (carte agrandie, journal) prennent ce que laissent les piles Rencontre */
+.side { position: relative; container-type: inline-size; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 10px; min-height: 0; }
 .encrow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+/* + le deck propre au scénario (Armes Expérimentales, Manigance Annexe) : quatre piles se partagent la
+   colonne de droite (100cqw de large) ; les cartes rétrécissent pour tenir et les libellés se resserrent */
+.encrow.x4 { grid-template-columns: repeat(4, 1fr); --sw: min(58px, calc((100cqw - 24px) / 4 - 14px)); }
+.encrow.x4 .zone-label { font-size: 11px; letter-spacing: .04em; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .bottom { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; }
-.bottom.inv { grid-template-columns: auto 1fr auto auto auto; } /* + Invocation deck and discard */
+.bottom.inv { grid-template-columns: auto 1fr auto auto auto; } /* + deck Invocation et sa défausse */
 
-/* ---------- buttons & labels ---------- */
+/* ---------- boutons et libellés ---------- */
 .btn { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; line-height: 1.1; white-space: nowrap; transition: transform .1s ease-out; }
 .btn:active:not(:disabled) { transform: scale(.96); }
 .btn:disabled { opacity: .45; cursor: default; }
@@ -75,7 +83,7 @@ input, textarea { -webkit-user-select: text; user-select: text; } /* iOS would n
 .note { font-size: 12px; color: var(--muted); }
 .err { color: var(--danger); font-size: 13px; }
 
-/* ---------- panels, piles, hand ---------- */
+/* ---------- panneaux, piles, main ---------- */
 .drop { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; min-width: 0; position: relative; }
 .drop.e { border-top: 2px solid color-mix(in srgb, var(--enc) 70%, transparent); }
 .drop.p { border-top: 2px solid color-mix(in srgb, var(--hero) 70%, transparent); }
@@ -89,8 +97,8 @@ input, textarea { -webkit-user-select: text; user-select: text; } /* iOS would n
 .pile .slot .stack { position: absolute; inset: 0; border-radius: 6px; transform: translate(3px, 3px); background: var(--line); opacity: .6; }
 .pile .count { font-family: var(--f-mono); font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .hand { display: flex; flex-direction: column; }
-/* touch-action: the browser never pans the hand sideways (usePointer scrolls it under the finger),
-   because a native sideways pan that hits the end of a row can become a "back" navigation */
+/* touch-action : le navigateur ne fait jamais défiler la main de côté (usePointer la fait défiler sous le
+   doigt), car un défilement natif qui bute au bout de la rangée peut devenir un retour à la page précédente */
 .hand-row { display: flex; gap: 6px; overflow-x: auto; overscroll-behavior: contain; touch-action: pan-y; padding: 8px 2px 4px; min-height: calc(var(--hw) * 1.4 + 12px); align-items: flex-end; }
 .hand-row .card { --w: var(--hw); flex: none; transition: transform .12s; }
 @media (hover: hover) and (pointer: fine) {
@@ -99,13 +107,13 @@ input, textarea { -webkit-user-select: text; user-select: text; } /* iOS would n
 .pile:active .slot { transform: scale(.97); }
 .hand-empty { color: var(--muted); font-size: 12.5px; align-self: center; }
 
-/* ---------- cards ---------- */
+/* ---------- cartes ---------- */
 .card { --w: var(--cw); width: var(--w); height: calc(var(--w) * 1.4); border-radius: calc(var(--w) * .06); position: relative; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: none; cursor: grab; box-shadow: 0 2px 6px rgb(0 0 0 / .5); }
-/* display-only cards (pile viewer, mulligan, preview) do not drag: the finger scrolls through them */
+/* les cartes d'affichage (fenêtre de pile, mulligan, aperçu) ne se glissent pas : le doigt les fait défiler */
 .card:not([data-id]) { touch-action: manipulation; }
 .card.land { width: calc(var(--w) * 1.4); height: var(--w); }
 .card.sel { outline: 2px solid var(--brass); outline-offset: 2px; }
-/* card of the hand picked at random (after .sel: it wins when both apply) */
+/* carte de la main tirée au hasard (après .sel : elle l'emporte quand les deux s'appliquent) */
 .card.rand { outline: 3px solid #e5483a; outline-offset: 2px; box-shadow: 0 0 0 5px rgb(229 72 58 / .25), 0 2px 6px rgb(0 0 0 / .5); }
 .card .face, .card .back { position: absolute; inset: 0; border-radius: inherit; background: #0d1015 center / cover no-repeat; }
 .card .face.plain { display: grid; place-items: center; padding: 8%; border: 1px solid var(--line); text-align: center; font-family: var(--f-display); font-size: calc(var(--w) * .13); line-height: 1.1; overflow: hidden; }
@@ -113,16 +121,16 @@ input, textarea { -webkit-user-select: text; user-select: text; } /* iOS would n
 .card .mk.dmg { background: #b8402f; }
 .card .mk.thr { background: #6a4bb0; right: auto; left: -7px; }
 .card .mk.tok { background: #56677a; top: auto; bottom: -7px; }
-/* Active token of Les Démolisseurs, centred under the villain */
+/* jeton Actif des Démolisseurs, centré sous le méchant */
 .card .mk.act { background: var(--brass); color: var(--brass-ink); top: auto; bottom: -9px; right: auto; left: 50%; transform: translateX(-50%); font-family: var(--f-display); font-weight: 700; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
-/* status cards (stunned, confused, tough) stacked over the card art, they can combine */
+/* cartes d'état (sonné, désorienté, tenace) empilées sur l'illustration, elles peuvent se cumuler */
 .card .status { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: calc(var(--w) * .02); pointer-events: none; }
 .card .status img { width: calc(var(--w) * 1.04); height: auto; flex: none; filter: drop-shadow(0 2px 3px rgb(0 0 0 / .6)); }
 .card.token { width: calc(var(--cw) * .4); height: calc(var(--cw) * .4); border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff6, transparent 50%), var(--tok); border: 2px solid #0006; }
 .card.pick { outline: 3px solid var(--danger); outline-offset: 2px; opacity: .5; }
 .ghost { position: fixed; left: 0; top: 0; pointer-events: none; z-index: 1000; opacity: .92; }
 
-/* ---------- context menu ---------- */
+/* ---------- menu contextuel ---------- */
 .menu { position: fixed; z-index: 2000; background: #20272f; border: 1px solid var(--line); border-radius: 8px; padding: 4px; min-width: 220px; box-shadow: 0 8px 24px rgb(0 0 0 / .5); max-height: 90vh; overflow: auto; overscroll-behavior: contain; touch-action: pan-y pinch-zoom; }
 .menu .mh { font-family: var(--f-display); font-size: 13px; letter-spacing: .05em; color: var(--muted); padding: 4px 10px 2px; }
 .menu button { display: flex; justify-content: space-between; gap: 16px; width: 100%; text-align: left; background: none; border: 0; border-radius: 5px; padding: 6px 10px; }
@@ -135,9 +143,9 @@ input, textarea { -webkit-user-select: text; user-select: text; } /* iOS would n
 .menu .peek { display: none; }
 .menu hr { border: 0; border-top: 1px solid var(--line); margin: 4px 0; }
 
-/* ---------- modals ---------- */
+/* ---------- fenêtres ---------- */
 .modal { position: fixed; inset: 0; z-index: 1500; background: rgb(5 8 10 / .72); display: grid; place-items: center; padding: 16px; }
-/* vertical scrollers only pan vertically: no sideways swipe for the browser to turn into "back" */
+/* les zones qui défilent verticalement ne défilent que verticalement : pas de balayage de côté que le navigateur changerait en « page précédente » */
 .modal .box { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; width: min(820px, 100%); max-height: 100%; overflow: auto; overscroll-behavior: contain; touch-action: pan-y pinch-zoom; padding: 18px 20px; display: grid; gap: 14px; }
 .modal h2 { font-family: var(--f-display); font-weight: 700; font-size: 24px; margin: 0; text-wrap: balance; }
 .modal p { margin: 0; color: var(--muted); line-height: 1.5; max-width: 68ch; }
@@ -154,37 +162,41 @@ input, textarea { -webkit-user-select: text; user-select: text; } /* iOS would n
 .keys .lab { grid-column: 1 / -1; }
 .keys kbd { font-family: var(--f-mono); font-size: 12px; background: var(--bg); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 1px 6px; white-space: nowrap; }
 
-/* ---------- touch screens ---------- */
-/* finger-sized targets; keyboard hints only clutter a tablet (the ? help still lists them) */
+/* ---------- écrans tactiles ---------- */
+/* cibles à la taille d'un doigt ; les rappels de touches encombrent une tablette (l'aide ? les liste toujours) */
 @media (pointer: coarse) {
   .btn { min-height: 36px; padding: 8px 12px; }
   .menu button { padding: 10px 12px; }
   .btn kbd, .menu kbd { display: none; }
 }
-/* touch, or a short screen: the side preview is small, so the long press / right-click menu
-   also shows the card big enough to read */
+/* tactile, ou écran peu haut : l'aperçu de côté est petit, alors le menu de l'appui long / du clic droit
+   montre aussi la carte en assez grand pour la lire */
 @media (pointer: coarse), (max-height: 800px) {
   .menu.peeks { display: flex; align-items: flex-start; gap: 8px; }
   .menu .peek { display: block; flex: none; --w: min(240px, calc((90vh - 10px) / 1.4)); cursor: default; }
   .menu .peek.land { --w: min(240px, calc(90vh - 10px)); }
   .menu .items { flex: 1; min-width: 210px; }
 }
-/* short landscape screens: smaller encounter piles leave the preview more room */
+/* écrans en paysage peu hauts : des piles Rencontre plus petites laissent plus de place à l'aperçu */
 @media (max-height: 860px) and (min-width: 701px) {
   .encrow { --sw: 46px; }
+  .encrow.x4 { --sw: min(46px, calc((100cqw - 24px) / 4 - 14px)); }
 }
 
-/* ---------- small screens ---------- */
-/* portrait tablets and narrow windows keep the table and the hand on one screen */
+/* ---------- petits écrans ---------- */
+/* tablettes en portrait et fenêtres étroites : la table et la main restent sur un seul écran */
 @media (max-width: 860px) {
   :root { --hw: 62px; }
 }
-/* phones: one column, the page scrolls */
+/* téléphones : une seule colonne, la page défile */
 @media (max-width: 700px) {
   body { overflow: auto; }
   #app, .app { height: auto; min-height: 100%; }
   .mid { grid-template-columns: 1fr; }
-  .side { grid-template-rows: none; }
+  /* une seule colonne comme avant : la table, la colonne latérale (piles Rencontre, carte, journal), puis le bandeau du joueur */
+  .play { display: contents; }
+  .side { grid-template-rows: none; order: 1; }
+  .bottom { order: 2; }
   .bottom, .bottom.inv { grid-template-columns: 1fr 1fr; }
   .bottom .hand { grid-column: 1 / -1; order: -1; }
 }

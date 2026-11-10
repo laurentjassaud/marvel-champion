@@ -1,4 +1,5 @@
 <script setup>
+// La fenêtre du mulligan : on clique les cartes de la main de départ à défausser, puis on repioche.
 import { ref, computed } from 'vue'
 import BaseModal from './BaseModal.vue'
 import GameCard from '../GameCard.vue'
@@ -6,46 +7,49 @@ import { handSize } from '../../game/engine.js'
 import { useGameStore } from '../../stores/game.js'
 import { useUiStore } from '../../stores/ui.js'
 
-const game = useGameStore()
+const gameStore = useGameStore()
 const ui = useUiStore()
-const hand = computed(() => game.zone('hand'))
-const size = computed(() => handSize(game.s))
-const picked = ref([])
+const handCards = computed(() => gameStore.cardsIn('hand'))
+const targetHandSize = computed(() => handSize(gameStore.game))
+/** Identifiants des cartes choisies pour être défaussées. */
+const selectedCardIds = ref([])
 
-const toggle = id => {
-  picked.value = picked.value.includes(id) ? picked.value.filter(x => x !== id) : [...picked.value, id]
+const toggleCard = cardId => {
+  selectedCardIds.value = selectedCardIds.value.includes(cardId)
+    ? selectedCardIds.value.filter(selectedId => selectedId !== cardId)
+    : [...selectedCardIds.value, cardId]
 }
-const action = computed(() => {
-  const n = picked.value.length
-  return n ? `Défausser ${n} carte${n > 1 ? 's' : ''} et repiocher` : 'Garder cette main'
+const confirmLabel = computed(() => {
+  const count = selectedCardIds.value.length
+  return count ? `Défausser ${count} carte${count > 1 ? 's' : ''} et repiocher` : 'Garder cette main'
 })
 function confirm() {
-  game.mulligan(picked.value)
+  gameStore.mulligan(selectedCardIds.value)
   ui.closeModal()
 }
 </script>
 
 <template>
   <BaseModal title="Mulligan">
-    <p>Pendant la mise en place, après la main de départ : défaussez autant de cartes que vous voulez, puis repiochez jusqu'à votre taille de main ({{ size }}). Les cartes défaussées vont dans votre défausse, elles ne retournent pas dans le paquet. Une seule fois par partie.</p>
-    <p v-if="game.s.mull" class="err">Vous avez déjà fait un mulligan dans cette partie.</p>
+    <p>Pendant la mise en place, après la main de départ : défaussez autant de cartes que vous voulez, puis repiochez jusqu'à votre taille de main ({{ targetHandSize }}). Les cartes défaussées vont dans votre défausse, elles ne retournent pas dans le paquet. Une seule fois par partie.</p>
+    <p v-if="gameStore.game.mulliganTaken" class="err">Vous avez déjà fait un mulligan dans cette partie.</p>
     <p class="note">Cliquez sur les cartes à défausser.</p>
     <div class="grid-cards">
       <GameCard
-        v-for="c in hand"
-        :key="c.id"
-        :card="c"
-        :face="true"
+        v-for="card in handCards"
+        :key="card.id"
+        :card="card"
+        :show-face="true"
         inert
-        :class="{ pick: picked.includes(c.id) }"
-        :aria-pressed="picked.includes(c.id)"
-        @click="toggle(c.id)"
-        @mouseenter="ui.showPreview(c.id)"
+        :class="{ pick: selectedCardIds.includes(card.id) }"
+        :aria-pressed="selectedCardIds.includes(card.id)"
+        @click="toggleCard(card.id)"
+        @mouseenter="ui.showPreview(card.id)"
       />
-      <p v-if="!hand.length">Main vide.</p>
+      <p v-if="!handCards.length">Main vide.</p>
     </div>
     <div class="row">
-      <button type="button" class="btn primary" @click="confirm">{{ action }}</button>
+      <button type="button" class="btn primary" @click="confirm">{{ confirmLabel }}</button>
       <span class="sp" />
       <button type="button" class="btn" @click="ui.closeModal()">Annuler</button>
     </div>

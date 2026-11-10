@@ -1,25 +1,31 @@
 <script setup>
+// Une pile (paquet, défausse, deck Rencontre, De côté…) : son nom, sa carte du dessus et le nombre de
+// cartes. Un clic hors de la carte du dessus déclenche l'action de la pile (useZoneActions).
 import { computed } from 'vue'
 import GameCard from './GameCard.vue'
 import { useGameStore } from '../stores/game.js'
 import { useZoneActions } from '../composables/useZoneActions.js'
 
 const props = defineProps({
+  /** La zone montrée (data.js : ZONE_LABELS). */
   zone: { type: String, required: true },
+  /** Le nom affiché au-dessus de la pile. */
   label: { type: String, required: true },
-  variant: { type: String, default: '' }, // 'p' player | 'e' encounter
+  /** Couleur de la pile : 'p' joueur, 'e' Rencontre, 'i' Invocation. */
+  variant: { type: String, default: '' },
+  /** Bulle d'aide. */
   title: { type: String, default: '' }
 })
 
-const game = useGameStore()
+const gameStore = useGameStore()
 const { activateZone } = useZoneActions()
-const cards = computed(() => game.pile(props.zone))
-const top = computed(() => cards.value.at(-1))
-// draw piles and the set-aside pile keep their top card hidden (not the Invocation deck: its top card is face up)
-const showFace = computed(() => !['deck', 'edeck', 'aside'].includes(props.zone) && !!top.value?.faceUp)
+const cards = computed(() => gameStore.pileOf(props.zone))
+const topCard = computed(() => cards.value.at(-1))
+// les pioches et « De côté » cachent leur carte du dessus (pas le deck Invocation : sa carte du dessus est visible)
+const showsTopFace = computed(() => !['playerDeck', 'encounterDeck', 'scenarioDeck', 'setAside'].includes(props.zone) && !!topCard.value?.faceUp)
 
-function onClick(e) {
-  if (!e.target.closest('.card')) activateZone(props.zone)
+function onClick(event) {
+  if (!event.target.closest('.card')) activateZone(props.zone)
 }
 </script>
 
@@ -28,7 +34,7 @@ function onClick(e) {
     <div class="zone-label">{{ label }}</div>
     <div class="slot">
       <div v-if="cards.length > 1" class="stack" />
-      <GameCard v-if="top" :key="top.id" :card="top" :face="showFace" />
+      <GameCard v-if="topCard" :key="topCard.id" :card="topCard" :show-face="showsTopFace" />
     </div>
     <div class="count">{{ cards.length }}</div>
   </div>

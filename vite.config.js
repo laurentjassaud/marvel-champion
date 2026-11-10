@@ -2,14 +2,16 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { VitePWA } from 'vite-plugin-pwa'
 
-// Two build targets:
-//  - default: installable PWA (service worker, offline cache of the card images)
-//  - `--mode artifact`: relative paths, no service worker; scripts/inline-artifact.mjs
-//    then inlines JS/CSS into a single page for hosting as a Claude artifact.
+// Deux constructions possibles :
+//  - par défaut : application installable (PWA : service worker, images des cartes gardées hors ligne) ;
+//  - `--mode artifact` : sans service worker ; scripts/inline-artifact.mjs intègre ensuite le JS et le CSS
+//    dans une seule page, pour l'hébergement en artefact Claude.
+// Les chemins sont relatifs ('./') par défaut : dist/ fonctionne où qu'il soit déposé (racine du domaine ou
+// sous-dossier). BASE_PATH impose un préfixe absolu si besoin.
 export default defineConfig(({ mode }) => {
   const artifact = mode === 'artifact'
   return {
-    base: artifact ? './' : (process.env.BASE_PATH || '/'),
+    base: artifact ? './' : (process.env.BASE_PATH || './'),
     build: {
       outDir: artifact ? 'dist-artifact' : 'dist',
       emptyOutDir: true,
@@ -39,13 +41,13 @@ export default defineConfig(({ mode }) => {
           globPatterns: ['**/*.{js,css,html,png}', 'backs/*.jpg'],
           runtimeCaching: [
             {
-              // card images are cached the first time they are shown (≈15 Mo in total)
+              // les images des cartes sont gardées dès leur premier affichage (841 images, ≈64 Mo en tout)
               urlPattern: /\/cards\/.*\.jpg$/,
               handler: 'CacheFirst',
-              options: { cacheName: 'mc-cards', expiration: { maxEntries: 400 } }
+              options: { cacheName: 'mc-cards', expiration: { maxEntries: 1000 } }
             },
             {
-              // images of the cards read from MarvelCDB (decks imported by link): kept for offline play
+              // les images des cartes lues sur MarvelCDB (decks importés par lien) : gardées pour jouer hors ligne
               urlPattern: /^https:\/\/(fr\.)?marvelcdb\.com\/bundles\/cards\//,
               handler: 'CacheFirst',
               options: { cacheName: 'mc-marvelcdb', expiration: { maxEntries: 600 }, cacheableResponse: { statuses: [0, 200] } }

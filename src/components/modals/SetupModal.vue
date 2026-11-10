@@ -1,110 +1,150 @@
 <script setup>
+// La fenêtre « Nouvelle partie », en deux écrans : 1 le héros et son deck (préconstruit, fichier importé ou
+// deck MarvelCDB), 2 le scénario (méchant, set(s) modulaire(s), difficulté). Elle s'ouvre sur les choix de
+// la partie en cours.
 import { reactive, ref, computed, watch, nextTick, onMounted } from 'vue'
 import BaseModal from './BaseModal.vue'
 import ChoiceOption from './ChoiceOption.vue'
-import { HEROES, VILLAINS, MODULARS, DEFS, BY_ID, heroName } from '../../game/data.js'
-import { imageById } from '../../composables/useAssets.js'
-import { fetchCdbDeck } from '../../game/marvelcdb.js'
+import { HEROES, SCENARIOS, MODULAR_SETS, CARD_DEFINITIONS, DEFINITION_BY_ID, heroName } from '../../game/data.js'
+import { scenarioRules } from '../../game/rules.js'
+import { imageUrlOfDefinition } from '../../composables/useAssets.js'
+import { fetchMarvelCdbDeck } from '../../game/marvelcdb.js'
 import { useGameStore } from '../../stores/game.js'
 import { useUiStore } from '../../stores/ui.js'
 
-const game = useGameStore()
+const gameStore = useGameStore()
 const ui = useUiStore()
 
-// two screens: 1 the hero and their deck, 2 the scenario
+/** Écran affiché : 1 héros, 2 scénario. */
 const step = ref(1)
-const prev = game.s?.opt ?? {}
+/** La mise en place de la partie en cours, pour ouvrir la fenêtre sur les mêmes choix. */
+const previousSetup = gameStore.game?.setup ?? {}
+/** Les sets modulaires conseillés d'un scénario : un, ou plusieurs (Crossbones 3, Crâne Rouge 2). */
+const advisedModularsOf = scenarioId => SCENARIOS.find(scenario => scenario.id === scenarioId)?.advisedModulars ?? []
 const form = reactive({
-  deck: prev.hero ?? 'spider_man', // a hero id (their precon deck) or 'import' (the custom deck)
-  villain: prev.villain ?? 'rhino',
-  modular: prev.drawn?.includes('modular') ? 'random' : prev.modular ?? 'bomb_scare',
-  diff: prev.drawn?.includes('expert') ? 'random' : prev.expert ? 'exp' : 'std'
+  /** Un identifiant de héros (son deck préconstruit) ou 'import' (le deck personnalisé). */
+  deckChoice: previousSetup.hero ?? 'spider_man',
+  scenario: previousSetup.scenario ?? 'rhino',
+  /** 'random', ou les sets modulaires choisis (autant que le scénario en prend). */
+  modulars: previousSetup.randomChoices?.includes('modular')
+    ? 'random'
+    : previousSetup.modulars?.length ? [...previousSetup.modulars] : advisedModularsOf(previousSetup.scenario ?? 'rhino'),
+  /** 'standard', 'expert' ou 'random'. */
+  difficulty: previousSetup.randomChoices?.includes('expert') ? 'random' : previousSetup.expert ? 'expert' : 'standard'
 })
-const imported = ref(null) // {list, hero, label, n, online, unknown, missing}
-const error = ref('')
+/** Le deck personnalisé importé : {deckList, hero, label, cardCount, importedCount, unknownCount, missing}. */
+const importedDeck = ref(null)
+const errorMessage = ref('')
 
-const heroImage = id => imageById(DEFS.find(d => d.t === 'hero' && d.s === id).id)
-const heroOf = id => HEROES.find(h => h.id === id)
-const advisedFor = mod => VILLAINS.filter(v => v.modular === mod).map(v => v.name).join(', ')
-// several villains at once (Les Démolisseurs): no modular set, difficulty picks version A or B
-const crew = computed(() => !!VILLAINS.find(v => v.id === form.villain)?.crew)
-const custom = computed(() => form.deck === 'import' && !!imported.value)
-const hero = computed(() => (custom.value ? imported.value.hero : form.deck))
-const deckName = computed(() => (custom.value ? imported.value.label : `Préconstruit ${heroOf(hero.value).aspect}`))
-const importNote = computed(() => {
-  const d = imported.value
-  const parts = [`${d.n} cartes`]
-  if (d.online) parts.push(`dont ${d.online} lue${d.online > 1 ? 's' : ''} sur MarvelCDB (images du site, en anglais)`)
-  if (d.unknown) {
-    const names = d.missing.slice(0, 4).join(', ') + (d.missing.length > 4 ? '…' : '')
-    parts.push(`${d.unknown} inconnue${d.unknown > 1 ? 's' : ''} ignorée${d.unknown > 1 ? 's' : ''}${names ? ` : ${names}` : ''}`)
+/** Miniature de la carte d'identité d'un héros. */
+const heroImageUrl = heroId => imageUrlOfDefinition(CARD_DEFINITIONS.find(definition => definition.type === 'hero' && definition.set === heroId).id)
+const heroOf = heroId => HEROES.find(hero => hero.id === heroId)
+/** Les méchants qui conseillent ce set modulaire ("Rhino, Taskmaster"). */
+const scenariosAdvising = modularId => SCENARIOS.filter(scenario => scenario.advisedModulars.includes(modularId)).map(scenario => scenario.villainName).join(', ')
+// plusieurs méchants à la fois (Les Démolisseurs) : pas de set modulaire, la difficulté choisit la version A ou B
+const isCrew = computed(() => !!scenarioRules(form.scenario).crew)
+// combien de sets modulaires prend le scénario ; avec plusieurs, les tuiles deviennent des cases à cocher
+const modularsNeeded = computed(() => Math.max(1, advisedModularsOf(form.scenario).length))
+const pickedModulars = computed(() => (form.modulars === 'random' ? [] : form.modulars))
+const modularsReady = computed(() => isCrew.value || form.modulars === 'random' || pickedModulars.value.length === modularsNeeded.value)
+// un seul set : le choix le remplace ; plusieurs : un choix coche ou décoche un set, le plus ancien cède sa place au-delà du nombre
+function pickModular(modularId) {
+  const current = pickedModulars.value
+  if (modularsNeeded.value === 1) form.modulars = [modularId]
+  else if (current.includes(modularId)) form.modulars = current.filter(id => id !== modularId)
+  else form.modulars = [...current, modularId].slice(-modularsNeeded.value)
+}
+const usesImportedDeck = computed(() => form.deckChoice === 'import' && !!importedDeck.value)
+const chosenHero = computed(() => (usesImportedDeck.value ? importedDeck.value.hero : form.deckChoice))
+const deckDescription = computed(() => (usesImportedDeck.value ? importedDeck.value.label : `Préconstruit ${heroOf(chosenHero.value).aspect}`))
+/** "Mon deck : 40 cartes, dont 3 lues sur MarvelCDB…, 2 inconnues ignorées : …" */
+const importSummary = computed(() => {
+  const deck = importedDeck.value
+  const parts = [`${deck.cardCount} cartes`]
+  if (deck.importedCount) parts.push(`dont ${deck.importedCount} lue${deck.importedCount > 1 ? 's' : ''} sur MarvelCDB (images du site, en anglais)`)
+  if (deck.unknownCount) {
+    const names = deck.missing.slice(0, 4).join(', ') + (deck.missing.length > 4 ? '…' : '')
+    const plural = deck.unknownCount > 1 ? 's' : ''
+    parts.push(`${deck.unknownCount} inconnue${plural} ignorée${plural}${names ? ` : ${names}` : ''}`)
   }
-  return `${d.label} : ${parts.join(', ')}.`
+  return `${deck.label} : ${parts.join(', ')}.`
 })
 
-// each villain comes with its advised modular set, unless the set is drawn at random
-watch(() => form.villain, v => { if (form.modular !== 'random') form.modular = VILLAINS.find(x => x.id === v).modular })
+// chaque méchant vient avec ses sets modulaires conseillés, sauf s'ils sont tirés au hasard
+watch(() => form.scenario, scenarioId => { if (form.modulars !== 'random') form.modulars = advisedModularsOf(scenarioId) })
 
-// a parsed deck becomes the custom deck; a failed import keeps the previous one
-function keep({ list, hero: id, unknown, missing, title, heroName }, name) {
-  if (!id) {
-    error.value = heroName
-      ? `Deck de ${heroName} : ce héros n'est pas encore disponible sur la table.`
+/**
+ * Un deck lu (fichier ou MarvelCDB) devient le deck personnalisé ; un import raté garde le précédent et
+ * affiche pourquoi. Rend true si le deck a été gardé.
+ *   fallbackName  nom du deck s'il n'a pas de titre (nom du fichier, « Deck MarvelCDB »)
+ */
+function keepImportedDeck({ deckList, hero, unknownCount, missing, title, heroName: marvelCdbHeroName }, fallbackName) {
+  if (!hero) {
+    errorMessage.value = marvelCdbHeroName
+      ? `Deck de ${marvelCdbHeroName} : ce héros n'est pas encore disponible sur la table.`
       : 'Aucune identité reconnue dans ce deck. Choisis un fichier .o8d OCTGN (héros de la boîte de base) ou un export texte MarvelCDB (.txt) d\'un des héros disponibles.'
     return false
   }
-  const count = keep => list.reduce((t, [g, q]) => t + (!['hero', 'obligation'].includes(BY_ID[g].t) && keep(BY_ID[g]) ? q : 0), 0)
-  const n = count(() => true)
-  const online = count(d => d.pack === 'marvelcdb') // cards read from MarvelCDB, with the site's images
-  imported.value = { list, hero: id, label: title || name, n, online, unknown, missing }
-  form.deck = 'import'
-  error.value = ''
+  // nombre d'exemplaires du deck (hors identité et obligation) qui remplissent la condition
+  const countCopies = condition => deckList.reduce((total, [definitionId, copies]) => {
+    const definition = DEFINITION_BY_ID[definitionId]
+    return total + (!['hero', 'obligation'].includes(definition.type) && condition(definition) ? copies : 0)
+  }, 0)
+  importedDeck.value = {
+    deckList, hero, label: title || fallbackName, unknownCount, missing,
+    cardCount: countCopies(() => true),
+    importedCount: countCopies(definition => definition.pack === 'marvelcdb') // cartes lues sur MarvelCDB, avec les images du site
+  }
+  form.deckChoice = 'import'
+  errorMessage.value = ''
   return true
 }
 
-// OCTGN .o8d or MarvelCDB text export (.txt)
-async function importDeck(e) {
-  const file = e.target.files[0]
-  e.target.value = '' // the same file can be picked again after a fix
-  if (file) keep(game.parseDeck(await file.text()), file.name.replace(/\.[^.]+$/, ''))
+// fichier .o8d d'OCTGN ou export texte de MarvelCDB (.txt)
+async function importDeckFile(event) {
+  const file = event.target.files[0]
+  event.target.value = '' // le même fichier peut être choisi à nouveau après une correction
+  if (file) keepImportedDeck(gameStore.parseDeckFile(await file.text()), file.name.replace(/\.[^.]+$/, ''))
 }
 
-// a MarvelCDB deck by its link or number, read from the site's public API
-const cdbLink = ref('')
-const loading = ref(false)
-async function importCdb() {
-  if (loading.value || !cdbLink.value.trim()) return
-  loading.value = true
-  error.value = ''
+// un deck MarvelCDB par son lien ou son numéro, lu dans l'API publique du site
+const marvelCdbLink = ref('')
+const isImporting = ref(false)
+async function importMarvelCdbDeck() {
+  if (isImporting.value || !marvelCdbLink.value.trim()) return
+  isImporting.value = true
+  errorMessage.value = ''
   try {
-    if (keep(await fetchCdbDeck(cdbLink.value), 'Deck MarvelCDB')) cdbLink.value = ''
-  } catch (err) {
-    error.value = err.message
+    if (keepImportedDeck(await fetchMarvelCdbDeck(marvelCdbLink.value), 'Deck MarvelCDB')) marvelCdbLink.value = ''
+  } catch (error) {
+    errorMessage.value = error.message
   } finally {
-    loading.value = false
+    isImporting.value = false
   }
 }
 
-function start() {
-  game.newGame({
-    hero: hero.value,
-    list: custom.value ? imported.value.list : game.precon(hero.value),
-    villain: form.villain,
-    modular: form.modular,
-    expert: form.diff === 'random' ? 'random' : form.diff === 'exp',
-    label: custom.value ? imported.value.label : `précon ${heroOf(hero.value).aspect}`
+/** « Mettre en place » : lance la nouvelle partie avec les choix des deux écrans. */
+function startGame() {
+  if (!modularsReady.value) return
+  gameStore.newGame({
+    hero: chosenHero.value,
+    deckList: usesImportedDeck.value ? importedDeck.value.deckList : gameStore.preconDeck(chosenHero.value),
+    scenario: form.scenario,
+    modulars: form.modulars === 'random' ? 'random' : [...form.modulars],
+    expert: form.difficulty === 'random' ? 'random' : form.difficulty === 'expert',
+    deckLabel: usesImportedDeck.value ? importedDeck.value.label : `précon ${heroOf(chosenHero.value).aspect}`
   })
   ui.closeModal()
 }
 
-// each screen opens at its top, focus on its selected choice
-const screen = ref(null)
-const focusChoice = () => screen.value?.querySelector('input:checked')?.focus({ preventScroll: true })
-onMounted(focusChoice)
+// chaque écran s'ouvre en haut, le focus sur son choix coché
+const screenElement = ref(null)
+const focusCheckedChoice = () => screenElement.value?.querySelector('input:checked')?.focus({ preventScroll: true })
+onMounted(focusCheckedChoice)
 watch(step, async () => {
   await nextTick()
-  screen.value?.closest('.box')?.scrollTo({ top: 0 })
-  focusChoice()
+  screenElement.value?.closest('.box')?.scrollTo({ top: 0 })
+  focusCheckedChoice()
 })
 </script>
 
@@ -117,60 +157,64 @@ watch(step, async () => {
       </li>
     </ol>
 
-    <div v-if="step === 1" ref="screen" class="screen">
+    <div v-if="step === 1" ref="screenElement" class="screen">
       <p>Choisissez votre héros avec son paquet préconstruit officiel de 40 cartes, ou importez un deck personnalisé
         (fichier .o8d d'OCTGN, export texte de MarvelCDB, ou lien d'un deck MarvelCDB). Par lien, un héros ou des cartes
         absents de la table sont lus sur MarvelCDB, avec les images du site (en anglais).</p>
       <div class="heroes" role="radiogroup" aria-label="Héros et paquet">
-        <ChoiceOption v-for="h in HEROES" :key="h.id" v-model="form.deck" name="deck" :value="h.id" :label="h.name"
-          :sub="`Préconstruit ${h.aspect}`" :image="heroImage(h.id)" />
-        <!-- custom deck: an import button until a deck is imported, then a choice like the others -->
-        <ChoiceOption v-if="imported" v-model="form.deck" name="deck" value="import" :label="imported.label"
-          :sub="`Deck personnalisé · ${heroName(imported.hero)}`" :image="heroImage(imported.hero)" />
+        <ChoiceOption v-for="hero in HEROES" :key="hero.id" v-model="form.deckChoice" name="deck" :value="hero.id" :label="hero.name"
+          :detail="`Préconstruit ${hero.aspect}`" :image-url="heroImageUrl(hero.id)" />
+        <!-- deck personnalisé : un bouton d'import tant qu'aucun deck n'est importé, puis un choix comme les autres -->
+        <ChoiceOption v-if="importedDeck" v-model="form.deckChoice" name="deck" value="import" :label="importedDeck.label"
+          :detail="`Deck personnalisé · ${heroName(importedDeck.hero)}`" :image-url="heroImageUrl(importedDeck.hero)" />
         <label v-else class="custom">
-          <input type="file" accept=".o8d,.xml,.txt" aria-label="Importer un deck personnalisé" @change="importDeck">
+          <input type="file" accept=".o8d,.xml,.txt" aria-label="Importer un deck personnalisé" @change="importDeckFile">
           <span class="plus" aria-hidden="true">+</span>
           <span class="txt">Deck personnalisé<small>Importer un .o8d ou un .txt MarvelCDB</small></span>
         </label>
       </div>
-      <form class="cdb" :aria-busy="loading" @submit.prevent="importCdb">
+      <form class="cdb" :aria-busy="isImporting" @submit.prevent="importMarvelCdbDeck">
         <label class="lab" for="cdb-link">Depuis MarvelCDB</label>
-        <input id="cdb-link" v-model="cdbLink" type="text" inputmode="url" enterkeyhint="go" autocomplete="off"
+        <input id="cdb-link" v-model="marvelCdbLink" type="text" inputmode="url" enterkeyhint="go" autocomplete="off"
           autocapitalize="off" spellcheck="false" placeholder="Lien du deck ou numéro de decklist">
-        <button type="submit" class="btn" :disabled="loading || !cdbLink.trim()">{{ loading ? 'Import…' : 'Importer'
+        <button type="submit" class="btn" :disabled="isImporting || !marvelCdbLink.trim()">{{ isImporting ? 'Import…' : 'Importer'
         }}</button>
       </form>
-      <div v-if="imported" class="row">
-        <span class="note">{{ importNote }}</span>
+      <div v-if="importedDeck" class="row">
+        <span class="note">{{ importSummary }}</span>
         <label class="btn file-btn">Importer un autre deck…<input type="file" accept=".o8d,.xml,.txt"
-            @change="importDeck"></label>
+            @change="importDeckFile"></label>
       </div>
-      <div v-if="error" class="err" role="alert">{{ error }}</div>
+      <div v-if="errorMessage" class="err" role="alert">{{ errorMessage }}</div>
     </div>
 
-    <div v-else ref="screen" class="screen">
+    <div v-else ref="screenElement" class="screen">
       <button type="button" class="recap" title="Changer de héros" @click="step = 1">
-        <img :src="heroImage(hero)" alt="">
-        <span class="txt">{{ heroName(hero) }}<small>{{ deckName }}</small></span>
+        <img :src="heroImageUrl(chosenHero)" alt="">
+        <span class="txt">{{ heroName(chosenHero) }}<small>{{ deckDescription }}</small></span>
         <span class="change">Changer</span>
       </button>
 
       <div class="fieldset">
         <div class="lab">Méchant</div>
         <div class="choices">
-          <ChoiceOption v-for="v in VILLAINS" :key="v.id" v-model="form.villain" name="villain" :value="v.id"
-            :label="v.name" :sub="v.scenario ?? v.level" />
+          <ChoiceOption v-for="scenario in SCENARIOS" :key="scenario.id" v-model="form.scenario" name="villain" :value="scenario.id"
+            :label="scenario.villainName" :detail="scenario.title ?? scenario.level" />
         </div>
       </div>
 
-      <div v-if="!crew" class="fieldset">
-        <div class="lab">Set modulaire</div>
+      <div v-if="!isCrew" class="fieldset">
+        <div class="lab">{{ modularsNeeded > 1 ? `Sets modulaires · ${modularsNeeded} à choisir` : 'Set modulaire' }}</div>
         <div class="choices">
-          <ChoiceOption v-model="form.modular" name="modular" value="random" label="Au hasard"
-            sub="Tiré à la mise en place" />
-          <ChoiceOption v-for="m in MODULARS" :key="m.id" v-model="form.modular" name="modular" :value="m.id"
-            :label="m.name" :sub="advisedFor(m.id) ? `Conseillé avec ${advisedFor(m.id)}` : ''" />
+          <ChoiceOption name="modular" value="random" label="Au hasard" :checked="form.modulars === 'random'"
+            :detail="modularsNeeded > 1 ? `${modularsNeeded} sets tirés à la mise en place` : 'Tiré à la mise en place'"
+            @pick="form.modulars = 'random'" />
+          <ChoiceOption v-for="modular in MODULAR_SETS" :key="modular.id" name="modular" :value="modular.id" :label="modular.name"
+            :multiple="modularsNeeded > 1" :checked="pickedModulars.includes(modular.id)"
+            :detail="scenariosAdvising(modular.id) ? `Conseillé avec ${scenariosAdvising(modular.id)}` : ''" @pick="pickModular(modular.id)" />
         </div>
+        <p v-if="!modularsReady" class="note" role="status">Choisissez {{ modularsNeeded }} sets modulaires ({{ pickedModulars.length }}
+          choisi{{ pickedModulars.length > 1 ? 's' : '' }}).</p>
       </div>
       <p v-else class="note">Les Démolisseurs : quatre méchants en jeu, chacun avec sa manigance annexe et son propre
         paquet Rencontre ; ni set modulaire, ni set Standard, ni obligation, ni Némésis.</p>
@@ -178,12 +222,12 @@ watch(step, async () => {
       <div class="fieldset">
         <div class="lab">Difficulté</div>
         <div class="choices">
-          <ChoiceOption v-model="form.diff" name="diff" value="std" label="Standard"
-            :sub="crew ? 'Méchants version A' : 'Étapes I et II + set Standard'" />
-          <ChoiceOption v-model="form.diff" name="diff" value="exp" label="Expert"
-            :sub="crew ? 'Méchants version B' : 'Étapes II et III + set Expert'" />
-          <ChoiceOption v-model="form.diff" name="diff" value="random" label="Au hasard"
-            sub="Standard ou expert, tiré à la mise en place" />
+          <ChoiceOption v-model="form.difficulty" name="difficulty" value="standard" label="Standard"
+            :detail="isCrew ? 'Méchants version A' : 'Étapes I et II + set Standard'" />
+          <ChoiceOption v-model="form.difficulty" name="difficulty" value="expert" label="Expert"
+            :detail="isCrew ? 'Méchants version B' : 'Étapes II et III + set Expert'" />
+          <ChoiceOption v-model="form.difficulty" name="difficulty" value="random" label="Au hasard"
+            detail="Standard ou expert, tiré à la mise en place" />
         </div>
       </div>
 
@@ -194,7 +238,7 @@ watch(step, async () => {
     <div class="row foot">
       <button v-if="step === 2" type="button" class="btn" @click="step = 1">← Héros</button>
       <button v-if="step === 1" type="button" class="btn primary" @click="step = 2">Suivant : scénario →</button>
-      <button v-else type="button" class="btn primary" @click="start">Mettre en place</button>
+      <button v-else type="button" class="btn primary" :disabled="!modularsReady" @click="startGame">Mettre en place</button>
       <span class="sp" />
       <button type="button" class="btn" @click="ui.closeModal()">Annuler</button>
     </div>
@@ -234,7 +278,7 @@ watch(step, async () => {
   gap: 14px;
 }
 
-/* every hero tile has the same width, however many heroes there are */
+/* toutes les tuiles de héros ont la même largeur, quel que soit le nombre de héros */
 .heroes {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(178px, 1fr));
@@ -331,7 +375,7 @@ watch(step, async () => {
   outline-offset: 1px;
 }
 
-/* under 16px, iOS zooms the page when the field gets the focus */
+/* sous 16 px, iOS zoome la page quand le champ prend le focus */
 @media (pointer: coarse) {
   .cdb input {
     font-size: 16px;
@@ -364,7 +408,7 @@ watch(step, async () => {
   font-size: 12.5px;
 }
 
-/* the buttons stay in view while the choices scroll */
+/* les boutons restent visibles pendant que les choix défilent */
 .foot {
   position: sticky;
   bottom: 0;

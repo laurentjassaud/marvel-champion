@@ -1,123 +1,199 @@
+// Store de la partie : l'état de la partie en cours (réactif, enregistré dans le navigateur) et les actions
+// des écrans. Chaque action est une mince enveloppe autour d'une fonction du moteur de règles
+// (src/game/engine.js), à qui elle passe l'état et la disposition actuelle de la table.
+
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
-import * as E from '../game/engine.js'
-import { PRECONS, VILLAINS, BY_ID, ZONE_LABELS, addDefs, heroName } from '../game/data.js'
+import * as Engine from '../game/engine.js'
+import { PRECON_DECKS, SCENARIOS, DEFINITION_BY_ID, addImportedDefinitions, heroName } from '../game/data.js'
+import { migrateSavedGame } from '../game/savedGame.js'
 import { useUiStore } from './ui.js'
 
-const KEY = 'mc-table-vue-v1'
+/** Clé de la partie enregistrée dans le navigateur (gardée telle quelle pour retrouver les anciennes parties). */
+const SAVED_GAME_KEY = 'mc-table-vue-v1'
 
-function load() {
+/** Relit la partie enregistrée, mise au format actuel ; null s'il n'y en a pas ou si elle est illisible. */
+function loadSavedGame() {
   try {
-    const s = JSON.parse(localStorage.getItem(KEY))
-    if (!(s?.cards?.length && s.counters?.length === 3)) return null
-    addDefs(s.opt?.defs) // cards read from MarvelCDB with an imported deck
-    return s
-  } catch { return null }
+    const saved = migrateSavedGame(JSON.parse(localStorage.getItem(SAVED_GAME_KEY)))
+    if (!(saved?.cards?.length && saved.counters?.length === 3)) return null
+    addImportedDefinitions(saved.setup?.importedDefinitions) // cartes lues sur MarvelCDB avec un deck importé
+    return saved
+  } catch {
+    return null
+  }
 }
 
-/** Game state + actions. Every action is a thin wrapper around the rules engine. */
 export const useGameStore = defineStore('game', () => {
   const ui = useUiStore()
-  const s = ref(load())
+  /** L'état de la partie en cours (voir engine/state.js), ou null avant la première partie. */
+  const game = ref(loadSavedGame())
 
-  // persist (debounced)
-  let timer
-  watch(s, () => {
-    clearTimeout(timer)
-    timer = setTimeout(() => { try { localStorage.setItem(KEY, JSON.stringify(s.value)) } catch { /* quota or private mode */ } }, 250)
+  // enregistrement dans le navigateur, un quart de seconde après le dernier changement
+  let saveTimer
+  watch(game, () => {
+    clearTimeout(saveTimer)
+    saveTimer = setTimeout(() => {
+      try { localStorage.setItem(SAVED_GAME_KEY, JSON.stringify(game.value)) } catch { /* stockage plein ou navigation privée */ }
+    }, 250)
   }, { deep: true })
 
-  const ready = computed(() => !!s.value?.cards?.length)
-  const zone = z => (s.value ? E.cardsIn(s.value, z) : [])
-  // a pile as shown: with several villains, the encounter piles are the active villain's
-  const pile = z => (s.value && (z === 'edeck' || z === 'ediscard') ? E.encounterPile(s.value, z) : zone(z))
-  const card = id => (s.value && id ? E.byId(s.value, id) : null)
-  // Docteur Strange: the Invocation deck and its discard are shown next to the player piles
-  const hasInvocation = computed(() => !!s.value?.cards.some(E.isInvocation))
-  // round and phase (a game saved before they existed is in round 1, hero phase)
-  const turn = computed(() => s.value?.turn ?? 1)
-  const phase = computed(() => (s.value ? E.phaseOf(s.value) : 'hero'))
+  /* ---------- lecture de l'état ---------- */
+
+  /** Une partie est en cours. */
+  const isReady = computed(() => !!game.value?.cards?.length)
+  /** Les cartes d'une zone. */
+  const cardsIn = zone => (game.value ? Engine.cardsInZone(game.value, zone) : [])
+  /** Une pile telle qu'elle est montrée : avec les Démolisseurs, les piles Rencontre sont celles du méchant actif. */
+  const pileOf = zone => (game.value && ['encounterDeck', 'encounterDiscard'].includes(zone) ? Engine.encounterPile(game.value, zone) : cardsIn(zone))
+  /** La carte qui porte cet identifiant, ou null. */
+  const cardById = cardId => (game.value && cardId ? Engine.cardById(game.value, cardId) : null)
+  /** Docteur Strange : le deck Invocation et sa défausse s'affichent à côté des piles du joueur. */
+  const hasInvocationDeck = computed(() => !!game.value?.cards.some(Engine.isInvocationCard))
+  /** Le deck propre au scénario (Armes Expérimentales, Manigance Annexe), à côté des piles Rencontre, ou null. */
+  const scenarioDeck = computed(() => (game.value ? Engine.scenarioDeckOf(game.value) : null))
+  const turn = computed(() => game.value?.turn ?? 1)
+  const phase = computed(() => game.value?.phase ?? 'hero')
+  /** Sous-titre de la barre du haut : "Spider-Man contre Rhino · expert" (une difficulté tirée au hasard n'est pas nommée). */
   const subtitle = computed(() => {
-    const o = s.value?.opt
-    if (!o) return 'Table solo'
-    const v = VILLAINS.find(x => x.id === o.villain)
-    // a difficulty drawn at random is not named
-    return `${heroName(o.hero)} contre ${v?.name ?? ''}${o.expert && !o.drawn?.includes('expert') ? ' · expert' : ''}`
+    const setup = game.value?.setup
+    if (!setup) return 'Table solo'
+    const scenario = SCENARIOS.find(candidate => candidate.id === setup.scenario)
+    const expert = setup.expert && !setup.randomChoices?.includes('expert') ? ' · expert' : ''
+    return `${heroName(setup.hero)} contre ${scenario?.villainName ?? ''}${expert}`
   })
+  /** Le mulligan se fait une seule fois, pendant la phase du héros du round 1. */
+  const canMulligan = computed(() => !!game.value && !game.value.mulliganTaken && turn.value === 1 && phase.value === 'hero')
 
-  // run an engine function with the state and the current layout
-  const run = (fn, ...args) => (s.value ? fn(s.value, ...args) : undefined)
-  const withCard = (id, fn) => { const c = card(id); if (c) fn(c) }
-  const L = () => ui.layout()
+  /* ---------- outils ---------- */
 
-  function newGame(opt) {
-    s.value = E.newGame(opt, L())
-    ui.select(null)
-    ui.preview = null
-    ui.randomPick = null
+  /** Appelle une fonction du moteur avec l'état de la partie, puis les autres arguments ; rien sans partie. */
+  const run = (engineFunction, ...args) => (game.value ? engineFunction(game.value, ...args) : undefined)
+  /** Appelle `action` avec la carte de cet identifiant, si elle existe. */
+  const withCard = (cardId, action) => {
+    const card = cardById(cardId)
+    if (card) action(card)
   }
+  /** La disposition actuelle de la table. */
+  const layout = () => ui.layout()
+  /** Un méchant vaincu : son étape suivante (ou la victoire) est présentée dans une fenêtre. */
+  const announceVillainResult = result => { if (result) ui.openModal('villain', { result }) }
   /**
-   * Same setup from the start: same hero and deck, same scenario (a module or difficulty drawn at
-   * random stays the one drawn), decks shuffled again. A game saved before the deck list was kept
-   * replays the hero's precon.
+   * Les changements de phase rendent true / false, ou ce qu'a donné un changement de stade résolu à la fin
+   * de la phase (Kang) : il est alors présenté dans la fenêtre du méchant. Rend true si la phase a changé.
    */
-  function restart() {
-    const o = s.value.opt
-    newGame({ hero: o.hero, list: o.list ?? PRECONS[o.hero], villain: o.villain, modular: o.modular, expert: o.expert, label: o.label, drawn: o.drawn, defs: o.defs })
-    s.value.log.unshift({ t: s.value.log[0].t, msg: 'Partie recommencée avec la même mise en place.', sys: true })
+  const afterPhaseChange = result => {
+    if (result && result !== true) announceVillainResult(result)
+    return !!result
   }
-  // a villain defeated: its next stage (or the victory) is presented in a window
-  const announce = r => { if (r) ui.openModal('villain', { result: r }) }
-  // the mulligan is taken once, in the hero phase of round 1
-  const canMulligan = computed(() => !!s.value && !s.value.mull && turn.value === 1 && phase.value === 'hero')
-  function defaultGame() {
-    newGame({ hero: 'spider_man', list: PRECONS.spider_man, villain: 'rhino', modular: 'bomb_scare', expert: false, label: 'précon Justice' })
-    s.value.log.unshift({ t: s.value.log[0].t, msg: 'Bienvenue. Une partie d\'exemple est prête : Spider-Man contre Rhino. « Nouvelle partie » pour changer de héros ou de méchant.', sys: true })
+  /** Ajoute un message en tête du journal, à l'heure du premier message. */
+  const prependLog = text => game.value.log.unshift({ time: game.value.log[0].time, text, important: true })
+
+  /* ---------- parties ---------- */
+
+  /** Commence une nouvelle partie (options : voir engine/setup.js newGame) et vide la sélection. */
+  function newGame(options) {
+    game.value = Engine.newGame(options, layout())
+    ui.selectCard(null)
+    ui.preview = null
+    ui.randomlyPickedCardId = null
+  }
+
+  /**
+   * Recommence avec la même mise en place : même héros et même deck, même scénario (un set modulaire ou une
+   * difficulté tirés au hasard restent ceux qui ont été tirés), paquets mélangés à nouveau.
+   */
+  function restartGame() {
+    const setup = game.value.setup
+    newGame({
+      hero: setup.hero, deckList: setup.deckList, scenario: setup.scenario, modulars: setup.modulars, expert: setup.expert,
+      deckLabel: setup.deckLabel, randomChoices: setup.randomChoices, importedDefinitions: setup.importedDefinitions
+    })
+    prependLog('Partie recommencée avec la même mise en place.')
+  }
+
+  /** La partie d'exemple du premier lancement : Spider-Man contre Rhino. */
+  function startExampleGame() {
+    newGame({ hero: 'spider_man', deckList: PRECON_DECKS.spider_man, scenario: 'rhino', modulars: ['bomb_scare'], expert: false, deckLabel: 'précon Justice' })
+    prependLog('Bienvenue. Une partie d\'exemple est prête : Spider-Man contre Rhino. « Nouvelle partie » pour changer de héros ou de méchant.')
   }
 
   return {
-    s, ready, zone, pile, card, hasInvocation, turn, phase, subtitle, canMulligan,
-    newGame, defaultGame, restart,
-    // a card of the hand at random, marked in red until it is clicked or moved (usePointer)
-    randomHandCard: () => { ui.randomPick = run(E.randomHandCard)?.id ?? null },
-    precon: hero => PRECONS[hero],
-    parseDeck: E.parseDeck,
-    isCoreCard: id => !!BY_ID[id],
+    game, isReady, cardsIn, pileOf, cardById, hasInvocationDeck, scenarioDeck, turn, phase, subtitle, canMulligan,
+    newGame, startExampleGame, restartGame,
+    preconDeck: heroId => PRECON_DECKS[heroId],
+    parseDeckFile: Engine.parseDeckFile,
+    /** La carte fait partie des boîtes de la table (ou a déjà été lue sur MarvelCDB). */
+    isKnownCard: definitionId => !!DEFINITION_BY_ID[definitionId],
 
-    draw: () => run(E.drawCard, L()),
-    drawMany: n => run(E.drawMany, L(), n),
-    discardTop: () => run(E.discardTop),
-    shuffle: z => { run(E.shuffleZone, z); run(E.log, `${ZONE_LABELS[z][0].toUpperCase()}${ZONE_LABELS[z].slice(1)} mélangé.`) },
-    searched: z => { run(E.shuffleZone, z); run(E.log, `Vous cherchez dans le ${ZONE_LABELS[z]}, puis le mélangez.`) },
-    invoke: () => run(E.invoke),
-    invokeKeep: () => run(E.invokeKeep),
-    discardInvocation: () => run(E.invoke, false),
-    reveal: () => run(E.revealEncounter, L()),
-    boost: () => { if (run(E.dealFaceDown, L())) run(E.log, 'Carte Rencontre posée face cachée (boost).') },
-    toVillainPhase: () => run(E.toVillainPhase, L()),
-    toHeroPhase: () => run(E.toHeroPhase),
-    mulligan: ids => run(E.mulligan, L(), ids),
-    addToken: () => run(E.addToken, L()),
-    clamp: () => run(E.clampAll, L()),
-
-    move: (id, z, opts) => withCard(id, c => run(E.moveCard, c, z, opts)),
-    playToTable: (id, faceDown) => withCard(id, c => run(E.playToTable, L(), c, faceDown)),
-    takeFromPile: (id, z) => withCard(id, c => run(E.takeFromPile, L(), c, z)),
-    reorderHand: (id, beforeId) => run(E.reorderHand, id, beforeId),
-    tap: id => withCard(id, c => run(E.toggleTap, c)),
-    flip: id => withCard(id, c => run(E.flipCard, c)),
-    status: (id, st) => withCard(id, c => run(E.toggleStatus, c, st)),
-    damage: (id, n) => announce(run(E.addDamage, card(id), n)),
-    threat: (id, n) => run(E.addThreat, card(id), n),
-    tokens: (id, n) => run(E.addTokens, card(id), n),
-    setActive: set => run(E.setActive, set),
-    untapPlayer: () => { zone('table').filter(c => !E.isEnc(c)).forEach(c => { c.tapped = false }) },
-
-    counterAdd(i, n) {
-      // the villain counter: − damages, + heals, so that a stage falling to 0 is noticed (next stage, victory)
-      if (i === 1) return announce(run(E.addDamage, null, -n))
-      const k = s.value.counters[i]; k.v += n; E.log(s.value, `${k.l} : ${k.v}.`)
+    /* ---------- pioches et piles ---------- */
+    drawCard: () => run(Engine.drawCard, layout()),
+    drawCards: count => run(Engine.drawCards, layout(), count),
+    discardTopOfDeck: () => run(Engine.discardTopOfDeck),
+    /** Mélange une zone et l'écrit au journal ("Paquet Rencontre mélangé."). */
+    shuffle: zone => {
+      const label = run(Engine.zoneLabel, zone)
+      run(Engine.shuffleZone, zone)
+      run(Engine.logMessage, `${label[0].toUpperCase()}${label.slice(1)} mélangé.`)
     },
-    counterLabel(i, l) { if (l) s.value.counters[i].l = l }
+    /** Après avoir cherché dans une pioche : elle est mélangée, comme le demandent les règles. */
+    shuffleAfterSearch: zone => {
+      run(Engine.shuffleZone, zone)
+      run(Engine.logMessage, `Vous cherchez dans le ${run(Engine.zoneLabel, zone)}, puis le mélangez.`)
+    },
+    /** Une carte de la main au hasard, entourée de rouge jusqu'à ce qu'on la touche (usePointer). */
+    pickRandomHandCard: () => { ui.randomlyPickedCardId = run(Engine.pickRandomHandCard)?.id ?? null },
+    castInvocation: () => run(Engine.castInvocation),
+    castInvocationAndKeep: () => run(Engine.castInvocationAndKeep),
+    discardInvocation: () => run(Engine.castInvocation, false),
+    revealEncounterCard: () => run(Engine.revealEncounterCard, layout()),
+    revealScenarioDeckCard: () => run(Engine.revealScenarioDeckCard, layout()),
+    dealBoostCard: () => { if (run(Engine.dealBoostCard, layout())) run(Engine.logMessage, 'Carte Rencontre posée face cachée (boost).') },
+    /** « Attribuez-vous une carte Rencontre » : face cachée devant l'identité, à révéler pendant la phase du méchant. */
+    dealEncounterCardToPlayer: () => {
+      if (run(Engine.dealEncounterCardToPlayer, layout())) run(Engine.logMessage, 'Vous recevez une carte Rencontre face cachée, posée devant votre identité.')
+    },
+
+    /* ---------- phases ---------- */
+    startVillainPhase: () => afterPhaseChange(run(Engine.startVillainPhase, layout())),
+    startHeroPhase: () => afterPhaseChange(run(Engine.startHeroPhase, layout())),
+    mulligan: cardIds => run(Engine.mulligan, layout(), cardIds),
+
+    /* ---------- table ---------- */
+    addPawn: () => run(Engine.addPawn, layout()),
+    keepCardsOnTable: () => run(Engine.keepCardsOnTable, layout()),
+    moveCard: (cardId, zone, options) => withCard(cardId, card => run(Engine.moveCard, card, zone, options)),
+    playToTable: (cardId, faceDown) => withCard(cardId, card => run(Engine.playToTable, layout(), card, faceDown)),
+    takeFromPile: (cardId, zone) => withCard(cardId, card => run(Engine.takeFromPile, layout(), card, zone)),
+    reorderHand: (cardId, beforeCardId) => run(Engine.reorderHand, cardId, beforeCardId),
+    toggleExhausted: cardId => withCard(cardId, card => run(Engine.toggleExhausted, card)),
+    flipCard: cardId => withCard(cardId, card => run(Engine.flipCard, card)),
+    setIdentityForm: (cardId, side) => withCard(cardId, card => run(Engine.setIdentityForm, card, side)),
+    toggleStatus: (cardId, statusId) => withCard(cardId, card => run(Engine.toggleStatus, card, statusId)),
+    /** Redresse toutes les cartes du joueur sur la table. */
+    readyPlayerCards: () => { for (const card of cardsIn('table')) if (!Engine.isEncounterCard(card)) card.exhausted = false },
+
+    /* ---------- dégâts, menace, jetons ---------- */
+    addDamage: (cardId, amount) => announceVillainResult(run(Engine.addDamage, cardById(cardId), amount, layout())),
+    addThreat: (cardId, amount) => run(Engine.addThreat, cardById(cardId), amount),
+    addTokens: (cardId, amount) => run(Engine.addTokens, cardById(cardId), amount),
+    /** Kang : le stade 3 est achevé, le stade 4 arrive à la fin de la phase (une carte Empire de Kang dessous). */
+    completeKangStage3: () => announceVillainResult(run(Engine.completeKangStage3)),
+    setActiveVillain: set => run(Engine.setActiveVillain, set),
+
+    /* ---------- compteurs du haut de l'écran ---------- */
+    /**
+     * Change un compteur de `amount`. Le compteur du méchant (index 1) passe par les dégâts : « − » blesse,
+     * « + » soigne, pour qu'une étape qui tombe à 0 soit remarquée (étape suivante, victoire).
+     */
+    changeCounter(index, amount) {
+      if (index === 1) return announceVillainResult(run(Engine.addDamage, null, -amount, layout()))
+      const counter = game.value.counters[index]
+      counter.value += amount
+      Engine.logMessage(game.value, `${counter.label} : ${counter.value}.`)
+      return undefined
+    },
+    /** Renomme un compteur (clic sur son libellé). */
+    renameCounter(index, label) { if (label) game.value.counters[index].label = label }
   }
 })

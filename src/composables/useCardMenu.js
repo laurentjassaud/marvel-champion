@@ -1,127 +1,181 @@
-import { def, isCharacter, counterOf, discardOf, nameOf } from '../game/engine.js'
-import { STATUSES } from '../game/data.js'
+// Menus contextuels (clic droit, ou appui long sur écran tactile) des cartes et des piles.
+
+import {
+  definitionOf, isCharacter, counterKindOf, discardZoneOf, cardName, mainSchemeTakesTokens, isAlterEgo, kangStage3Scheme
+} from '../game/engine.js'
+import { STATUS_CARDS } from '../game/data.js'
 import { useGameStore } from '../stores/game.js'
 import { useUiStore } from '../stores/ui.js'
 
-/** Piles drawn from the top: a card in one of them opens the pile's menu. */
-export const DRAW_PILES = ['deck', 'edeck', 'ideck']
-/** Piles with a menu of their own on right click / long press: the draw piles and the discard piles. */
-export const MENU_PILES = [...DRAW_PILES, 'discard', 'ediscard', 'idiscard']
+/** Les pioches : une carte de l'une d'elles ouvre le menu de la pile. */
+export const DECK_PILES = ['playerDeck', 'encounterDeck', 'invocationDeck', 'scenarioDeck']
+/** Les piles qui ont leur propre menu au clic droit ou à l'appui long : les pioches et les défausses. */
+export const PILES_WITH_MENU = [...DECK_PILES, 'playerDiscard', 'encounterDiscard', 'invocationDiscard']
 
-const item = (label, run, key) => ({ label, run, key })
-/** Toggle item, shown with a check mark when on. */
-const check = (label, on, run) => ({ label, run, checked: on })
+/** Une ligne de menu : son libellé, l'action, et le raccourci clavier affiché à droite. */
+const menuItem = (label, run, shortcut) => ({ label, run, key: shortcut })
+/** Une ligne à cocher, montrée avec une coche quand elle est active. */
+const checkItem = (label, isChecked, run) => ({ label, run, checked: isChecked })
 
-/** Remove leading, trailing and doubled separators. */
-function tidy(items) {
-  const out = []
-  for (const it of items) {
-    if (!it && (!out.length || !out[out.length - 1])) continue
-    out.push(it)
+/** Retire les séparateurs (null) en tête, en fin, et ceux qui se suivent. */
+function withoutExtraSeparators(items) {
+  const kept = []
+  for (const item of items) {
+    const previousIsSeparator = !kept.length || !kept[kept.length - 1]
+    if (!item && previousIsSeparator) continue
+    kept.push(item)
   }
-  while (out.length && !out[out.length - 1]) out.pop()
-  return out
+  while (kept.length && !kept[kept.length - 1]) kept.pop()
+  return kept
 }
 
-/** Context menus for cards and for the two draw piles. */
+/** Menus contextuels des cartes et des piles. */
 export function useCardMenu() {
-  const game = useGameStore()
+  const gameStore = useGameStore()
   const ui = useUiStore()
 
-  function openCardMenu(c, x, y) {
-    if (DRAW_PILES.includes(c.zone)) return openPileMenu(c.zone, x, y)
-    ui.select(c.id)
-    const id = c.id
-    const items = []
-    if (c.kind === 'token') {
-      items.push(item('Supprimer le pion', () => game.move(id, 'discard'), 'Suppr'))
-    } else {
-      if (c.zone === 'table') {
-        const flip = c.hero ? (c.side ? 'Passer en héros' : 'Passer en alter ego')
-          : def(c).bn && c.faceUp ? `Retourner (face ${c.side ? 'A' : 'B'})`
-            : c.faceUp ? 'Retourner face cachée' : 'Révéler'
-        // damage on characters, threat on schemes, plain tokens on the rest
-        const counter = {
-          dmg: [item('Dégât +1', () => game.damage(id, 1), 'G'), item('Dégât −1', () => game.damage(id, -1), '⇧G')],
-          thr: [item('Menace +1', () => game.threat(id, 1), 'M'), item('Menace −1', () => game.threat(id, -1), '⇧M')],
-          tok: [item('Jeton +1', () => game.tokens(id, 1), 'J'), item('Jeton −1', () => game.tokens(id, -1), '⇧J')]
-        }[counterOf(c)]
-        items.push(
-          item(c.tapped ? 'Redresser' : 'Épuiser', () => game.tap(id), 'T'),
-          item(flip, () => game.flip(id), 'F'),
-          null,
-          ...counter,
-          null
-        )
-        // several villains (Les Démolisseurs): hand the Active token to another one
-        if (game.s.crew && def(c).t === 'villain' && def(c).s !== game.s.active) {
-          items.push(item('Rendre actif (jeton Actif)', () => game.setActive(def(c).s)), null)
-        }
-        if (c.faceUp && isCharacter(c)) {
-          items.push(...STATUSES.map(st => check(st.label, !!c[st.id], () => game.status(id, st.id))), null)
-        }
-      }
-      if (c.zone === 'hand') {
-        items.push(item('Jouer sur la table', () => game.playToTable(id), '↵'), item('Jouer face cachée', () => game.playToTable(id, true)), null)
-      }
-      if (!c.hero) {
-        if (c.zone !== 'hand') items.push(item('Prendre en main', () => game.move(id, 'hand'), 'H'))
-        if (c.zone !== discardOf(c)) items.push(item('Défausser', () => game.move(id, 'discard'), 'Suppr'))
-        if (c.zone !== 'aside') items.push(item('Mettre de côté', () => game.move(id, 'aside'), 'X'))
-        items.push(item('Sur le paquet', () => game.move(id, 'deck')), item('Sous le paquet', () => game.move(id, 'deck', { bottom: true })))
-      }
+  /** Ouvre le menu d'une carte à la position (x, y) ; une carte du dessus d'une pioche ouvre le menu de la pile. */
+  function openCardMenu(card, x, y) {
+    if (DECK_PILES.includes(card.zone)) {
+      openPileMenu(card.zone, x, y)
+      return
     }
-    const known = c.kind !== 'token' && (c.faceUp || c.zone === 'hand')
-    const title = c.kind === 'token' ? 'Pion' : known ? nameOf(c) : 'Carte face cachée'
-    // `card`: shown enlarged next to the options on touch screens, where the side preview is small
-    ui.openMenu({ x, y, title, items: tidy(items), card: known ? id : null })
+    ui.selectCard(card.id)
+    const items = card.isPawn
+      ? [menuItem('Supprimer le pion', () => gameStore.moveCard(card.id, 'discard'), 'Suppr')]
+      : [...tableItems(card), ...handItems(card), ...moveItems(card)]
+    const isKnown = !card.isPawn && (card.faceUp || card.zone === 'hand')
+    let title = 'Carte face cachée'
+    if (card.isPawn) title = 'Pion'
+    else if (isKnown) title = cardName(card)
+    // cardId : la carte, montrée en grand à côté du menu sur écran tactile, où l'aperçu de côté est petit
+    ui.openContextMenu({ x, y, title, items: withoutExtraSeparators(items), cardId: isKnown ? card.id : null })
   }
 
+  /** Lignes d'une carte sur la table : épuiser, retourner, compteurs, stade de Kang, jeton Actif, cartes d'état. */
+  function tableItems(card) {
+    if (card.zone !== 'table') return []
+    const definition = definitionOf(card)
+    const cardId = card.id
+    // une identité à deux faces héros (La Guêpe) : F va à la face A, l'autre face héros a sa propre ligne
+    const heroForms = card.isIdentity && definition.thirdName ? definition.forms ?? ['A', 'C'] : null
+    let flipLabel = card.faceUp ? 'Retourner face cachée' : 'Révéler'
+    if (card.isIdentity) flipLabel = isAlterEgo(card) ? `Passer en héros${heroForms ? ` (${heroForms[0]})` : ''}` : 'Passer en alter ego'
+    else if (definition.backName && card.faceUp) flipLabel = `Retourner (face ${card.side ? 'A' : 'B'})`
+    let otherFormItem = null
+    if (heroForms && isAlterEgo(card)) otherFormItem = menuItem(`Passer en héros (${heroForms[1]})`, () => gameStore.setIdentityForm(cardId, 2))
+    else if (heroForms) {
+      const [targetName, targetSide] = card.side === 2 ? [heroForms[0], 0] : [heroForms[1], 2]
+      otherFormItem = menuItem(`Passer en ${targetName}`, () => gameStore.setIdentityForm(cardId, targetSide))
+    }
+    // dégâts sur les personnages, menace sur les manigances, jetons sur le reste (et sur la manigance
+    // principale : jetons Retard de L'Homme Absorbant, jetons Test de Zola)
+    const counterItems = {
+      damage: [menuItem('Dégât +1', () => gameStore.addDamage(cardId, 1), 'G'), menuItem('Dégât −1', () => gameStore.addDamage(cardId, -1), '⇧G')],
+      threat: [menuItem('Menace +1', () => gameStore.addThreat(cardId, 1), 'M'), menuItem('Menace −1', () => gameStore.addThreat(cardId, -1), '⇧M')],
+      tokens: [menuItem('Jeton +1', () => gameStore.addTokens(cardId, 1), 'J'), menuItem('Jeton −1', () => gameStore.addTokens(cardId, -1), '⇧J')]
+    }
+    const items = [
+      menuItem(card.exhausted ? 'Redresser' : 'Épuiser', () => gameStore.toggleExhausted(cardId), 'T'),
+      menuItem(flipLabel, () => gameStore.flipCard(cardId), 'F'),
+      otherFormItem,
+      null,
+      ...counterItems[counterKindOf(card)],
+      ...(mainSchemeTakesTokens(card) ? counterItems.tokens : []),
+      null
+    ]
+    const game = gameStore.game
+    // Kang : stade 3 achevé → stade 4 à la fin de la phase, une carte Empire de Kang dessous
+    if (kangStage3Scheme(game) === card && !game.pendingStageChange) {
+      items.push(menuItem('Stade achevé : passer au stade 4 (Empire de Kang)', () => gameStore.completeKangStage3()), null)
+    }
+    // plusieurs méchants (Les Démolisseurs) : donner le jeton Actif à un autre
+    if (game.crew && definition.type === 'villain' && definition.set !== game.activeVillainSet) {
+      items.push(menuItem('Rendre actif (jeton Actif)', () => gameStore.setActiveVillain(definition.set)), null)
+    }
+    if (card.faceUp && isCharacter(card)) {
+      items.push(...STATUS_CARDS.map(status => checkItem(status.label, !!card[status.id], () => gameStore.toggleStatus(cardId, status.id))), null)
+    }
+    return items
+  }
+
+  /** Lignes d'une carte de la main : la jouer, face visible ou cachée. */
+  function handItems(card) {
+    if (card.zone !== 'hand') return []
+    return [
+      menuItem('Jouer sur la table', () => gameStore.playToTable(card.id), '↵'),
+      menuItem('Jouer face cachée', () => gameStore.playToTable(card.id, true)),
+      null
+    ]
+  }
+
+  /** Lignes pour ranger une carte ailleurs (pas l'identité) : main, défausse, de côté, sur ou sous sa pioche. */
+  function moveItems(card) {
+    if (card.isIdentity) return []
+    const items = []
+    if (card.zone !== 'hand') items.push(menuItem('Prendre en main', () => gameStore.moveCard(card.id, 'hand'), 'H'))
+    if (card.zone !== discardZoneOf(card)) items.push(menuItem('Défausser', () => gameStore.moveCard(card.id, 'discard'), 'Suppr'))
+    if (card.zone !== 'setAside') items.push(menuItem('Mettre de côté', () => gameStore.moveCard(card.id, 'setAside'), 'X'))
+    items.push(
+      menuItem('Sur le paquet', () => gameStore.moveCard(card.id, 'deck')),
+      menuItem('Sous le paquet', () => gameStore.moveCard(card.id, 'deck', { bottom: true }))
+    )
+    return items
+  }
+
+  /** Ouvre le menu d'une pile (pioche ou défausse) à la position (x, y). */
   function openPileMenu(zone, x, y) {
     const menus = {
-      deck: ['Paquet joueur', [
-        item('Piocher 1', () => game.draw(), 'D'),
-        item('Piocher 3', () => game.drawMany(3)),
-        item('Mélanger', () => game.shuffle('deck')),
-        item('Défausser la carte du dessus', () => game.discardTop()),
-        item('Chercher dans le paquet…', () => ui.openModal('pile', { zone: 'deck' }))
+      playerDeck: ['Paquet joueur', [
+        menuItem('Piocher 1', () => gameStore.drawCard(), 'D'),
+        menuItem('Piocher 3', () => gameStore.drawCards(3)),
+        menuItem('Mélanger', () => gameStore.shuffle('playerDeck')),
+        menuItem('Défausser la carte du dessus', () => gameStore.discardTopOfDeck()),
+        menuItem('Chercher dans le paquet…', () => ui.openModal('pile', { zone: 'playerDeck' }))
       ]],
-      edeck: ['Paquet Rencontre', [
-        item('Révéler une carte', () => game.reveal(), 'E'),
-        item('Carte face cachée (boost)', () => game.boost()),
-        item('Mélanger', () => game.shuffle('edeck')),
-        item('Chercher dans le paquet…', () => ui.openModal('pile', { zone: 'edeck' }))
+      encounterDeck: ['Paquet Rencontre', [
+        menuItem('Révéler une carte', () => gameStore.revealEncounterCard(), 'E'),
+        menuItem('Carte face cachée (boost)', () => gameStore.dealBoostCard()),
+        menuItem('Carte face cachée pour vous', () => gameStore.dealEncounterCardToPlayer()),
+        menuItem('Mélanger', () => gameStore.shuffle('encounterDeck')),
+        menuItem('Chercher dans le paquet…', () => ui.openModal('pile', { zone: 'encounterDeck' }))
       ]],
-      // Docteur Strange: the top card is face up, the card abilities name the option
-      ideck: ['Deck Invocation', [
-        item('Lancer (Maîtrise des Sorts)', () => game.invoke(), 'I'),
-        item('Lancer et la garder (Maître des Arts Mystiques)', () => game.invokeKeep()),
-        item('Défausser sans lancer (Talent Naturel, Wong)', () => game.discardInvocation()),
-        item('Mélanger', () => game.shuffle('ideck')),
-        item('Chercher dans le deck…', () => ui.openModal('pile', { zone: 'ideck' }))
+      // Docteur Strange : la carte du dessus est face visible ; les capacités des cartes nomment le choix
+      invocationDeck: ['Deck Invocation', [
+        menuItem('Lancer (Maîtrise des Sorts)', () => gameStore.castInvocation(), 'I'),
+        menuItem('Lancer et la garder (Maître des Arts Mystiques)', () => gameStore.castInvocationAndKeep()),
+        menuItem('Défausser sans lancer (Talent Naturel, Wong)', () => gameStore.discardInvocation()),
+        menuItem('Mélanger', () => gameStore.shuffle('invocationDeck')),
+        menuItem('Chercher dans le deck…', () => ui.openModal('pile', { zone: 'invocationDeck' }))
       ]],
-      // discard piles: search them, or take the top card back
-      discard: ['Défausse', [
-        item('Chercher dans la défausse…', () => ui.openModal('pile', { zone: 'discard' })),
-        topItem('discard', name => `Reprendre « ${name} » en main`, id => game.move(id, 'hand'))
+      // le deck propre au scénario : Armes Expérimentales (Crossbones), Manigance Annexe (Crâne Rouge)
+      scenarioDeck: [`Deck ${gameStore.scenarioDeck?.name ?? ''}`, [
+        menuItem('Révéler la carte du dessus', () => gameStore.revealScenarioDeckCard()),
+        menuItem('Mélanger', () => gameStore.shuffle('scenarioDeck')),
+        menuItem('Chercher dans le deck…', () => ui.openModal('pile', { zone: 'scenarioDeck' }))
       ]],
-      ediscard: ['Défausse Rencontre', [
-        item('Chercher dans la défausse…', () => ui.openModal('pile', { zone: 'ediscard' })),
-        topItem('ediscard', name => `Remettre « ${name} » en jeu`, id => game.takeFromPile(id, 'ediscard'))
+      // les défausses : y chercher, ou reprendre la carte du dessus
+      playerDiscard: ['Défausse', [
+        menuItem('Chercher dans la défausse…', () => ui.openModal('pile', { zone: 'playerDiscard' })),
+        topCardItem('playerDiscard', name => `Reprendre « ${name} » en main`, cardId => gameStore.moveCard(cardId, 'hand'))
       ]],
-      idiscard: ['Défausse Invocation', [
-        item('Chercher dans la défausse…', () => ui.openModal('pile', { zone: 'idiscard' })),
-        topItem('idiscard', name => `Remettre « ${name} » sur le deck Invocation`, id => game.move(id, 'deck'))
+      encounterDiscard: ['Défausse Rencontre', [
+        menuItem('Chercher dans la défausse…', () => ui.openModal('pile', { zone: 'encounterDiscard' })),
+        topCardItem('encounterDiscard', name => `Remettre « ${name} » en jeu`, cardId => gameStore.takeFromPile(cardId, 'encounterDiscard'))
+      ]],
+      invocationDiscard: ['Défausse Invocation', [
+        menuItem('Chercher dans la défausse…', () => ui.openModal('pile', { zone: 'invocationDiscard' })),
+        topCardItem('invocationDiscard', name => `Remettre « ${name} » sur le deck Invocation`, cardId => gameStore.moveCard(cardId, 'deck'))
       ]]
     }
     const [title, items] = menus[zone]
-    ui.openMenu({ x, y, title, items: items.filter(Boolean) })
+    ui.openContextMenu({ x, y, title, items: items.filter(Boolean) })
   }
 
-  /** Item acting on the top card of a pile, or nothing when the pile is empty. */
-  function topItem(zone, label, run) {
-    const top = game.pile(zone).at(-1)
-    return top ? item(label(nameOf(top)), () => run(top.id)) : null
+  /** Ligne qui agit sur la carte du dessus d'une pile ; rien si la pile est vide. */
+  function topCardItem(zone, labelFor, run) {
+    const topCard = gameStore.pileOf(zone).at(-1)
+    return topCard ? menuItem(labelFor(cardName(topCard)), () => run(topCard.id)) : null
   }
 
   return { openCardMenu, openPileMenu }

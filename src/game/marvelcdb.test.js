@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { cdbTarget, cdbDef, fetchCdbDeck } from './marvelcdb.js'
-import { BY_ID, BY_CODE, addDefs } from './data.js'
+import { parseMarvelCdbLink, marvelCdbDefinition, entryTokensFromCardText, fetchMarvelCdbDeck } from './marvelcdb.js'
+import { DEFINITION_BY_ID, DEFINITION_BY_CODE, addImportedDefinitions } from './data.js'
 import * as E from './engine.js'
 
 const SITE = 'https://fr.marvelcdb.com'
@@ -40,29 +40,48 @@ const GAMBIT_PACK = [
 
 describe('MarvelCDB : lien ou numéro', () => {
   it('reconnaît les liens de decklist et de deck, et un numéro seul', () => {
-    expect(cdbTarget('https://fr.marvelcdb.com/decklist/view/69334/black-widow-cc-campaign-1.0')).toEqual({ kind: 'decklist', id: '69334' })
-    expect(cdbTarget('  marvelcdb.com/deck/view/123456 ')).toEqual({ kind: 'deck', id: '123456' })
-    expect(cdbTarget('https://marvelcdb.com/deck/edit/42')).toEqual({ kind: 'deck', id: '42' })
-    expect(cdbTarget('69334')).toEqual({ kind: null, id: '69334' })
-    expect(cdbTarget('https://example.com/decklist/view/1')).toBeNull()
-    expect(cdbTarget('')).toBeNull()
+    expect(parseMarvelCdbLink('https://fr.marvelcdb.com/decklist/view/69334/black-widow-cc-campaign-1.0')).toEqual({ kind: 'decklist', id: '69334' })
+    expect(parseMarvelCdbLink('  marvelcdb.com/deck/view/123456 ')).toEqual({ kind: 'deck', id: '123456' })
+    expect(parseMarvelCdbLink('https://marvelcdb.com/deck/edit/42')).toEqual({ kind: 'deck', id: '42' })
+    expect(parseMarvelCdbLink('69334')).toEqual({ kind: null, id: '69334' })
+    expect(parseMarvelCdbLink('https://example.com/decklist/view/1')).toBeNull()
+    expect(parseMarvelCdbLink('')).toBeNull()
   })
 })
 
 describe('MarvelCDB : cartes lues sur le site', () => {
   it('identité : alter ego au dos, tailles de main, PV, images du site', () => {
-    expect(cdbDef(GAMBIT)).toMatchObject({
-      id: 'cdb-37001a', code: '37001a', n: 'Gambit', t: 'hero', s: 'gambit', hp: 9, hs: 5, l: 0,
-      bn: 'Remy LeBeau', bt: 'alter_ego', bhs: 6, img: `${SITE}/bundles/cards/37001a.png`, bimg: `${SITE}/bundles/cards/37001b.png`
+    expect(marvelCdbDefinition(GAMBIT)).toMatchObject({
+      id: 'cdb-37001a', code: '37001a', name: 'Gambit', type: 'hero', set: 'gambit', hitPoints: 9, handSize: 5, landscape: false,
+      backName: 'Remy LeBeau', backType: 'alter_ego', backHandSize: 6, imageUrl: `${SITE}/bundles/cards/37001a.png`, backImageUrl: `${SITE}/bundles/cards/37001b.png`
     })
   })
 
   it('manigance annexe à l\'horizontale avec sa menace de départ, Ténacité, traits, manigance annexe de joueur', () => {
     const [, , , bella, guild] = GAMBIT_PACK
-    expect(cdbDef(guild)).toMatchObject({ t: 'side_scheme', l: 1, bth: 4 })
-    expect(cdbDef(bella)).toMatchObject({ t: 'minion', hp: 5, toughness: true, tr: ['assassin', 'élite'] })
-    expect(cdbDef(card('99010', 'player_side_scheme', 'hero', 'x', 'Plan'))).toMatchObject({ t: 'side_scheme', l: 1 })
-    expect(cdbDef({ ...card('99011', 'event', 'basic', null, 'Sans image'), imagesrc: null }).img).toBeNull()
+    expect(marvelCdbDefinition(guild)).toMatchObject({ type: 'side_scheme', landscape: true, startingThreat: 4 })
+    expect(marvelCdbDefinition(bella)).toMatchObject({ type: 'minion', hitPoints: 5, toughness: true, traits: ['assassin', 'élite'] })
+    expect(marvelCdbDefinition(card('99010', 'player_side_scheme', 'hero', 'x', 'Plan'))).toMatchObject({ type: 'side_scheme', landscape: true })
+    expect(marvelCdbDefinition({ ...card('99011', 'event', 'basic', null, 'Sans image'), imagesrc: null }).imageUrl).toBeNull()
+    // the player upgrades keep their traits (Iron Man counts the Tech ones), not the other player cards
+    expect(marvelCdbDefinition(card('99012', 'upgrade', 'basic', null, 'Gadget', { traits: 'Objet. Tech.' })).traits).toEqual(['objet', 'tech'])
+    expect(marvelCdbDefinition(card('99013', 'event', 'basic', null, 'Coup', { traits: 'Attaque.' })).traits).toBeUndefined()
+  })
+
+  it('jetons d\'entrée en jeu : Utilisations, « entre en jeu avec », par joueur, texte anglais', () => {
+    const team = card('99020', 'support', 'basic', null, 'Équipe', { text: 'Utilisations (3 jetons Soin). <i>(Entre en jeu avec 3 jetons. Quand il n\'y en a plus, défaussez cette carte)</i>' })
+    expect(marvelCdbDefinition(team)).toMatchObject({ entryTokens: 3, entryTokenName: 'Soin' })
+    expect(entryTokensFromCardText({ text: 'Hawkeye entre en jeu avec 4 jetons Flèche sur lui.' })).toEqual({ entryTokens: 4, entryTokenName: 'Flèche' })
+    expect(entryTokensFromCardText({ text: 'Attachez cette carte à Crossbones. Utilisations (2[per_hero] jetons Munition).' })).toEqual({ entryTokens: 2, entryTokenName: 'Munition' })
+    expect(entryTokensFromCardText({ text: 'Utilisations (1 jeton Fureur, plus 1[per_hero] jeton Fureur supplémentaire).' })).toEqual({ entryTokens: 2, entryTokenName: 'Fureur' })
+    // the French text not translated yet: the number from the English one
+    expect(entryTokensFromCardText({ text: 'Attach to Batroc. Uses (4 leap counters).', real_text: 'Attach to Batroc. Uses (4 leap counters).' })).toEqual({ entryTokens: 4 })
+    // Ténacité is a status card, not counters
+    expect(entryTokensFromCardText({ text: 'Ténacité. <i>(Ce personnage entre en jeu avec une carte d\'état Tenace.)</i>', real_text: 'Toughness. <i>(This character enters play with a tough status card.)</i>' })).toEqual({})
+    expect(marvelCdbDefinition(card('99021', 'event', 'basic', null, 'Rien')).entryTokens).toBeUndefined()
+    // Ténacité without its period (Kang I), and a mere Tenace status card given by an effect
+    expect(marvelCdbDefinition(card('99022', 'villain', 'encounter', 'x', 'Kang', { text: 'Ténacité [star] <b>Interruption forcée</b> : …' })).toughness).toBe(true)
+    expect(marvelCdbDefinition(card('99023', 'event', 'basic', null, 'Bouclier', { text: 'Donnez une carte d\'état Tenace à un allié.' })).toughness).toBeUndefined()
   })
 })
 
@@ -73,10 +92,10 @@ describe('MarvelCDB : import', () => {
       'card/12019.json': { code: '12019', name: 'Premiers Soins', duplicate_of_code: '01086' },
       'card/99001.json': card('99001', 'event', 'justice', null, 'Carte Future', { quantity: 2 })
     })
-    const r = await fetchCdbDeck('https://marvelcdb.com/decklist/view/69334/natasha-1.0', api.fetchFn)
-    expect(r).toMatchObject({ hero: 'black_widow', heroName: 'Black Widow', title: 'Natasha', unknown: 0, missing: [] })
-    expect(r.list.map(([id, q]) => `${q}x ${BY_ID[id].n}`).sort()).toEqual(['1x Black Widow', '1x Carte Future', '1x Le Soldat de l\'Hiver', '2x Premiers Soins'])
-    expect(BY_CODE['99001']).toMatchObject({ id: 'cdb-99001', pack: 'marvelcdb', img: `${SITE}/bundles/cards/99001.png` })
+    const r = await fetchMarvelCdbDeck('https://marvelcdb.com/decklist/view/69334/natasha-1.0', api.fetchFn)
+    expect(r).toMatchObject({ hero: 'black_widow', heroName: 'Black Widow', title: 'Natasha', unknownCount: 0, missing: [] })
+    expect(r.deckList.map(([id, q]) => `${q}x ${DEFINITION_BY_ID[id].name}`).sort()).toEqual(['1x Black Widow', '1x Carte Future', '1x Le Soldat de l\'Hiver', '2x Premiers Soins'])
+    expect(DEFINITION_BY_CODE['99001']).toMatchObject({ id: 'cdb-99001', pack: 'marvelcdb', imageUrl: `${SITE}/bundles/cards/99001.png` })
     expect(api.calls.sort()).toEqual(['card/12019.json', 'card/99001.json', 'decklist/69334.json'])
   })
 
@@ -90,49 +109,49 @@ describe('MarvelCDB : import', () => {
       'card/37020.json': { ...card('37020', 'event', 'basic', null, 'Frappe et Court'), duplicate_of_code: '18020', imagesrc: null },
       'card/18020.json': card('18020', 'event', 'basic', null, 'Frappe et Court', { quantity: 3 })
     })
-    const r = await fetchCdbDeck('7', api.fetchFn)
-    expect(r).toMatchObject({ hero: 'gambit', title: 'Ragin\' Cajun', unknown: 0 })
-    expect(r.list.map(([id, q]) => `${q}x ${id}`).sort()).toEqual(['1x cdb-37001a', '2x cdb-18020', '3x cdb-37006', `1x ${BY_CODE['01088'].id}`].sort())
-    expect(BY_CODE['37025']).toMatchObject({ t: 'obligation', s: 'gambit' })
-    expect(BY_CODE['37032']).toBeUndefined()
+    const r = await fetchMarvelCdbDeck('7', api.fetchFn)
+    expect(r).toMatchObject({ hero: 'gambit', title: 'Ragin\' Cajun', unknownCount: 0 })
+    expect(r.deckList.map(([id, q]) => `${q}x ${id}`).sort()).toEqual(['1x cdb-37001a', '2x cdb-18020', '3x cdb-37006', `1x ${DEFINITION_BY_CODE['01088'].id}`].sort())
+    expect(DEFINITION_BY_CODE['37025']).toMatchObject({ type: 'obligation', set: 'gambit' })
+    expect(DEFINITION_BY_CODE['37032']).toBeUndefined()
 
     // the game: alter ego Remy LeBeau, obligation in the encounter deck, nemesis aside; the cards stay with it
-    const s = E.newGame({ hero: r.hero, list: r.list, villain: 'rhino', modular: 'bomb_scare', expert: false, label: 'Ragin\' Cajun' }, { w: 1200, h: 700, cw: 80 })
-    const id = E.identity(s)
-    expect(E.nameOf(id)).toBe('Remy LeBeau')
-    expect(s.counters[0]).toMatchObject({ l: 'GAMBIT', v: 9 })
-    expect(E.cardsIn(s, 'hand')).toHaveLength(6)
-    expect(E.cardsIn(s, 'edeck').some(c => c.g === 'cdb-37025')).toBe(true)
-    expect(E.cardsIn(s, 'aside').filter(c => E.def(c).s === 'gambit_nemesis').map(c => c.g).sort()).toEqual(['cdb-37026', 'cdb-37027', 'cdb-37028', 'cdb-37028'])
-    expect(s.opt.defs.map(d => d.id).sort()).toEqual(['cdb-18020', 'cdb-37001a', 'cdb-37006', 'cdb-37025', 'cdb-37026', 'cdb-37027', 'cdb-37028'])
-    expect(s.opt.defs[0].pack).toBeUndefined()
+    const s = E.newGame({ hero: r.hero, deckList: r.deckList, scenario: 'rhino', modulars: ['bomb_scare'], expert: false, label: 'Ragin\' Cajun' }, { w: 1200, h: 700, cw: 80 })
+    const id = E.identityCard(s)
+    expect(E.cardName(id)).toBe('Remy LeBeau')
+    expect(s.counters[0]).toMatchObject({ label: 'GAMBIT', value: 9 })
+    expect(E.cardsInZone(s, 'hand')).toHaveLength(6)
+    expect(E.cardsInZone(s, 'encounterDeck').some(c => c.definitionId === 'cdb-37025')).toBe(true)
+    expect(E.cardsInZone(s, 'setAside').filter(c => E.definitionOf(c).set === 'gambit_nemesis').map(c => c.definitionId).sort()).toEqual(['cdb-37026', 'cdb-37027', 'cdb-37028', 'cdb-37028'])
+    expect(s.setup.importedDefinitions.map(d => d.id).sort()).toEqual(['cdb-18020', 'cdb-37001a', 'cdb-37006', 'cdb-37025', 'cdb-37026', 'cdb-37027', 'cdb-37028'])
+    expect(s.setup.importedDefinitions[0].pack).toBeUndefined()
   })
 
   it('nos scans en français passent avant le site : identité, cartes et réimpressions de nos boîtes ne sont pas demandées', async () => {
     // a game saved with a card read online, which our packs have since (here Quake, 08012): ours stays the one used
-    addDefs([cdbDef(card('08012', 'ally', 'justice', null, 'Quake (site)'))])
+    addImportedDefinitions([marvelCdbDefinition(card('08012', 'ally', 'justice', null, 'Quake (site)'))])
     const api = fakeApi({ 'decklist/3.json': { name: 'Locale', hero_code: '08001a', slots: { '08002': 1, '08012': 1, '01086': 2 } } })
-    const r = await fetchCdbDeck('3', api.fetchFn)
+    const r = await fetchMarvelCdbDeck('3', api.fetchFn)
     expect(api.calls).toEqual(['decklist/3.json'])
-    expect(r.list.map(([id]) => BY_ID[id].pack)).toEqual(['black_widow', 'black_widow', 'black_widow', 'core'])
-    expect(BY_CODE['08012'].n).toBe('Quake')
+    expect(r.deckList.map(([id]) => DEFINITION_BY_ID[id].pack)).toEqual(['black_widow', 'black_widow', 'black_widow', 'core'])
+    expect(DEFINITION_BY_CODE['08012'].name).toBe('Quake')
   })
 
   it('un numéro seul : decklist publiée, sinon deck partagé', async () => {
     const api = fakeApi({ 'deck/69334.json': DECK })
-    const r = await fetchCdbDeck('69334', api.fetchFn)
+    const r = await fetchMarvelCdbDeck('69334', api.fetchFn)
     expect(r.hero).toBe('black_widow')
     expect(api.calls.slice(0, 2)).toEqual(['decklist/69334.json', 'deck/69334.json'])
   })
 
   it('deck privé ou inexistant, saisie illisible : un message en clair', async () => {
     const api = fakeApi({ 'deck/7.json': new TypeError('Failed to fetch') })
-    await expect(fetchCdbDeck('https://marvelcdb.com/deck/view/7', api.fetchFn)).rejects.toThrow(/Deck introuvable sur MarvelCDB/)
-    await expect(fetchCdbDeck('mon deck', api.fetchFn)).rejects.toThrow(/Collez le lien/)
+    await expect(fetchMarvelCdbDeck('https://marvelcdb.com/deck/view/7', api.fetchFn)).rejects.toThrow(/Deck introuvable sur MarvelCDB/)
+    await expect(fetchMarvelCdbDeck('mon deck', api.fetchFn)).rejects.toThrow(/Collez le lien/)
   })
 
   it('carte que l\'API ne décrit pas : son code est listé', async () => {
     const api = fakeApi({ 'decklist/1.json': { ...DECK, slots: { 99002: 2 } } })
-    expect(await fetchCdbDeck('1', api.fetchFn)).toMatchObject({ unknown: 2, missing: ['99002'] })
+    expect(await fetchMarvelCdbDeck('1', api.fetchFn)).toMatchObject({ unknownCount: 2, missing: ['99002'] })
   })
 })

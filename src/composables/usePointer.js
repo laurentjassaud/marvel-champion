@@ -1,245 +1,295 @@
+// Souris, doigt et stylet, gérés de la même façon et en un seul endroit (écouteurs posés sur le document) :
+// glisser-déposer entre les zones, toucher, double-clic / double toucher, aperçu au survol, menu au clic
+// droit ou à l'appui long. Les cartes portent l'attribut data-id, les zones où l'on dépose data-zone.
+
 import { onMounted, onBeforeUnmount } from 'vue'
 import { useGameStore } from '../stores/game.js'
 import { useUiStore } from '../stores/ui.js'
 import { useZoneActions } from './useZoneActions.js'
-import { useCardMenu, DRAW_PILES, MENU_PILES } from './useCardMenu.js'
+import { useCardMenu, DECK_PILES, PILES_WITH_MENU } from './useCardMenu.js'
 
-const LONG_PRESS = 500
-const PILE_SELECTOR = MENU_PILES.map(z => `[data-zone="${z}"]`).join(', ')
-const DOUBLE_TAP = 350
-// a finger wobbles more than a mouse: below this distance a press is still a tap
-const SLOP = { mouse: 5, pen: 8, touch: 10 }
+/** Durée d'un appui long (ms) : il ouvre le menu, comme un clic droit. */
+const LONG_PRESS_DELAY = 500
+/** Délai maximal entre deux touchers pour un double toucher (ms). */
+const DOUBLE_TAP_DELAY = 350
+/** Distance (px) en deçà de laquelle un appui reste un toucher et non un glisser : un doigt tremble plus qu'une souris. */
+const MOVE_TOLERANCE = { mouse: 5, pen: 8, touch: 10 }
+/** Sélecteur des piles qui ont leur propre menu. */
+const PILE_SELECTOR = PILES_WITH_MENU.map(zone => `[data-zone="${zone}"]`).join(', ')
 
-// A press handled here must not also reach the click handlers underneath: the pile under
-// a card that was just drawn, the menu item now under the finger after a long press,
-// the zone revealed by a menu or a modal that a tap just closed.
-let swallowClick = false
-/** Drop the click that ends the current press. */
-export const swallowNextClick = () => { swallowClick = true }
+// Un appui traité ici ne doit pas aussi atteindre les gestionnaires de clic en dessous : la pile sous une
+// carte qu'on vient de piocher, la ligne de menu qui se retrouve sous le doigt après un appui long, la zone
+// découverte par un menu ou une fenêtre qu'un toucher vient de fermer.
+let ignoreNextClick = false
+/** Ignore le clic qui termine l'appui en cours. */
+export const swallowNextClick = () => { ignoreNextClick = true }
 
-/**
- * Pointer input, delegated at document level, the same for mouse, touch and pen:
- * drag & drop between zones, tap, double-click / double tap, hover preview,
- * right-click / long-press menu. Cards expose `data-id`, drop zones expose `data-zone`.
- */
 export function usePointer() {
-  const game = useGameStore()
+  const gameStore = useGameStore()
   const ui = useUiStore()
   const { activateCard } = useZoneActions()
   const { openCardMenu, openPileMenu } = useCardMenu()
 
-  let press = null // primary pointer down, not yet a drag
+  /** Appui du pointeur principal, pas encore devenu un glisser. */
+  let press = null
+  /** Glisser en cours : {cardElement, card, ghost, offsetX, offsetY, pointerId…}. */
   let drag = null
-  let lastTap = null // {id, t, x, y}: double tap on touch and pen
+  /** Dernier toucher {cardId, time, x, y} : pour reconnaître un double toucher (doigt et stylet). */
+  let lastTap = null
   let pointerType = 'mouse'
-  let longPressed = false // the current press already opened a menu
+  /** L'appui en cours a déjà ouvert un menu (appui long). */
+  let longPressDone = false
 
-  const inert = el => el.closest('.modal, .preview, .menu')
-  const cardFrom = target => {
-    const el = target.closest?.('.card[data-id]')
-    if (!el || inert(el)) return null
-    const c = game.card(el.dataset.id)
-    return c ? { el, c } : null
+  /** Élément à l'intérieur d'une fenêtre, de l'aperçu ou d'un menu : ces cartes-là ne se glissent pas. */
+  const isInsideOverlay = element => element.closest('.modal, .preview, .menu')
+  /** La carte (élément et objet) sous la cible d'un événement, ou null. */
+  const cardUnder = target => {
+    const element = target.closest?.('.card[data-id]')
+    if (!element || isInsideOverlay(element)) return null
+    const card = gameStore.cardById(element.dataset.id)
+    return card ? { element, card } : null
   }
-  // long press works like a right click on any card (also in a pile viewer), on the draw and discard piles;
-  // the hand strip itself is pressable so that a finger can scroll it from the gaps too
-  const pressable = target => target.closest?.(`.card, .hand-row, ${PILE_SELECTOR}`)
-  // Touch and pen: an overflowing hand scrolls sideways under the finger. We scroll it ourselves:
-  // a native pan that reaches the end of the row can turn into the browser's "back" swipe.
-  const handScroller = target => {
+  // l'appui long agit comme un clic droit sur toute carte (aussi dans une fenêtre de pile), sur les pioches
+  // et les défausses ; la main elle-même s'appuie, pour qu'un doigt la fasse défiler depuis les espaces vides
+  const pressableUnder = target => target.closest?.(`.card, .hand-row, ${PILE_SELECTOR}`)
+  // Doigt et stylet : une main qui déborde défile de côté sous le doigt. On la fait défiler nous-mêmes : un
+  // défilement natif qui atteint le bout de la rangée peut devenir le geste « page précédente » du navigateur.
+  const scrollableHandUnder = target => {
     if (pointerType === 'mouse') return null
     const row = target.closest?.('.hand-row')
     return row && row.scrollWidth > row.clientWidth + 1 ? row : null
   }
-  const zoneAt = (x, y) => document.elementFromPoint(x, y)?.closest('[data-zone]') ?? null
-  const clearOver = () => document.querySelectorAll('.over').forEach(n => n.classList.remove('over'))
+  /** La zone de dépôt sous le point (x, y). */
+  const zoneElementAt = (x, y) => document.elementFromPoint(x, y)?.closest('[data-zone]') ?? null
+  /** Efface la surbrillance des zones survolées pendant un glisser. */
+  const clearDropHighlight = () => document.querySelectorAll('.over').forEach(element => element.classList.remove('over'))
 
-  // runs before every other pointerdown listener, including the ones that stop propagation
-  function onDownFirst(e) {
-    swallowClick = false
-    longPressed = false
-    pointerType = e.pointerType
+  // s'exécute avant tous les autres écouteurs pointerdown, y compris ceux qui arrêtent la propagation
+  function onPointerDownFirst(event) {
+    ignoreNextClick = false
+    longPressDone = false
+    pointerType = event.pointerType
   }
 
-  function onDown(e) {
-    if (!e.isPrimary || e.button !== 0) return
-    const target = pressable(e.target)
+  function onPointerDown(event) {
+    if (!event.isPrimary || event.button !== 0) return
+    const target = pressableUnder(event.target)
     if (!target || target.closest('.menu')) return
-    const hit = cardFrom(e.target)
-    const r = hit?.el.getBoundingClientRect()
+    const hit = cardUnder(event.target)
+    const rect = hit?.element.getBoundingClientRect()
     press = {
-      hit, row: handScroller(e.target), scrolling: false, left: 0, id: e.pointerId, sx: e.clientX, sy: e.clientY,
-      ox: hit ? e.clientX - r.left : 0, oy: hit ? e.clientY - r.top : 0,
-      timer: setTimeout(longPress, LONG_PRESS)
+      hit,
+      scrollRow: scrollableHandUnder(event.target), isScrolling: false, scrollStart: 0,
+      pointerId: event.pointerId, startX: event.clientX, startY: event.clientY,
+      // où l'on a saisi la carte, pour qu'elle suive le pointeur sans sauter
+      offsetX: hit ? event.clientX - rect.left : 0, offsetY: hit ? event.clientY - rect.top : 0,
+      longPressTimer: setTimeout(onLongPress, LONG_PRESS_DELAY)
     }
   }
 
-  // iOS never fires contextmenu on a long press (Android and Windows do): send one ourselves
-  function longPress() {
-    const p = press
-    if (!p) return
+  // iOS n'envoie jamais contextmenu sur un appui long (Android et Windows oui) : on en envoie un nous-mêmes
+  function onLongPress() {
+    const pressed = press
+    if (!pressed) return
     press = null
-    longPressed = true
-    swallowClick = true
-    const el = document.elementFromPoint(p.sx, p.sy)
-    el?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, view: window, clientX: p.sx, clientY: p.sy }))
+    longPressDone = true
+    ignoreNextClick = true
+    const element = document.elementFromPoint(pressed.startX, pressed.startY)
+    element?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, view: window, clientX: pressed.startX, clientY: pressed.startY }))
   }
 
-  // the card picked at random loses its red outline once clicked, tapped or moved
-  const unmark = c => { if (ui.randomPick === c.id) ui.randomPick = null }
+  /** La carte tirée au hasard perd son contour rouge dès qu'on la touche ou la déplace. */
+  const clearRandomMark = card => { if (ui.randomlyPickedCardId === card.id) ui.randomlyPickedCardId = null }
 
+  /** L'appui devient un glisser : une copie de la carte (le « fantôme ») suit le pointeur, la carte s'estompe. */
   function startDrag() {
-    clearTimeout(press.timer)
-    const { el, c } = press.hit
-    unmark(c)
-    const ghost = el.cloneNode(true)
+    clearTimeout(press.longPressTimer)
+    const { element, card } = press.hit
+    clearRandomMark(card)
+    const ghost = element.cloneNode(true)
     ghost.classList.add('ghost')
     ghost.classList.remove('sel', 'tapped')
     ghost.removeAttribute('data-id')
-    ghost.style.width = `${el.offsetWidth}px`
-    ghost.style.height = `${el.offsetHeight}px`
-    ghost.style.zIndex = ''
-    ghost.style.left = '0'
-    ghost.style.top = '0'
-    if (c.zone === 'table' && c.tapped) { press.ox = el.offsetWidth / 2; press.oy = el.offsetHeight / 2 }
+    Object.assign(ghost.style, { width: `${element.offsetWidth}px`, height: `${element.offsetHeight}px`, zIndex: '', left: '0', top: '0' })
+    // une carte épuisée est tournée : on la saisit par son centre
+    if (card.zone === 'table' && card.exhausted) { press.offsetX = element.offsetWidth / 2; press.offsetY = element.offsetHeight / 2 }
     document.body.appendChild(ghost)
-    el.style.opacity = '.25'
-    drag = { ...press, el, c, ghost }
+    element.style.opacity = '.25'
+    drag = { ...press, cardElement: element, card, ghost }
     press = null
   }
 
-  function onMove(e) {
-    if (press && e.pointerId === press.id) {
-      const dx = e.clientX - press.sx
-      const dy = e.clientY - press.sy
-      if (press.scrolling) { press.row.scrollLeft = press.left - dx; return }
-      if (Math.hypot(dx, dy) < (SLOP[pointerType] ?? 5)) return
-      // sideways on an overflowing hand: scroll it; upwards: drag the card as usual
-      if (press.row && Math.abs(dx) > Math.abs(dy)) {
-        clearTimeout(press.timer)
-        Object.assign(press, { scrolling: true, left: press.row.scrollLeft + dx })
-        press.row.scrollLeft = press.left - dx
+  function onPointerMove(event) {
+    if (press && event.pointerId === press.pointerId) {
+      const deltaX = event.clientX - press.startX
+      const deltaY = event.clientY - press.startY
+      if (press.isScrolling) { press.scrollRow.scrollLeft = press.scrollStart - deltaX; return }
+      if (Math.hypot(deltaX, deltaY) < (MOVE_TOLERANCE[pointerType] ?? 5)) return
+      // de côté sur une main qui déborde : on la fait défiler ; vers le haut : on glisse la carte comme d'habitude
+      if (press.scrollRow && Math.abs(deltaX) > Math.abs(deltaY)) {
+        clearTimeout(press.longPressTimer)
+        Object.assign(press, { isScrolling: true, scrollStart: press.scrollRow.scrollLeft + deltaX })
+        press.scrollRow.scrollLeft = press.scrollStart - deltaX
         return
       }
-      // a pile, a card in a pile viewer or the hand strip does not drag: moving only cancels the long press
-      if (!press.hit) { clearTimeout(press.timer); press = null; return }
+      // une pile, une carte dans une fenêtre de pile ou la main ne se glissent pas : bouger annule seulement l'appui long
+      if (!press.hit) { clearTimeout(press.longPressTimer); press = null; return }
       startDrag()
     }
-    if (!drag || e.pointerId !== drag.id) return
-    drag.ghost.style.transform = `translate(${e.clientX - drag.ox}px, ${e.clientY - drag.oy}px)`
-    clearOver()
-    zoneAt(e.clientX, e.clientY)?.classList.add('over')
+    if (!drag || event.pointerId !== drag.pointerId) return
+    drag.ghost.style.transform = `translate(${event.clientX - drag.offsetX}px, ${event.clientY - drag.offsetY}px)`
+    clearDropHighlight()
+    zoneElementAt(event.clientX, event.clientY)?.classList.add('over')
   }
 
-  function onUp(e) {
-    if (press && e.pointerId === press.id) {
-      clearTimeout(press.timer)
-      const { hit, scrolling } = press
-      press = null
-      if (scrolling) { swallowClick = true; return }
-      if (!hit) return // pile or pile viewer: their own click handler does the job
-      swallowClick = true
-      unmark(hit.c)
-      if (pointerType !== 'mouse' && isDoubleTap(hit.c, e)) doubleActivate(hit.c)
-      else activateCard(hit.c)
+  function onPointerUp(event) {
+    if (press && event.pointerId === press.pointerId) {
+      finishPress(event)
       return
     }
-    if (!drag || e.pointerId !== drag.id) return
-    swallowClick = true
-    const d = drag
-    drag = null
-    d.ghost.remove()
-    d.el.style.opacity = ''
-    clearOver()
-    const zoneEl = zoneAt(e.clientX, e.clientY)
-    if (!zoneEl) return
-    const zone = zoneEl.dataset.zone
-    if (zone === 'table') {
-      const tr = zoneEl.getBoundingClientRect()
-      const w = d.el.offsetWidth
-      const h = d.el.offsetHeight
-      const x = Math.max(0, Math.min(tr.width - w, e.clientX - tr.left - d.ox))
-      const y = Math.max(0, Math.min(tr.height - h, e.clientY - tr.top - d.oy))
-      // a card dragged off a draw pile lands face down (an Invocation card is then put under a scheme)
-      game.move(d.c.id, 'table', { x, y, faceDown: DRAW_PILES.includes(d.c.zone) })
-    } else if (zone === 'hand' && d.c.zone === 'hand') {
-      const others = [...zoneEl.querySelectorAll('.card[data-id]')].filter(n => n.dataset.id !== d.c.id)
-      const before = others.find(n => { const r = n.getBoundingClientRect(); return e.clientX < r.left + r.width / 2 })
-      game.reorderHand(d.c.id, before?.dataset.id)
-    } else if (zone !== d.c.zone) {
-      game.move(d.c.id, zone)
-    }
-    ui.select(d.c.id)
+    if (drag && event.pointerId === drag.pointerId) finishDrag(event)
   }
 
-  function onCancel() {
-    if (press) clearTimeout(press.timer)
+  /** Fin d'un appui sans glisser : un toucher (ou double toucher) sur une carte. */
+  function finishPress(event) {
+    clearTimeout(press.longPressTimer)
+    const { hit, isScrolling } = press
     press = null
-    if (drag) { drag.ghost.remove(); drag.el.style.opacity = ''; drag = null; clearOver() }
+    if (isScrolling) { ignoreNextClick = true; return }
+    if (!hit) return // une pile ou une fenêtre de pile : leur propre gestionnaire de clic s'en charge
+    ignoreNextClick = true
+    clearRandomMark(hit.card)
+    if (pointerType !== 'mouse' && isDoubleTap(hit.card, event)) doubleActivate(hit.card)
+    else activateCard(hit.card)
   }
 
-  // touch and pen get our own double tap; the mouse keeps the native dblclick (OS speed setting)
-  function isDoubleTap(c, e) {
-    const prev = lastTap
-    lastTap = { id: c.id, t: e.timeStamp, x: e.clientX, y: e.clientY }
-    if (!prev || prev.id !== c.id || e.timeStamp - prev.t > DOUBLE_TAP || Math.hypot(e.clientX - prev.x, e.clientY - prev.y) > 30) return false
+  /**
+   * Fin d'un glisser : la carte est déposée dans la zone sous le pointeur. Sur la table, à l'endroit lâché
+   * (face cachée si elle vient d'une pioche) ; dans la main, rangée parmi les autres cartes ; ailleurs, dans
+   * cette zone.
+   */
+  function finishDrag(event) {
+    ignoreNextClick = true
+    const finished = drag
+    drag = null
+    finished.ghost.remove()
+    finished.cardElement.style.opacity = ''
+    clearDropHighlight()
+    const zoneElement = zoneElementAt(event.clientX, event.clientY)
+    if (!zoneElement) return
+    const zone = zoneElement.dataset.zone
+    const { card, cardElement } = finished
+    if (zone === 'table') {
+      const tableRect = zoneElement.getBoundingClientRect()
+      const x = Math.max(0, Math.min(tableRect.width - cardElement.offsetWidth, event.clientX - tableRect.left - finished.offsetX))
+      const y = Math.max(0, Math.min(tableRect.height - cardElement.offsetHeight, event.clientY - tableRect.top - finished.offsetY))
+      // une carte tirée d'une pioche arrive face cachée (une carte Invocation est alors glissée sous une manigance)
+      gameStore.moveCard(card.id, 'table', { x, y, faceDown: DECK_PILES.includes(card.zone) })
+    } else if (zone === 'hand' && card.zone === 'hand') {
+      const otherCards = [...zoneElement.querySelectorAll('.card[data-id]')].filter(element => element.dataset.id !== card.id)
+      const nextCard = otherCards.find(element => {
+        const rect = element.getBoundingClientRect()
+        return event.clientX < rect.left + rect.width / 2
+      })
+      gameStore.reorderHand(card.id, nextCard?.dataset.id)
+    } else if (zone !== card.zone) {
+      gameStore.moveCard(card.id, zone)
+    }
+    ui.selectCard(card.id)
+  }
+
+  function onPointerCancel() {
+    if (press) clearTimeout(press.longPressTimer)
+    press = null
+    if (!drag) return
+    drag.ghost.remove()
+    drag.cardElement.style.opacity = ''
+    drag = null
+    clearDropHighlight()
+  }
+
+  // doigt et stylet ont notre propre double toucher ; la souris garde le double-clic natif (vitesse réglée dans le système)
+  function isDoubleTap(card, event) {
+    const previous = lastTap
+    lastTap = { cardId: card.id, time: event.timeStamp, x: event.clientX, y: event.clientY }
+    const tooLate = previous && event.timeStamp - previous.time > DOUBLE_TAP_DELAY
+    const tooFar = previous && Math.hypot(event.clientX - previous.x, event.clientY - previous.y) > 30
+    if (!previous || previous.cardId !== card.id || tooLate || tooFar) return false
     lastTap = null
     return true
   }
-  function doubleActivate(c) {
-    if (c.zone === 'table') game.tap(c.id)
-    else if (c.zone === 'hand') game.playToTable(c.id)
+  /** Double-clic / double toucher : épuise ou redresse une carte de la table, joue une carte de la main. */
+  function doubleActivate(card) {
+    if (card.zone === 'table') gameStore.toggleExhausted(card.id)
+    else if (card.zone === 'hand') gameStore.playToTable(card.id)
   }
-  function onDblClick(e) {
+  function onDoubleClick(event) {
     if (pointerType !== 'mouse') return
-    const hit = cardFrom(e.target)
-    if (hit) doubleActivate(hit.c)
+    const hit = cardUnder(event.target)
+    if (hit) doubleActivate(hit.card)
   }
 
-  function onClickFirst(e) {
-    if (!swallowClick || e.detail === 0) return // detail 0: keyboard activation, never dropped
-    swallowClick = false
-    e.preventDefault()
-    e.stopPropagation()
+  function onClickFirst(event) {
+    if (!ignoreNextClick || event.detail === 0) return // detail 0 : activation au clavier, jamais ignorée
+    ignoreNextClick = false
+    event.preventDefault()
+    event.stopPropagation()
   }
 
-  // native contextmenu: right click, or long press on Android and Windows touch screens
-  function onContextFirst(e) {
-    if (!e.isTrusted) return
-    if (longPressed || drag) { e.preventDefault(); e.stopPropagation(); return }
-    if (press) { clearTimeout(press.timer); press = null; longPressed = true; swallowClick = true }
+  // contextmenu natif : clic droit, ou appui long sur les écrans tactiles Android et Windows
+  function onContextMenuFirst(event) {
+    if (!event.isTrusted) return
+    if (longPressDone || drag) {
+      event.preventDefault()
+      event.stopPropagation()
+      return
+    }
+    if (press) {
+      clearTimeout(press.longPressTimer)
+      press = null
+      longPressDone = true
+      ignoreNextClick = true
+    }
   }
 
-  function onOver(e) {
-    const hit = cardFrom(e.target)
-    ui.hover = hit ? hit.c.id : null
-    if (hit && hit.c.kind !== 'token') ui.showPreview(hit.c.id)
+  /** Survol : la carte sous la souris devient la cible des raccourcis et s'affiche en grand. */
+  function onMouseOver(event) {
+    const hit = cardUnder(event.target)
+    ui.hoveredCardId = hit ? hit.card.id : null
+    if (hit && !hit.card.isPawn) ui.showPreview(hit.card.id)
   }
 
-  // a pile on the board (its top card included) opens the pile's menu; a card in a pile viewer
-  // keeps its own menu (PileModal)
-  function onContext(e) {
-    const pile = e.target.closest?.(PILE_SELECTOR)
-    if (pile && !inert(pile)) { e.preventDefault(); openPileMenu(pile.dataset.zone, e.clientX, e.clientY); return }
-    const hit = cardFrom(e.target)
-    if (hit) { e.preventDefault(); openCardMenu(hit.c, e.clientX, e.clientY) }
+  // une pile du plateau (sa carte du dessus comprise) ouvre le menu de la pile ; une carte dans une
+  // fenêtre de pile garde son propre menu (PileModal)
+  function onContextMenu(event) {
+    const pileElement = event.target.closest?.(PILE_SELECTOR)
+    if (pileElement && !isInsideOverlay(pileElement)) {
+      event.preventDefault()
+      openPileMenu(pileElement.dataset.zone, event.clientX, event.clientY)
+      return
+    }
+    const hit = cardUnder(event.target)
+    if (hit) {
+      event.preventDefault()
+      openCardMenu(hit.card, event.clientX, event.clientY)
+    }
   }
 
-  // window capture runs before anything on the page; iOS only applies :active with a touch listener
-  const first = [['pointerdown', onDownFirst], ['click', onClickFirst], ['contextmenu', onContextFirst]]
+  // la capture sur window passe avant tout le reste de la page ; iOS n'applique :active qu'avec un écouteur touchstart
+  const firstListeners = [['pointerdown', onPointerDownFirst], ['click', onClickFirst], ['contextmenu', onContextMenuFirst]]
   const listeners = [
-    ['pointerdown', onDown], ['pointermove', onMove], ['pointerup', onUp], ['pointercancel', onCancel],
-    ['dblclick', onDblClick], ['mouseover', onOver], ['contextmenu', onContext]
+    ['pointerdown', onPointerDown], ['pointermove', onPointerMove], ['pointerup', onPointerUp], ['pointercancel', onPointerCancel],
+    ['dblclick', onDoubleClick], ['mouseover', onMouseOver], ['contextmenu', onContextMenu]
   ]
-  const noop = () => {}
+  const doNothing = () => {}
   onMounted(() => {
-    first.forEach(([t, fn]) => window.addEventListener(t, fn, true))
-    listeners.forEach(([t, fn]) => document.addEventListener(t, fn))
-    document.addEventListener('touchstart', noop, { passive: true })
+    for (const [type, listener] of firstListeners) window.addEventListener(type, listener, true)
+    for (const [type, listener] of listeners) document.addEventListener(type, listener)
+    document.addEventListener('touchstart', doNothing, { passive: true })
   })
   onBeforeUnmount(() => {
-    first.forEach(([t, fn]) => window.removeEventListener(t, fn, true))
-    listeners.forEach(([t, fn]) => document.removeEventListener(t, fn))
-    document.removeEventListener('touchstart', noop)
+    for (const [type, listener] of firstListeners) window.removeEventListener(type, listener, true)
+    for (const [type, listener] of listeners) document.removeEventListener(type, listener)
+    document.removeEventListener('touchstart', doNothing)
   })
 }

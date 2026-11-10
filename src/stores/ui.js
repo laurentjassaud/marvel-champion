@@ -1,34 +1,71 @@
+// État de l'interface (et non de la partie) : taille des cartes, carte sélectionnée, survolée ou agrandie,
+// menu contextuel, fenêtre ouverte, onglet et largeur de la colonne de droite.
+
 import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
 
-const SIZE_KEY = 'mc-table-card-size'
-const readSize = () => {
-  try { return Number(localStorage.getItem(SIZE_KEY)) || 80 } catch { return 80 }
+// Réglages gardés dans ce navigateur seulement (localStorage) ; le stockage peut manquer (navigation
+// privée) ou être plein : la lecture et l'écriture ne doivent jamais faire échouer l'application.
+const CARD_WIDTH_KEY = 'mc-table-card-size'
+const SIDE_TAB_KEY = 'mc-table-side-tab'
+const SIDE_WIDTH_KEY = 'mc-table-side-width'
+const readSetting = key => { try { return localStorage.getItem(key) } catch { return null } }
+const writeSetting = (key, value) => {
+  try {
+    if (value == null) localStorage.removeItem(key)
+    else localStorage.setItem(key, String(value))
+  } catch { /* stockage indisponible */ }
 }
 
-/** Interface state: sizes, selection, hover, preview, context menu, modals. */
 export const useUiStore = defineStore('ui', () => {
-  const cw = ref(readSize()) // table card width (px)
-  const tableW = ref(0)
-  const tableH = ref(0)
-  const sel = ref(null) // selected card id
-  const randomPick = ref(null) // card of the hand picked at random, outlined in red
-  const hover = ref(null) // card id under the pointer
-  const preview = ref(null) // {id, face} card shown enlarged
-  const menu = ref(null) // {x, y, title, items: [{label, key, run, checked?} | null], card?: id}
-  const modal = ref(null) // {type: 'setup'|'pile'|'mulligan'|'help'|'restart'|'villain', zone?, result?}
+  /** Largeur d'une carte sur la table, en pixels (curseur « Taille »). */
+  const cardWidth = ref(Number(readSetting(CARD_WIDTH_KEY)) || 80)
+  /** Onglet de la colonne de droite : 'card' (la carte agrandie) ou 'log' (le journal). */
+  const sideTab = ref(readSetting(SIDE_TAB_KEY) === 'log' ? 'log' : 'card')
+  /** Largeur de la colonne de droite choisie en glissant son bord, en pixels ; null : la largeur par défaut. */
+  const sideColumnWidth = ref(Number(readSetting(SIDE_WIDTH_KEY)) || null)
+  /** Taille mesurée de la table, en pixels. */
+  const tableWidth = ref(0)
+  const tableHeight = ref(0)
+  /** Carte sélectionnée (clic) : cible des raccourcis clavier quand la souris n'est sur aucune carte. */
+  const selectedCardId = ref(null)
+  /** Carte de la main tirée au hasard, entourée de rouge jusqu'à ce qu'on la touche. */
+  const randomlyPickedCardId = ref(null)
+  /** Carte sous le pointeur. */
+  const hoveredCardId = ref(null)
+  /** Carte montrée en grand : {cardId, showFace} ; showFace : montrer sa face même si elle est cachée (sa propre main…). */
+  const preview = ref(null)
+  /** Menu contextuel ouvert : {x, y, title, items: [{label, key, run, checked?} | null (séparateur)], cardId?}. */
+  const contextMenu = ref(null)
+  /** Fenêtre ouverte : {type: 'setup' | 'pile' | 'mulligan' | 'help' | 'restart' | 'villain', zone?, result?}. */
+  const modal = ref(null)
 
-  watch(cw, v => { try { localStorage.setItem(SIZE_KEY, String(v)) } catch { /* storage unavailable */ } })
+  watch(cardWidth, width => writeSetting(CARD_WIDTH_KEY, width))
+  watch(sideTab, tab => writeSetting(SIDE_TAB_KEY, tab))
+  // la largeur change à chaque mouvement d'un glisser : elle n'est écrite qu'une fois stabilisée
+  let sideWidthTimer
+  watch(sideColumnWidth, width => {
+    clearTimeout(sideWidthTimer)
+    sideWidthTimer = setTimeout(() => writeSetting(SIDE_WIDTH_KEY, width), 300)
+  })
 
-  // floors only cover the instant before the table is measured: above the real size they would place cards off the table
-  const layout = () => ({ w: Math.max(tableW.value, 400), h: Math.max(tableH.value, 300), cw: cw.value })
-  const setTable = (w, h) => { tableW.value = w; tableH.value = h }
-  const select = id => { sel.value = id }
-  const showPreview = (id, face = false) => { preview.value = { id, face } }
-  const openMenu = m => { menu.value = m }
-  const closeMenu = () => { menu.value = null }
-  const openModal = (type, extra = {}) => { menu.value = null; modal.value = { type, ...extra } }
+  /**
+   * Disposition de la table pour le moteur : {width, height, cardWidth}. Les minimums ne servent qu'à
+   * l'instant où la table n'est pas encore mesurée : plus grands que la vraie taille, ils poseraient des
+   * cartes hors de la table.
+   */
+  const layout = () => ({ width: Math.max(tableWidth.value, 400), height: Math.max(tableHeight.value, 300), cardWidth: cardWidth.value })
+  const setTableSize = (width, height) => { tableWidth.value = width; tableHeight.value = height }
+  const selectCard = cardId => { selectedCardId.value = cardId }
+  const showPreview = (cardId, showFace = false) => { preview.value = { cardId, showFace } }
+  const openContextMenu = menu => { contextMenu.value = menu }
+  const closeContextMenu = () => { contextMenu.value = null }
+  /** Ouvre une fenêtre (et ferme le menu contextuel) ; `extra` : ses paramètres (zone de la pile, résultat…). */
+  const openModal = (type, extra = {}) => { contextMenu.value = null; modal.value = { type, ...extra } }
   const closeModal = () => { modal.value = null }
 
-  return { cw, tableW, tableH, sel, randomPick, hover, preview, menu, modal, layout, setTable, select, showPreview, openMenu, closeMenu, openModal, closeModal }
+  return {
+    cardWidth, sideTab, sideColumnWidth, tableWidth, tableHeight, selectedCardId, randomlyPickedCardId, hoveredCardId,
+    preview, contextMenu, modal, layout, setTableSize, selectCard, showPreview, openContextMenu, closeContextMenu, openModal, closeModal
+  }
 })

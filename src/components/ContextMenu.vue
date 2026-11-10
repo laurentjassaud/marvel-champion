@@ -1,71 +1,75 @@
 <script setup>
+// Le menu contextuel (clic droit, appui long) : ses lignes viennent de useCardMenu. Sur écran tactile, la
+// carte concernée est montrée en grand à côté (cachée par le CSS ailleurs).
 import { ref, reactive, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
-import GameCard, { bareCard } from './GameCard.vue'
+import GameCard, { printedCard } from './GameCard.vue'
 import { useGameStore } from '../stores/game.js'
 import { useUiStore } from '../stores/ui.js'
 import { swallowNextClick } from '../composables/usePointer.js'
 
-const game = useGameStore()
+const gameStore = useGameStore()
 const ui = useUiStore()
-const el = ref(null)
-const pos = reactive({ x: 0, y: 0 })
-// the card the menu is about, shown enlarged on touch screens (hidden by CSS elsewhere)
-const peek = computed(() => {
-  const c = ui.menu?.card && game.card(ui.menu.card)
-  return c ? bareCard(c) : null
+const menuElement = ref(null)
+/** Position affichée du menu (ramenée dans l'écran). */
+const position = reactive({ x: 0, y: 0 })
+/** La carte dont parle le menu, telle qu'imprimée, ou null. */
+const menuCard = computed(() => {
+  const card = ui.contextMenu?.cardId && gameStore.cardById(ui.contextMenu.cardId)
+  return card ? printedCard(card) : null
 })
 
-// keep the menu on screen, then focus its first item
-watch(() => ui.menu, async m => {
-  if (!m) return
-  pos.x = m.x
-  pos.y = m.y
+// garde le menu dans l'écran, puis donne le focus à sa première ligne
+watch(() => ui.contextMenu, async menu => {
+  if (!menu) return
+  position.x = menu.x
+  position.y = menu.y
   await nextTick()
-  if (!el.value) return
-  const r = el.value.getBoundingClientRect()
-  pos.x = Math.max(4, Math.min(m.x, innerWidth - r.width - 8))
-  pos.y = Math.max(4, Math.min(m.y, innerHeight - r.height - 8))
-  el.value.querySelector('button')?.focus()
+  if (!menuElement.value) return
+  const rect = menuElement.value.getBoundingClientRect()
+  position.x = Math.max(4, Math.min(menu.x, innerWidth - rect.width - 8))
+  position.y = Math.max(4, Math.min(menu.y, innerHeight - rect.height - 8))
+  menuElement.value.querySelector('button')?.focus()
 })
 
-function run(it) {
-  ui.closeMenu()
-  it.run()
+/** Choisit une ligne : ferme le menu, puis lance son action. */
+function chooseItem(item) {
+  ui.closeContextMenu()
+  item.run()
 }
-// like a native menu, the press that dismisses it does nothing else (no draw, no drag, no select)
-function outside(e) {
-  if (!ui.menu || e.target.closest('.menu')) return
-  ui.closeMenu()
-  e.stopPropagation()
+// comme un menu natif, l'appui qui le ferme ne fait rien d'autre (ni pioche, ni glisser, ni sélection)
+function onPointerDownOutside(event) {
+  if (!ui.contextMenu || event.target.closest('.menu')) return
+  ui.closeContextMenu()
+  event.stopPropagation()
   swallowNextClick()
 }
-onMounted(() => document.addEventListener('pointerdown', outside, true))
-onBeforeUnmount(() => document.removeEventListener('pointerdown', outside, true))
+onMounted(() => document.addEventListener('pointerdown', onPointerDownOutside, true))
+onBeforeUnmount(() => document.removeEventListener('pointerdown', onPointerDownOutside, true))
 </script>
 
 <template>
   <div
-    v-if="ui.menu"
-    ref="el"
+    v-if="ui.contextMenu"
+    ref="menuElement"
     class="menu"
-    :class="{ peeks: peek }"
+    :class="{ peeks: menuCard }"
     role="menu"
-    :style="{ left: `${pos.x}px`, top: `${pos.y}px` }"
+    :style="{ left: `${position.x}px`, top: `${position.y}px` }"
     @contextmenu.prevent
   >
-    <GameCard v-if="peek" class="peek" :card="peek" :face="true" inert aria-hidden="true" />
+    <GameCard v-if="menuCard" class="peek" :card="menuCard" :show-face="true" inert aria-hidden="true" />
     <div class="items">
-      <div v-if="ui.menu.title" class="mh">{{ ui.menu.title }}</div>
-      <template v-for="(it, i) in ui.menu.items" :key="i">
-        <hr v-if="!it">
+      <div v-if="ui.contextMenu.title" class="mh">{{ ui.contextMenu.title }}</div>
+      <template v-for="(item, index) in ui.contextMenu.items" :key="index">
+        <hr v-if="!item">
         <button
           v-else
           type="button"
-          :role="it.checked == null ? 'menuitem' : 'menuitemcheckbox'"
-          :aria-checked="it.checked ?? undefined"
-          @click="run(it)"
+          :role="item.checked == null ? 'menuitem' : 'menuitemcheckbox'"
+          :aria-checked="item.checked ?? undefined"
+          @click="chooseItem(item)"
         >
-          <span>{{ it.label }}</span><kbd v-if="it.key">{{ it.key }}</kbd><span v-else-if="it.checked" class="chk" aria-hidden="true">✓</span>
+          <span>{{ item.label }}</span><kbd v-if="item.key">{{ item.key }}</kbd><span v-else-if="item.checked" class="chk" aria-hidden="true">✓</span>
         </button>
       </template>
     </div>

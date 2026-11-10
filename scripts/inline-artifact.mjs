@@ -1,22 +1,27 @@
-// Turns the `--mode artifact` build into a single self-contained page (JS and CSS inlined),
-// without the <html>/<head>/<body> skeleton that the Claude artifact host adds itself.
-// Card images are not inlined: they are published next to the page as cards/<box>/*.jpg, backs/*.jpg and status/*.png.
+// Transforme la construction `--mode artifact` en une seule page autonome (JS et CSS intégrés dans la page),
+// sans le squelette <html>/<head>/<body> que l'hébergeur d'artefacts de Claude ajoute lui-même.
+// Les images des cartes ne sont pas intégrées : elles sont publiées à côté de la page (cards/<boîte>/*.jpg,
+// backs/*.jpg et status/*.png).
 import { readFileSync, writeFileSync } from 'node:fs'
 
-const dir = 'dist-artifact'
-const read = f => readFileSync(`${dir}/${f}`, 'utf8')
-let html = read('index.html')
+const BUILD_FOLDER = 'dist-artifact'
+const readBuiltFile = fileName => readFileSync(`${BUILD_FOLDER}/${fileName}`, 'utf8')
+let html = readBuiltFile('index.html')
 
 html = html
-  .replace(/<link[^>]*rel="stylesheet"[^>]*href="\.\/(assets\/[^"]+\.css)"[^>]*>/g, (_, f) => `<style>${read(f)}</style>`)
-  .replace(/<script[^>]*src="\.\/(assets\/[^"]+\.js)"[^>]*><\/script>/g, (_, f) => `<script type="module">${read(f).replace(/<\/script/gi, '<\\/script')}</script>`)
+  // la feuille de style dans une balise <style>
+  .replace(/<link[^>]*rel="stylesheet"[^>]*href="\.\/(assets\/[^"]+\.css)"[^>]*>/g, (_, cssFile) => `<style>${readBuiltFile(cssFile)}</style>`)
+  // le script dans une balise <script> (un « </script » dans le code fermerait la balise trop tôt)
+  .replace(/<script[^>]*src="\.\/(assets\/[^"]+\.js)"[^>]*><\/script>/g,
+    (_, jsFile) => `<script type="module">${readBuiltFile(jsFile).replace(/<\/script/gi, '<\\/script')}</script>`)
+  // préchargements et icônes : inutiles dans une page autonome
   .replace(/<link[^>]*rel="(modulepreload|icon|apple-touch-icon)"[^>]*>\s*/g, '')
 
-const head = html.match(/<head>([\s\S]*)<\/head>/i)[1]
+const headContent = html.match(/<head>([\s\S]*)<\/head>/i)[1]
   .replace(/<meta charset[^>]*>\s*/i, '')
   .replace(/<meta name="viewport"[^>]*>\s*/i, '')
   .replace('</title>', '</title>\n    <meta name="claude:viewport-fit-sides" content="cover">')
-const body = html.match(/<body>([\s\S]*)<\/body>/i)[1]
+const bodyContent = html.match(/<body>([\s\S]*)<\/body>/i)[1]
 
-writeFileSync(`${dir}/page.html`, `${head.trim()}\n${body.trim()}\n`)
-console.log(`${dir}/page.html written (${(head.length + body.length) / 1000 | 0} kB)`)
+writeFileSync(`${BUILD_FOLDER}/page.html`, `${headContent.trim()}\n${bodyContent.trim()}\n`)
+console.log(`${BUILD_FOLDER}/page.html écrit (${(headContent.length + bodyContent.length) / 1000 | 0} ko)`)
