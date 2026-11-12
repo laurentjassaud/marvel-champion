@@ -350,13 +350,32 @@ describe('paquets', () => {
     expect(E.drawCard(s, L)).toBe(false)
   })
 
-  it('Rencontre vide : remélange et ajoute un jeton d\'accélération', () => {
+  it('Rencontre vide : dès que sa dernière carte en sort, sa défausse mélangée devient le nouveau paquet, +1 accélération', () => {
     const s = game()
+    const total = E.cardsInZone(s, 'encounterDeck').length
     E.cardsInZone(s, 'encounterDeck').forEach(c => E.moveCard(s, c, 'discard', {}, true))
-    expect(E.cardsInZone(s, 'encounterDiscard').length).toBeGreaterThan(0)
-    const c = E.revealEncounterCard(s, L)
-    expect(c.zone).toBe('table')
+    // la dernière carte défaussée a vidé le paquet : la défausse, elle comprise, est aussitôt remélangée
+    expect(E.cardsInZone(s, 'encounterDeck')).toHaveLength(total)
+    expect(E.cardsInZone(s, 'encounterDiscard')).toHaveLength(0)
     expect(s.accelerationTokens).toBe(1)
+    expect(s.log.at(-1).text).toBe(`Paquet Rencontre épuisé : sa défausse (${total} cartes) est mélangée et devient le nouveau paquet Rencontre. Pion Accélération : 1 (+1 menace par phase du méchant).`)
+    // révéler la dernière carte : le paquet se reconstitue aussitôt avec la défausse
+    const t = game()
+    const deck = E.cardsInZone(t, 'encounterDeck')
+    deck.slice(0, -1).forEach(c => E.moveCard(t, c, 'discard', {}, true))
+    expect(E.cardsInZone(t, 'encounterDeck')).toHaveLength(1)
+    const last = E.revealEncounterCard(t, L)
+    expect(last.zone).toBe('table')
+    expect(E.cardsInZone(t, 'encounterDeck')).toHaveLength(total - 1)
+    expect(t.accelerationTokens).toBe(1)
+    // paquet et défausse vides : le paquet reste vide jusqu'à la prochaine carte demandée
+    const u = game()
+    E.cardsInZone(u, 'encounterDeck').forEach(c => E.moveCard(u, c, 'setAside', {}, true))
+    expect(E.cardsInZone(u, 'encounterDeck')).toHaveLength(0)
+    expect(u.accelerationTokens).toBe(0)
+    E.moveCard(u, E.cardsInZone(u, 'setAside')[0], 'discard', {}, true)
+    expect(E.revealEncounterCard(u, L).zone).toBe('table')
+    expect(u.accelerationTokens).toBe(1)
   })
 
   it('une carte Rencontre défaussée va dans la défausse Rencontre', () => {
@@ -699,7 +718,11 @@ describe('Les Démolisseurs', () => {
   it('paquet du méchant actif vide : seule sa défausse est remélangée, +1 accélération', () => {
     const s = crewGame()
     E.encounterPile(s, 'encounterDeck').forEach(c => E.moveCard(s, c, 'discard', {}, true))
-    expect(E.cardsInZone(s, 'encounterDeck')).toHaveLength(45)
+    // vidé, son paquet est aussitôt reconstitué avec sa défausse ; ceux des autres n'ont pas bougé
+    expect(s.accelerationTokens).toBe(1)
+    expect(E.encounterPile(s, 'encounterDiscard')).toHaveLength(0)
+    expect(E.encounterPile(s, 'encounterDeck')).toHaveLength(15)
+    expect(E.cardsInZone(s, 'encounterDeck')).toHaveLength(60)
     E.revealEncounterCard(s, L)
     expect(s.accelerationTokens).toBe(1)
     expect(E.encounterPile(s, 'encounterDeck')).toHaveLength(14)
@@ -1008,11 +1031,12 @@ describe('Kang le Conquérant', () => {
   it('stade 3 achevé : à la fin de la phase, Kang (II) quitte la partie et une carte Empire de Kang est révélée au stade 4', () => {
     const s = kang()
     toStage3(s)
-    E.addThreat(s, null, 9)
-    expect(s.log.at(-1).text).toMatch(/Stade achevé/)
     const foe = villain(s)
-    expect(E.completeKangStage3(s)).toMatchObject({ kind: 'pending', fromCardId: E.kangStage3Scheme(s).id })
-    expect(E.completeKangStage3(s)).toBeNull() // once
+    // la menace atteint le seuil : le stade est achevé tout seul (comme avec le menu « Stade achevé »)
+    expect(E.addThreat(s, null, 9)).toMatchObject({ kind: 'pending', fromCardId: E.kangStage3Scheme(s).id })
+    expect(s.log.at(-1).text).toMatch(/est achevé\. Une carte Empire de Kang passe sous le stade 4A/)
+    expect(E.completeKangStage3(s)).toBeNull() // une seule fois
+    expect(E.addThreat(s, null, 1)).toBeUndefined()
     expect(foe.zone).toBe('table') // until the end of the phase
     const r = E.startHeroPhase(s, L)
     expect(r).toMatchObject({ kind: 'stage', fromCardId: foe.id, stageLeft: true })
@@ -1317,6 +1341,40 @@ describe('Ténacité', () => {
     const next = E.cardById(s, E.defeatVillain(s, rhino).toCardId)
     expect(E.definitionOf(next).stage).toBe('III')
     expect(next.tough).toBe(true)
+  })
+})
+
+describe('manigance principale achevée', () => {
+  const mainSchemeOf = s => E.cardsInZone(s, 'table').find(c => E.definitionOf(c).type === 'main_scheme')
+
+  it('Klaw : au seuil, le stade 2 remplace le stade 1 à sa place, avec sa menace de départ et son seuil', () => {
+    const s = game({ scenario: 'klaw', modulars: ['masters_of_evil'] })
+    const stage1 = mainSchemeOf(s)
+    const stage2 = E.cardsInZone(s, 'setAside').find(c => E.definitionOf(c).type === 'main_scheme')
+    const threshold = E.threatThreshold(s)
+    expect(E.addThreat(s, null, threshold - 1)).toBeUndefined()
+    const result = E.addThreat(s, null, 1)
+    expect(result).toMatchObject({ kind: 'schemeAdvance', fromCardId: stage1.id, toCardId: stage2.id, reachedThreat: threshold, threshold })
+    expect(stage1.zone).toBe('outOfGame')
+    expect(stage2).toMatchObject({ zone: 'table', faceUp: true, side: 0, x: stage1.x, y: stage1.y })
+    const definition = E.definitionOf(stage2)
+    expect(s.counters[2]).toMatchObject({ value: definition.startingThreat ?? 0, label: `Menace /${definition.threshold}` })
+    const log = s.log.map(e => e.text)
+    expect(log).toContain(`« ${E.cardName(stage1)} » est achevée (${threshold}/${threshold}) : le stade suivant la remplace.`)
+    expect(log.at(-1)).toMatch(/^Nouvelle manigance : « Rendez-Vous Secret » \(2A\)\. Une fois révélée : défaussez des cartes du paquet Rencontre jusqu'à défausser un sbire/)
+  })
+
+  it('Rhino : un seul stade, l\'achever est une défaite ; rien sous le seuil ni en retirant de la menace', () => {
+    const s = game()
+    const scheme = mainSchemeOf(s)
+    expect(E.addThreat(s, null, 6)).toBeUndefined()
+    expect(E.addThreat(s, null, -2)).toBeUndefined()
+    expect(E.addThreat(s, null, 3)).toMatchObject({ kind: 'schemeDefeat', fromCardId: scheme.id, reachedThreat: 7, threshold: 7 })
+    expect(scheme.zone).toBe('table')
+    expect(s.log.at(-1).text).toBe('« L\'Effraction ! » est achevée (7/7) : les joueurs perdent la partie.')
+    // une manigance annexe n'achève rien
+    const side = onTable(s, 'side_scheme')
+    expect(E.addThreat(s, side, 20)).toBeUndefined()
   })
 })
 

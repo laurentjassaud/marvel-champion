@@ -27,10 +27,10 @@ watch(() => gameStore.game?.log.at(-1), async () => {
 
 <style scoped>
 /* dans l'onglet Journal de la colonne de droite, qui dessine le panneau */
-.log { padding: 10px 12px; overflow: auto; overscroll-behavior: contain; touch-action: pan-y pinch-zoom; min-height: 0; font-size: 12.5px; line-height: 1.45; }
+.log { padding: 10px 12px; overflow: auto; overscroll-behavior: contain; touch-action: pan-y pinch-zoom; min-height: 0; font-size: 14px; line-height: 1.45; }
 p { margin: 0 0 3px; }
 p.sys { color: var(--brass); }
-time { font-family: var(--f-mono); color: var(--muted); font-size: 11px; margin-right: 6px; }
+time { color: var(--muted); font-size: 14px; margin-right: 6px; }
 @media (max-width: 700px) {
   .log { max-height: 220px; }
 }

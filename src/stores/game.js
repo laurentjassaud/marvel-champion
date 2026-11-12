@@ -54,13 +54,21 @@ export const useGameStore = defineStore('game', () => {
   const scenarioDeck = computed(() => (game.value ? Engine.scenarioDeckOf(game.value) : null))
   const turn = computed(() => game.value?.turn ?? 1)
   const phase = computed(() => game.value?.phase ?? 'hero')
-  /** Sous-titre de la barre du haut : "Spider-Man contre Rhino · expert" (une difficulté tirée au hasard n'est pas nommée). */
-  const subtitle = computed(() => {
+  /**
+   * L'affiche de la partie, pour la barre du haut : {hero, villain, expert} ("Spider-Man", "Rhino", true) ;
+   * une difficulté tirée au hasard n'est pas dévoilée. null sans partie.
+   */
+  const matchup = computed(() => {
     const setup = game.value?.setup
-    if (!setup) return 'Table solo'
+    if (!setup) return null
     const scenario = SCENARIOS.find(candidate => candidate.id === setup.scenario)
-    const expert = setup.expert && !setup.randomChoices?.includes('expert') ? ' · expert' : ''
-    return `${heroName(setup.hero)} contre ${scenario?.villainName ?? ''}${expert}`
+    return { hero: heroName(setup.hero), villain: scenario?.villainName ?? '', expert: !!setup.expert && !setup.randomChoices?.includes('expert') }
+  })
+  /** La même affiche en une phrase : "Spider-Man contre Rhino · expert". */
+  const subtitle = computed(() => {
+    if (!matchup.value) return 'Table solo'
+    const { hero, villain, expert } = matchup.value
+    return `${hero} contre ${villain}${expert ? ' · expert' : ''}`
   })
   /** Le mulligan se fait une seule fois, pendant la phase du héros du round 1. */
   const canMulligan = computed(() => !!game.value && !game.value.mulliganTaken && turn.value === 1 && phase.value === 'hero')
@@ -74,17 +82,38 @@ export const useGameStore = defineStore('game', () => {
     const card = cardById(cardId)
     if (card) action(card)
   }
-  /** La disposition actuelle de la table. */
-  const layout = () => ui.layout()
-  /** Un méchant vaincu : son étape suivante (ou la victoire) est présentée dans une fenêtre. */
-  const announceVillainResult = result => { if (result) ui.openModal('villain', { result }) }
+  /** La disposition actuelle de la table (le décor du méchant dépend du scénario en cours). */
+  const layout = () => ui.layout(game.value?.setup?.scenario)
+
   /**
-   * Les changements de phase rendent true / false, ou ce qu'a donné un changement de stade résolu à la fin
-   * de la phase (Kang) : il est alors présenté dans la fenêtre du méchant. Rend true si la phase a changé.
+   * L'état de la partie juste avant le changement présenté par la fenêtre ouverte (étape du méchant,
+   * manigance, victoire, défaite), en texte JSON : le bouton « Annuler » de la fenêtre le remet en place.
+   * Gardé hors de l'état réactif : ce n'est pas une partie, et il n'est pas enregistré.
    */
-  const afterPhaseChange = result => {
-    if (result && result !== true) announceVillainResult(result)
-    return !!result
+  let stateBeforeChange = null
+  /**
+   * Lance une action du moteur qui peut changer d'étape (dégâts au méchant, menace sur la manigance, fin de
+   * phase) ; si elle a rendu un changement, il est présenté dans sa fenêtre, avec la possibilité de
+   * l'annuler. Rend ce qu'a rendu l'action.
+   */
+  function runAndPresentChange(action) {
+    const before = game.value ? JSON.stringify(game.value) : null
+    const result = action()
+    if (result && result !== true) {
+      stateBeforeChange = before
+      // la manigance principale achevée a sa propre fenêtre ; le reste (étapes, Kang, victoire) celle du méchant
+      ui.openModal(String(result.kind).startsWith('scheme') ? 'scheme' : 'villain', { result })
+    }
+    return result
+  }
+  /** « Annuler » d'une fenêtre de changement : la partie revient à l'état d'avant l'action qui l'a ouverte. */
+  function cancelPresentedChange() {
+    if (stateBeforeChange) {
+      game.value = JSON.parse(stateBeforeChange)
+      Engine.logMessage(game.value, 'Changement annulé : la partie revient à l\'état d\'avant.', true)
+    }
+    stateBeforeChange = null
+    ui.closeModal()
   }
   /** Ajoute un message en tête du journal, à l'heure du premier message. */
   const prependLog = text => game.value.log.unshift({ time: game.value.log[0].time, text, important: true })
@@ -93,7 +122,8 @@ export const useGameStore = defineStore('game', () => {
 
   /** Commence une nouvelle partie (options : voir engine/setup.js newGame) et vide la sélection. */
   function newGame(options) {
-    game.value = Engine.newGame(options, layout())
+    // le décor du méchant de la nouvelle partie, pas celui de la partie qu'elle remplace
+    game.value = Engine.newGame(options, ui.layout(options.scenario))
     ui.selectCard(null)
     ui.preview = null
     ui.randomlyPickedCardId = null
@@ -119,7 +149,7 @@ export const useGameStore = defineStore('game', () => {
   }
 
   return {
-    game, isReady, cardsIn, pileOf, cardById, hasInvocationDeck, scenarioDeck, turn, phase, subtitle, canMulligan,
+    game, isReady, cardsIn, pileOf, cardById, hasInvocationDeck, scenarioDeck, turn, phase, matchup, subtitle, canMulligan,
     newGame, startExampleGame, restartGame,
     preconDeck: heroId => PRECON_DECKS[heroId],
     parseDeckFile: Engine.parseDeckFile,
@@ -155,8 +185,9 @@ export const useGameStore = defineStore('game', () => {
     },
 
     /* ---------- phases ---------- */
-    startVillainPhase: () => afterPhaseChange(run(Engine.startVillainPhase, layout())),
-    startHeroPhase: () => afterPhaseChange(run(Engine.startHeroPhase, layout())),
+    // rendent true si la phase a changé ; un changement de stade résolu à la fin de la phase (Kang) est présenté
+    startVillainPhase: () => !!runAndPresentChange(() => run(Engine.startVillainPhase, layout())),
+    startHeroPhase: () => !!runAndPresentChange(() => run(Engine.startHeroPhase, layout())),
     mulligan: cardIds => run(Engine.mulligan, layout(), cardIds),
 
     /* ---------- table ---------- */
@@ -174,20 +205,25 @@ export const useGameStore = defineStore('game', () => {
     readyPlayerCards: () => { for (const card of cardsIn('table')) if (!Engine.isEncounterCard(card)) card.exhausted = false },
 
     /* ---------- dégâts, menace, jetons ---------- */
-    addDamage: (cardId, amount) => announceVillainResult(run(Engine.addDamage, cardById(cardId), amount, layout())),
-    addThreat: (cardId, amount) => run(Engine.addThreat, cardById(cardId), amount),
+    // un méchant vaincu (étape suivante, victoire) ou une manigance principale achevée est présenté dans sa fenêtre
+    addDamage: (cardId, amount) => runAndPresentChange(() => run(Engine.addDamage, cardById(cardId), amount, layout())),
+    addThreat: (cardId, amount) => runAndPresentChange(() => run(Engine.addThreat, cardById(cardId), amount)),
     addTokens: (cardId, amount) => run(Engine.addTokens, cardById(cardId), amount),
     /** Kang : le stade 3 est achevé, le stade 4 arrive à la fin de la phase (une carte Empire de Kang dessous). */
-    completeKangStage3: () => announceVillainResult(run(Engine.completeKangStage3)),
+    completeKangStage3: () => runAndPresentChange(() => run(Engine.completeKangStage3)),
+    /** « Annuler » des fenêtres du méchant et de la manigance : revient à l'état d'avant le changement. */
+    cancelPresentedChange,
     setActiveVillain: set => run(Engine.setActiveVillain, set),
 
     /* ---------- compteurs du haut de l'écran ---------- */
     /**
      * Change un compteur de `amount`. Le compteur du méchant (index 1) passe par les dégâts : « − » blesse,
-     * « + » soigne, pour qu'une étape qui tombe à 0 soit remarquée (étape suivante, victoire).
+     * « + » soigne, pour qu'une étape qui tombe à 0 soit remarquée (étape suivante, victoire). Celui de la
+     * menace (index 2) passe par la menace, pour qu'une manigance qui atteint son seuil soit achevée.
      */
     changeCounter(index, amount) {
-      if (index === 1) return announceVillainResult(run(Engine.addDamage, null, -amount, layout()))
+      if (index === 1) return runAndPresentChange(() => run(Engine.addDamage, null, -amount, layout()))
+      if (index === 2) return runAndPresentChange(() => run(Engine.addThreat, null, amount))
       const counter = game.value.counters[index]
       counter.value += amount
       Engine.logMessage(game.value, `${counter.label} : ${counter.value}.`)

@@ -1,6 +1,7 @@
 <script setup>
 // La fenêtre du méchant : ce qu'a donné la défaite d'un méchant (moteur, defeatVillain) — l'étape suivante,
 // le nouveau méchant actif des Démolisseurs, un changement de stade de Kang en attente, ou la victoire.
+// Le changement est déjà fait quand elle s'ouvre : « Annuler » remet la partie dans l'état d'avant.
 import { computed } from 'vue'
 import BaseModal from './BaseModal.vue'
 import GameCard, { printedCard } from '../GameCard.vue'
@@ -87,6 +88,8 @@ function restart() {
         <button type="button" class="btn" @click="ui.closeModal()">Fermer</button>
       </template>
       <button v-else type="button" class="btn primary" @click="ui.closeModal()">Continuer</button>
+      <!-- un clic de trop sur les dégâts ou la phase : la partie revient à l'état d'avant -->
+      <button type="button" class="btn" title="Revenir à l'état d'avant ce changement (dégâts, phase…)" @click="gameStore.cancelPresentedChange()">Annuler</button>
     </div>
   </BaseModal>
 </template>
@@ -97,12 +100,12 @@ function restart() {
 .art :deep(.card) { --w: 210px; cursor: default; }
 .art :deep(.card.land) { --w: 230px; }
 .art.defeated :deep(.card) { filter: grayscale(.75) brightness(.8); }
-.stamp { position: absolute; left: 50%; top: 46%; transform: translate(-50%, -50%) rotate(-14deg); padding: 4px 16px; border: 3px solid var(--danger); border-radius: 6px; color: var(--danger); background: rgb(18 22 28 / .7); font-family: var(--f-display); font-weight: 700; font-size: 30px; letter-spacing: .14em; text-transform: uppercase; }
+.stamp { position: absolute; left: 50%; top: 46%; transform: translate(-50%, -50%) rotate(-14deg); padding: 4px 16px; border: 3px solid var(--danger); border-radius: 6px; color: var(--danger); background: rgb(18 22 28 / .7); font-family: var(--font-display); font-weight: 700; font-size: 30px; letter-spacing: .14em; text-transform: uppercase; }
 .txt { flex: 1 1 260px; display: grid; gap: 10px; }
 .txt p { margin: 0; color: var(--fg); }
 .txt .note { color: var(--muted); }
 blockquote { margin: 0; padding: 12px 16px; border-left: 3px solid var(--brass); background: var(--bg); border-radius: 0 8px 8px 0; font-style: italic; line-height: 1.5; }
-.scheme { display: block; font-style: normal; font-family: var(--f-display); font-size: 13px; letter-spacing: .1em; text-transform: uppercase; color: var(--brass); margin-bottom: 4px; }
+.scheme { display: block; font-style: normal; font-family: var(--font-display); font-size: 20px; letter-spacing: .06em; text-transform: uppercase; color: var(--brass); margin-bottom: 4px; }
 @media (max-width: 700px) {
   .art :deep(.card) { --w: 150px; }
 }

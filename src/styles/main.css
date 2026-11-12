@@ -1,47 +1,76 @@
-/* Mise en page : une table de jeu sur un seul écran — la barre d'outils, puis deux colonnes : à gauche la table
-   libre (rangée du méchant en haut, rangée du héros en bas) au-dessus du bandeau du joueur (paquet, main,
-   défausse) ; à droite, jusqu'en bas, la colonne latérale (piles Rencontre, puis la carte agrandie et le
-   journal en onglets). Volontairement un seul thème sombre : c'est une table de jeu. */
+/* Mise en page (maquette Figma « Table de jeu ») : une table plein écran sur un fond indigo, sous une barre
+   de titre. À gauche, le décor du méchant (son illustration, son nom et ses PV en grand) ; à droite, la
+   colonne des piles Rencontre au-dessus de la carte agrandie et du journal ; en bas, de bord à bord, le
+   bandeau du joueur (ses piles, sa main en éventail, le tour et ses PV). Volontairement un seul thème
+   sombre : c'est une table de jeu. */
 :root {
   color-scheme: dark;
-  --bg: #12161c;
-  --table: #1b2a2e;
-  --table-line: #22363b;
-  --panel: #171d24;
-  --line: #2a333d;
-  --fg: #e6e2d8;
-  --muted: #8f978f;
-  --brass: #d1a356;
-  --brass-ink: #1a1408;
-  --hero: #4f7fc9;
-  --enc: #c9733f;
-  --threat: #8a6bd0;
-  --danger: #d9705c;
-  --f-display: "Saira Condensed", "Arial Narrow", system-ui, sans-serif;
-  --f-body: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --f-mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
-  --cw: 80px;  /* largeur d'une carte sur la table (curseur « Taille ») */
-  --hw: 76px;  /* largeur d'une carte de la main et des piles du joueur */
-  --sw: 58px;  /* largeur d'une carte des piles de la colonne de droite */
+  /* fond : dégradé radial indigo, plus clair vers le bas, au centre (maquette) */
+  --bg-center: #49498b;
+  --bg-mid: #3a3b70;
+  --bg: #2b2c55;
+  --bg-deep: #131527;
+  /* fenêtres et menus (opaques) ; panneaux posés sur la table (translucides) */
+  --panel: #23244a;
+  --panel-glass: rgb(19 21 39 / .42);
+  /* filets : violet de la maquette, et cadre des piles */
+  --line: rgb(101 103 198 / .38);
+  --frame: rgb(70 71 119 / .8);
+  --fg: #ffffff;
+  --muted: #aeb3dc;
+  /* libellés des piles : bleu pour le joueur, orangé pour la Rencontre */
+  --label: #789eca;
+  --label-enc: #f2a868;
+  /* boutons en biais : leur couleur et, en bas, leur liseré plus foncé */
+  --steel: #536992;
+  --steel-lip: #324567;
+  --red: #ff0000;
+  --red-lip: #a21212;
+  /* rouge des petits boutons : le texte blanc de 14 px y reste lisible */
+  --red-ui: #d31616;
+  --blue: #2f66d8;
+  --blue-lip: #1c3f8c;
+  /* jaune de « VS » : focus, sélection, messages de règle */
+  --yellow: #ffc219;
+  --brass: var(--yellow);
+  --brass-ink: #1d1600;
+  --hero: #3f7cf0;
+  --enc: #f08a3c;
+  --threat: #8f6be0;
+  --danger: #ff6a5a;
+  /* les deux polices de la table (chargées par index.html) */
+  --font-text: "Inter", sans-serif; /* texte courant : paragraphes, journal, boutons, menus, champs — 14 px */
+  --font-display: "Barlow Condensed", sans-serif; /* titres, libellés, onglets, compteurs — 20 px au moins */
+  /* courbes d'animation : entrée et retour d'une action (ease-out), mouvement sur place (ease-in-out),
+     arrivée d'un grand élément (drawer) */
+  --ease-out: cubic-bezier(.23, 1, .32, 1);
+  --ease-in-out: cubic-bezier(.77, 0, .175, 1);
+  --ease-drawer: cubic-bezier(.32, .72, 0, 1);
+  /* un pixel de la maquette (1920 × 1080) à la taille de l'écran : le décor et les grands chiffres suivent */
+  --u: min(100vw / 1920, 100vh / 1080);
+  --u: min(100vw / 1920, 100dvh / 1080);
+  --cw: 80px;  /* largeur d'une carte sur la table (réglage « Taille ») */
+  --hw: max(62px, calc(90 * var(--u)));  /* largeur d'une carte de la main et des piles du joueur */
+  --sw: max(52px, calc(80 * var(--u)));  /* largeur d'une carte des piles de la colonne de droite */
 }
 
 * { box-sizing: border-box; }
+/* les rappels de touches suivent le texte autour (le navigateur y met sinon une police à chasse fixe) */
+kbd { font-family: inherit; }
 /* tactile : pas de flash gris au toucher, pas d'agrandissement du texte, pas de « tirer pour rafraîchir » ni de rebond de page */
 html { height: 100%; -webkit-tap-highlight-color: transparent; -webkit-text-size-adjust: 100%; overscroll-behavior: none; }
 body {
   height: 100%; margin: 0;
-  background: var(--bg); color: var(--fg); font: 14px/1.4 var(--f-body); overflow: hidden; overscroll-behavior: none;
+  background: var(--bg); color: var(--fg); font: 14px/1.45 var(--font-text); overflow: hidden; overscroll-behavior: none;
   touch-action: manipulation; /* pas de zoom au double toucher (le pincement reste possible) */
-  padding-left: max(16px, env(safe-area-inset-left, 0px));
-  padding-right: max(16px, env(safe-area-inset-right, 0px));
 }
 #app { height: 100%; height: 100dvh; }
 button, input, select, textarea { font: inherit; color: inherit; }
 button { cursor: pointer; touch-action: manipulation; }
 /* les commandes ne sont pas du texte : un appui long ne doit pas sélectionner leur libellé */
-button, label, .bar, .drop, .zone-label, .menu, .table { -webkit-user-select: none; user-select: none; }
+button, label, .bar, .drop, .zone-label, .menu, .table, .hud, .dock { -webkit-user-select: none; user-select: none; }
 input, textarea { -webkit-user-select: text; user-select: text; } /* sinon iOS ne laisserait pas y taper */
-:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
+:focus-visible { outline: 2px solid var(--yellow); outline-offset: 2px; }
 [hidden] { display: none !important; }
 /* textes propres à un type de pointeur (souris et clavier, ou doigt) */
 .on-touch { display: none; }
@@ -51,78 +80,164 @@ input, textarea { -webkit-user-select: text; user-select: text; } /* sinon iOS n
 }
 
 /* ---------- structure de la page ---------- */
-.app { height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 10px; padding-block: max(10px, env(safe-area-inset-top, 0px)) max(10px, env(safe-area-inset-bottom, 0px)); }
-/* la colonne de droite se rétrécit sur tablette pour laisser sa place à la table ; son bord gauche se
-   glisse (SideResizer règle --side), et la table garde toujours 420 px */
-.mid { --side: clamp(240px, 30vw, 440px); display: grid; grid-template-columns: minmax(0, 1fr) min(var(--side), max(240px, calc(100% - 430px))); gap: 10px; min-height: 0; }
-/* colonne de gauche : la table prend la hauteur que lui laisse le bandeau du joueur */
-.play { display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 10px; min-height: 0; min-width: 0; }
+/* trois rangées : la barre (48 px), la table entre le décor du méchant et la colonne de droite, le bandeau
+   du joueur ; le décor (VillainBackdrop) passe derrière, sans rien capter */
+.app {
+  position: relative; isolation: isolate; height: 100%; overflow: hidden;
+  display: grid; grid-template-rows: 48px minmax(0, 1fr) auto;
+  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+  background: radial-gradient(ellipse 58.7% 58.7% at 50% 73.5%, var(--bg-center), var(--bg-mid) 50%, var(--bg));
+}
+.app > .bar { z-index: 3; }
+/* la table et la colonne de droite ; la colonne se rétrécit sur tablette pour laisser sa place à la table ;
+   son bord gauche se glisse (SideResizer règle --side), et la table garde toujours 420 px */
+.mid {
+  --side: clamp(280px, 19.5vw, 400px);
+  position: relative; z-index: 1; min-height: 0;
+  display: grid; grid-template-columns: minmax(0, 1fr) min(var(--side), max(240px, calc(100% - 450px))); gap: 10px;
+  padding-right: max(12px, calc(20 * var(--u)));
+}
+/* la table, avec par-dessus, en bas à gauche, les PV du méchant (VillainHud) */
+.play { position: relative; min-height: 0; min-width: 0; display: grid; }
 /* les onglets (carte agrandie, journal) prennent ce que laissent les piles Rencontre */
-.side { position: relative; container-type: inline-size; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 10px; min-height: 0; }
-.encrow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.side {
+  position: relative; container-type: inline-size; min-height: 0;
+  display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 12px;
+  padding: max(14px, calc(40 * var(--u))) 0 12px;
+}
+.encrow { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; justify-items: center; }
+/* un libellé trop long pour sa colonne (« Défausse R. » sur tablette) se termine par des points de suspension */
+.encrow .zone-label { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 /* + le deck propre au scénario (Armes Expérimentales, Manigance Annexe) : quatre piles se partagent la
    colonne de droite (100cqw de large) ; les cartes rétrécissent pour tenir et les libellés se resserrent */
-.encrow.x4 { grid-template-columns: repeat(4, 1fr); --sw: min(58px, calc((100cqw - 24px) / 4 - 14px)); }
-.encrow.x4 .zone-label { font-size: 11px; letter-spacing: .04em; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
-.bottom { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; }
-.bottom.inv { grid-template-columns: auto 1fr auto auto auto; } /* + deck Invocation et sa défausse */
+.encrow.x4 { grid-template-columns: repeat(4, minmax(0, 1fr)); --sw: min(max(52px, calc(80 * var(--u))), calc((100cqw - 24px) / 4 - 12px)); }
 
 /* ---------- boutons et libellés ---------- */
-.btn { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; line-height: 1.1; white-space: nowrap; transition: transform .1s ease-out; }
-.btn:active:not(:disabled) { transform: scale(.96); }
+/* bouton ordinaire (fenêtres, menus de la table) */
+.btn {
+  background: rgb(83 105 146 / .38); border: 1px solid rgb(120 158 202 / .35); border-radius: 3px; padding: 7px 12px;
+  line-height: 1.1; white-space: nowrap; color: var(--fg);
+  transition: transform 140ms var(--ease-out), background-color 150ms ease, border-color 150ms ease;
+}
+.btn:active:not(:disabled) { transform: scale(.97); }
 .btn:disabled { opacity: .45; cursor: default; }
 @media (hover: hover) and (pointer: fine) {
-  .btn:hover:not(:disabled) { border-color: var(--brass); }
+  .btn:hover:not(:disabled) { border-color: var(--label); background: rgb(83 105 146 / .55); }
 }
-.btn.primary { background: var(--brass); color: var(--brass-ink); border-color: var(--brass); font-weight: 600; }
-.btn.enc { border-color: color-mix(in srgb, var(--enc) 60%, var(--line)); }
-.btn kbd { font-family: var(--f-mono); font-size: 10px; color: var(--muted); margin-left: 5px; }
-.btn.primary kbd { color: var(--brass-ink); opacity: .7; }
-.zone-label { font-family: var(--f-display); font-weight: 600; font-size: 12.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 0 0 6px; white-space: nowrap; }
-.sp { flex: 1; }
-.note { font-size: 12px; color: var(--muted); }
-.err { color: var(--danger); font-size: 13px; }
-
-/* ---------- panneaux, piles, main ---------- */
-.drop { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; min-width: 0; position: relative; }
-.drop.e { border-top: 2px solid color-mix(in srgb, var(--enc) 70%, transparent); }
-.drop.p { border-top: 2px solid color-mix(in srgb, var(--hero) 70%, transparent); }
-.drop.i { border-top: 2px solid color-mix(in srgb, var(--brass) 70%, transparent); }
-.drop.over, .table.over { box-shadow: inset 0 0 0 2px var(--brass); }
-.pile { display: flex; flex-direction: column; align-items: center; gap: 4px; --pw: var(--hw); min-width: calc(var(--pw) + 22px); cursor: pointer; }
-.encrow .pile { --pw: var(--sw); padding: 6px; min-width: 0; }
-.pile .slot { width: var(--pw); height: calc(var(--pw) * 1.4); border: 1px dashed var(--line); border-radius: 6px; position: relative; }
-.pile .slot .card { position: absolute; inset: 0; --w: var(--pw); }
-.pile .slot .card.land { inset: auto; top: calc(var(--pw) * .2); left: calc(var(--pw) * -.2); }
-.pile .slot .stack { position: absolute; inset: 0; border-radius: 6px; transform: translate(3px, 3px); background: var(--line); opacity: .6; }
-.pile .count { font-family: var(--f-mono); font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
-.hand { display: flex; flex-direction: column; }
-/* touch-action : le navigateur ne fait jamais défiler la main de côté (usePointer la fait défiler sous le
-   doigt), car un défilement natif qui bute au bout de la rangée peut devenir un retour à la page précédente */
-.hand-row { display: flex; gap: 6px; overflow-x: auto; overscroll-behavior: contain; touch-action: pan-y; padding: 8px 2px 4px; min-height: calc(var(--hw) * 1.4 + 12px); align-items: flex-end; }
-.hand-row .card { --w: var(--hw); flex: none; transition: transform .12s; }
+.btn.primary { background: var(--red-ui); color: #fff; border-color: var(--red-ui); font-weight: 600; }
 @media (hover: hover) and (pointer: fine) {
-  .hand-row .card:hover { transform: translateY(-6px); }
+  .btn.primary:hover:not(:disabled) { background: #e42020; border-color: #e42020; }
 }
+.btn.enc { border-color: color-mix(in srgb, var(--enc) 60%, var(--line)); }
+.btn kbd { font-size: 14px; color: var(--muted); margin-left: 5px; }
+.btn.primary kbd { color: #fff; opacity: .75; }
+
+/* bouton en biais de la maquette : un parallélogramme et, en bas, un liseré plus foncé qui s'enfonce
+   quand on appuie. Sa pente est celle des onglets de la barre (24,25 px sur 55 px de haut). */
+.slant {
+  --fill: var(--steel); --lip: var(--steel-lip); --h: 40px; --lip-h: 5px; --cut: calc(var(--h) * .441);
+  position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  height: var(--h); padding: 0 calc(var(--cut) + 12px) var(--lip-h); border: 0; color: #fff; white-space: nowrap;
+  font: italic 700 20px/1 var(--font-display); letter-spacing: -.02em; text-transform: uppercase;
+  background: linear-gradient(to bottom, var(--fill) calc(100% - var(--lip-h)), var(--lip) 0);
+  clip-path: polygon(var(--cut) 0, 100% 0, calc(100% - var(--cut)) 100%, 0 100%);
+  transition: transform 140ms var(--ease-out), filter 150ms ease;
+}
+.slant:active:not(:disabled) { transform: translateY(2px); }
+.slant:disabled { opacity: .45; cursor: default; }
+/* le contour de focus serait coupé par la forme : le liseré passe au jaune, la couleur s'éclaircit */
+.slant:focus-visible { outline: none; --lip: var(--yellow); filter: brightness(1.15); }
+@media (hover: hover) and (pointer: fine) {
+  .slant:hover:not(:disabled) { filter: brightness(1.14); }
+}
+.slant.red { --fill: var(--red); --lip: var(--red-lip); }
+.slant.blue { --fill: var(--blue); --lip: var(--blue-lip); }
+/* inactif (phase qui n'est pas en cours, onglet fermé) */
+.slant.dim { --fill: rgb(83 105 146 / .32); --lip: rgb(50 69 103 / .55); color: var(--muted); }
+.slant kbd { font: 400 14px/1 var(--font-text); letter-spacing: 0; text-transform: none; opacity: .72; }
+
+.zone-label { font: italic 900 20px/1.1 var(--font-display); letter-spacing: -.02em; text-transform: uppercase; color: var(--label); margin: 0; white-space: nowrap; }
+.sp { flex: 1; }
+.note { font-size: 14px; color: var(--muted); }
+.err { color: var(--danger); font-size: 14px; }
+
+/* ---------- piles, main ---------- */
+.drop { position: relative; min-width: 0; }
+.drop.over, .table.over { box-shadow: inset 0 0 0 2px rgb(255 194 25 / .7); }
+/* une pile : son nom au-dessus, sa carte du dessus dans un cadre, son nombre de cartes dessous */
+.pile { display: flex; flex-direction: column; align-items: center; gap: 6px; --pw: var(--hw); cursor: pointer; }
+.pile.e .zone-label { color: var(--label-enc); }
+.pile.i .zone-label { color: var(--yellow); }
+.encrow .pile { --pw: var(--sw); min-width: 0; }
+.pile.over { box-shadow: none; }
+.pile .slot {
+  width: calc(var(--pw) + 8px); height: calc(var(--pw) * 1.4 + 8px); position: relative;
+  border: 1px solid var(--frame); border-radius: 4px;
+  transition: transform 140ms var(--ease-out), border-color 150ms ease, box-shadow 150ms ease;
+}
+.pile.over .slot { border-color: var(--yellow); box-shadow: 0 0 0 1px var(--yellow), 0 0 22px rgb(255 194 25 / .3); }
+.pile .slot .card { position: absolute; inset: 3px; --w: var(--pw); }
+.pile .slot .card.land { inset: auto; top: calc(var(--pw) * .2 + 3px); left: calc(var(--pw) * -.2 + 3px); }
+/* l'épaisseur d'une pile de plusieurs cartes */
+.pile .slot .stack { position: absolute; inset: 3px; border-radius: 3px; transform: translate(3px, 3px); background: #17183a; box-shadow: 0 2px 4px rgb(0 0 0 / .3); }
+.pile .count { font-size: 14px; line-height: 1; color: var(--fg); letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
 .pile:active .slot { transform: scale(.97); }
-.hand-empty { color: var(--muted); font-size: 12.5px; align-self: center; }
+@media (hover: hover) and (pointer: fine) {
+  .pile:hover .slot { border-color: rgb(120 158 202 / .9); }
+}
+
+/* la main : un éventail centré, les cartes se recouvrent davantage quand elles sont nombreuses */
+.hand { display: grid; align-items: end; justify-items: center; min-width: 0; }
+/* touch-action : le navigateur ne fait jamais défiler la main de côté (usePointer la fait défiler sous le
+   doigt quand elle déborde, sur téléphone), car un défilement natif qui bute au bout de la rangée peut
+   devenir un retour à la page précédente */
+.hand-row {
+  --n: 1; --mid: 0;
+  /* pente entre deux cartes voisines : 8° au plus, l'éventail entier ne dépasse pas ±14° */
+  --fan-step: min(8deg, calc(28deg / max(1, calc(var(--n) - 1))));
+  container-type: inline-size; position: relative; width: 100%;
+  display: flex; justify-content: center; align-items: flex-end;
+  touch-action: pan-y; padding: calc(var(--hw) * .32) 0 calc(var(--hw) * .16); min-height: calc(var(--hw) * 1.88);
+}
+.hand-row .card {
+  --w: var(--hw); flex: none;
+  /* place de la carte par rapport au milieu de la main : -1,5 ; -0,5 ; 0,5 ; 1,5 pour quatre cartes */
+  --off: calc(var(--i, 0) - var(--mid));
+  /* les cartes se chevauchent d'un cinquième, plus si la place manque */
+  margin-left: min(calc(var(--hw) * -.22), calc((100cqw - var(--n) * var(--hw)) / max(1, calc(var(--n) - 1))));
+  transform: translateY(calc(var(--off) * var(--off) * 2px)) rotate(calc(var(--off) * var(--fan-step)));
+  transform-origin: 50% 110%;
+  transition: transform 200ms var(--ease-out), box-shadow 200ms var(--ease-out);
+}
+.hand-row .card:first-child { margin-left: 0; }
+@media (hover: hover) and (pointer: fine) {
+  /* la carte survolée se redresse et monte ; sa zone de survol descend avec elle, pour ne pas la lâcher */
+  .hand-row .card:hover { z-index: 5; transform: translateY(-24%) scale(1.06); box-shadow: 0 18px 28px rgb(0 0 0 / .45); }
+  .hand-row .card:hover::after { content: ''; position: absolute; left: 0; right: 0; top: 100%; height: 30%; }
+}
+.hand-empty { color: var(--muted); font-size: 14px; align-self: center; text-align: center; padding-bottom: calc(var(--hw) * .5); }
 
 /* ---------- cartes ---------- */
-.card { --w: var(--cw); width: var(--w); height: calc(var(--w) * 1.4); border-radius: calc(var(--w) * .06); position: relative; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: none; cursor: grab; box-shadow: 0 2px 6px rgb(0 0 0 / .5); }
+.card {
+  --w: var(--cw); width: var(--w); height: calc(var(--w) * 1.4); border-radius: max(3px, calc(var(--w) * .035));
+  position: relative; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: none; cursor: grab;
+  box-shadow: 0 4px 4px rgb(0 0 0 / .25), 0 10px 22px -10px rgb(0 0 0 / .45);
+}
 /* les cartes d'affichage (fenêtre de pile, mulligan, aperçu) ne se glissent pas : le doigt les fait défiler */
 .card:not([data-id]) { touch-action: manipulation; }
 .card.land { width: calc(var(--w) * 1.4); height: var(--w); }
-.card.sel { outline: 2px solid var(--brass); outline-offset: 2px; }
+.card.sel { outline: 2px solid var(--yellow); outline-offset: 2px; }
 /* carte de la main tirée au hasard (après .sel : elle l'emporte quand les deux s'appliquent) */
-.card.rand { outline: 3px solid #e5483a; outline-offset: 2px; box-shadow: 0 0 0 5px rgb(229 72 58 / .25), 0 2px 6px rgb(0 0 0 / .5); }
-.card .face, .card .back { position: absolute; inset: 0; border-radius: inherit; background: #0d1015 center / cover no-repeat; }
-.card .face.plain { display: grid; place-items: center; padding: 8%; border: 1px solid var(--line); text-align: center; font-family: var(--f-display); font-size: calc(var(--w) * .13); line-height: 1.1; overflow: hidden; }
-.card .mk { position: absolute; right: -7px; top: -7px; min-width: 22px; height: 22px; padding: 0 5px; border-radius: 11px; font-family: var(--f-mono); font-size: 12px; display: grid; place-items: center; box-shadow: 0 1px 3px rgb(0 0 0 / .6); color: #fff; }
-.card .mk.dmg { background: #b8402f; }
-.card .mk.thr { background: #6a4bb0; right: auto; left: -7px; }
-.card .mk.tok { background: #56677a; top: auto; bottom: -7px; }
+.card.rand { outline: 3px solid #ff3b2f; outline-offset: 2px; box-shadow: 0 0 0 5px rgb(255 59 47 / .25), 0 4px 4px rgb(0 0 0 / .25); }
+/* la face, cerclée d'un filet noir comme sur la maquette */
+.card .face, .card .back { position: absolute; inset: 0; border-radius: inherit; background: #0d0e1f center / cover no-repeat; box-shadow: inset 0 0 0 1px rgb(0 0 0 / .85); }
+.card .face.plain { display: grid; place-items: center; padding: 8%; border: 1px solid var(--line); text-align: center; font-family: var(--font-display); font-size: max(20px, calc(var(--w) * .13)); line-height: 1.1; overflow: hidden; }
+.card .mk { position: absolute; right: -7px; top: -7px; min-width: 24px; height: 24px; padding: 0 6px; border-radius: 12px; font-size: 14px; display: grid; place-items: center; box-shadow: 0 1px 3px rgb(0 0 0 / .6); color: #fff; }
+.card .mk.dmg { background: #d42a1c; }
+.card .mk.thr { background: #6d4fd0; right: auto; left: -7px; }
+.card .mk.tok { background: #4d5f86; top: auto; bottom: -7px; }
 /* jeton Actif des Démolisseurs, centré sous le méchant */
-.card .mk.act { background: var(--brass); color: var(--brass-ink); top: auto; bottom: -9px; right: auto; left: 50%; transform: translateX(-50%); font-family: var(--f-display); font-weight: 700; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+.card .mk.act { background: var(--yellow); color: var(--brass-ink); top: auto; bottom: -9px; right: auto; left: 50%; transform: translateX(-50%); font: italic 900 20px/1 var(--font-display); height: 26px; letter-spacing: -.01em; text-transform: uppercase; }
 /* cartes d'état (sonné, désorienté, tenace) empilées sur l'illustration, elles peuvent se cumuler */
 .card .status { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: calc(var(--w) * .02); pointer-events: none; }
 .card .status img { width: calc(var(--w) * 1.04); height: auto; flex: none; filter: drop-shadow(0 2px 3px rgb(0 0 0 / .6)); }
@@ -131,43 +246,65 @@ input, textarea { -webkit-user-select: text; user-select: text; } /* sinon iOS n
 .ghost { position: fixed; left: 0; top: 0; pointer-events: none; z-index: 1000; opacity: .92; }
 
 /* ---------- menu contextuel ---------- */
-.menu { position: fixed; z-index: 2000; background: #20272f; border: 1px solid var(--line); border-radius: 8px; padding: 4px; min-width: 220px; box-shadow: 0 8px 24px rgb(0 0 0 / .5); max-height: 90vh; overflow: auto; overscroll-behavior: contain; touch-action: pan-y pinch-zoom; }
-.menu .mh { font-family: var(--f-display); font-size: 13px; letter-spacing: .05em; color: var(--muted); padding: 4px 10px 2px; }
-.menu button { display: flex; justify-content: space-between; gap: 16px; width: 100%; text-align: left; background: none; border: 0; border-radius: 5px; padding: 6px 10px; }
-.menu button:focus-visible, .menu button:active { background: var(--line); }
-@media (hover: hover) and (pointer: fine) {
-  .menu button:hover { background: var(--line); }
+.menu {
+  position: fixed; z-index: 2000; background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 4px; min-width: 220px;
+  box-shadow: 0 18px 40px -8px rgb(6 7 20 / .7), 0 2px 6px rgb(0 0 0 / .3); max-height: 90vh; overflow: auto; overscroll-behavior: contain; touch-action: pan-y pinch-zoom;
+  transform-origin: top left; transition: opacity 120ms var(--ease-out), transform 120ms var(--ease-out);
 }
-.menu kbd { font-family: var(--f-mono); font-size: 11px; color: var(--muted); }
-.menu .chk { color: var(--brass); font-weight: 700; }
+.menu .mh { font: italic 700 20px/1.2 var(--font-display); letter-spacing: -.01em; text-transform: uppercase; color: var(--label); padding: 4px 10px 2px; }
+.menu button { display: flex; justify-content: space-between; gap: 16px; width: 100%; text-align: left; background: none; border: 0; border-radius: 3px; padding: 6px 10px; }
+.menu button:focus-visible, .menu button:active { background: rgb(83 105 146 / .45); }
+@media (hover: hover) and (pointer: fine) {
+  .menu button:hover { background: rgb(83 105 146 / .45); }
+}
+.menu kbd { font-size: 14px; color: var(--muted); }
+.menu .chk { color: var(--yellow); font-weight: 700; }
 .menu .peek { display: none; }
 .menu hr { border: 0; border-top: 1px solid var(--line); margin: 4px 0; }
 
 /* ---------- fenêtres ---------- */
-.modal { position: fixed; inset: 0; z-index: 1500; background: rgb(5 8 10 / .72); display: grid; place-items: center; padding: 16px; }
+.modal {
+  position: fixed; inset: 0; z-index: 1500; display: grid; place-items: center; padding: 16px;
+  background: rgb(10 11 28 / .7); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
+  transition: opacity 200ms var(--ease-out);
+}
 /* les zones qui défilent verticalement ne défilent que verticalement : pas de balayage de côté que le navigateur changerait en « page précédente » */
-.modal .box { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; width: min(820px, 100%); max-height: 100%; overflow: auto; overscroll-behavior: contain; touch-action: pan-y pinch-zoom; padding: 18px 20px; display: grid; gap: 14px; }
-.modal h2 { font-family: var(--f-display); font-weight: 700; font-size: 24px; margin: 0; text-wrap: balance; }
+.modal .box {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 6px; width: min(820px, 100%); max-height: 100%;
+  overflow: auto; overscroll-behavior: contain; touch-action: pan-y pinch-zoom; padding: 18px 20px; display: grid; gap: 14px;
+  box-shadow: 0 30px 80px -20px rgb(4 5 18 / .8), inset 0 1px 0 rgb(255 255 255 / .06);
+  transition: opacity 240ms var(--ease-out), transform 240ms var(--ease-out);
+}
+.modal h2 { font: italic 900 30px/1.1 var(--font-display); letter-spacing: -.02em; text-transform: uppercase; margin: 0; text-wrap: balance; }
 .modal p { margin: 0; color: var(--muted); line-height: 1.5; max-width: 68ch; }
 .modal .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .grid-cards { display: flex; flex-wrap: wrap; gap: 8px; }
 .grid-cards .card { --w: 96px; cursor: pointer; }
 .fieldset { display: grid; gap: 6px; }
-.fieldset > .lab, .keys .lab { font-family: var(--f-display); font-size: 13px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.fieldset > .lab, .keys .lab { font: italic 700 20px/1.1 var(--font-display); letter-spacing: -.01em; text-transform: uppercase; color: var(--label); }
 .choices { display: flex; flex-wrap: wrap; gap: 8px; }
 .file-btn { position: relative; overflow: hidden; }
 .file-btn input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
 .help-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 18px; }
 .keys { display: grid; grid-template-columns: auto 1fr; gap: 7px 12px; align-items: center; align-content: start; }
 .keys .lab { grid-column: 1 / -1; }
-.keys kbd { font-family: var(--f-mono); font-size: 12px; background: var(--bg); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 1px 6px; white-space: nowrap; }
+.keys kbd { font-size: 14px; background: var(--bg); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 1px 6px; white-space: nowrap; }
+
+/* entrée des fenêtres et du menu : un fondu et un léger grossissement, depuis le centre pour une fenêtre,
+   depuis le coin du pointeur pour le menu (sortie immédiate) */
+@starting-style {
+  .modal { opacity: 0; }
+  .modal .box { opacity: 0; transform: translateY(8px) scale(.96); }
+  .menu { opacity: 0; transform: scale(.97); }
+}
 
 /* ---------- écrans tactiles ---------- */
 /* cibles à la taille d'un doigt ; les rappels de touches encombrent une tablette (l'aide ? les liste toujours) */
 @media (pointer: coarse) {
   .btn { min-height: 36px; padding: 8px 12px; }
+  .slant { --h: 44px; }
   .menu button { padding: 10px 12px; }
-  .btn kbd, .menu kbd { display: none; }
+  .btn kbd, .menu kbd, .slant kbd { display: none; }
 }
 /* tactile, ou écran peu haut : l'aperçu de côté est petit, alors le menu de l'appui long / du clic droit
    montre aussi la carte en assez grand pour la lire */
@@ -177,29 +314,19 @@ input, textarea { -webkit-user-select: text; user-select: text; } /* sinon iOS n
   .menu .peek.land { --w: min(240px, calc(90vh - 10px)); }
   .menu .items { flex: 1; min-width: 210px; }
 }
-/* écrans en paysage peu hauts : des piles Rencontre plus petites laissent plus de place à l'aperçu */
-@media (max-height: 860px) and (min-width: 701px) {
-  .encrow { --sw: 46px; }
-  .encrow.x4 { --sw: min(46px, calc((100cqw - 24px) / 4 - 14px)); }
-}
 
 /* ---------- petits écrans ---------- */
-/* tablettes en portrait et fenêtres étroites : la table et la main restent sur un seul écran */
-@media (max-width: 860px) {
-  :root { --hw: 62px; }
-}
-/* téléphones : une seule colonne, la page défile */
+/* téléphones : une seule colonne, la page défile ; la main redevient une rangée qui défile */
 @media (max-width: 700px) {
   body { overflow: auto; }
   #app, .app { height: auto; min-height: 100%; }
-  .mid { grid-template-columns: 1fr; }
-  /* une seule colonne comme avant : la table, la colonne latérale (piles Rencontre, carte, journal), puis le bandeau du joueur */
-  .play { display: contents; }
-  .side { grid-template-rows: none; order: 1; }
-  .bottom { order: 2; }
-  .bottom, .bottom.inv { grid-template-columns: 1fr 1fr; }
-  .bottom .hand { grid-column: 1 / -1; order: -1; }
+  .app { grid-template-rows: auto auto auto; overflow: visible; }
+  .mid { grid-template-columns: 1fr; padding-inline: 12px; }
+  .side { grid-template-rows: none; padding-top: 4px; }
+  .hand-row { overflow-x: auto; overscroll-behavior: contain; justify-content: flex-start; gap: 6px; padding: 8px 2px 4px; min-height: calc(var(--hw) * 1.4 + 12px); }
+  .hand-row .card { margin-left: 0; transform: none; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .hand-row .card, .btn { transition: none; }
+  .hand-row .card, .btn, .slant, .pile .slot, .menu, .modal, .modal .box { transition: none; }
+  .hand-row .card:hover { transform: translateY(calc(var(--off) * var(--off) * 2px)) rotate(calc(var(--off) * var(--fan-step))); }
 }

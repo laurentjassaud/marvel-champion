@@ -38,7 +38,7 @@ input { position: absolute; opacity: 0; pointer-events: none; }
 .tile { display: flex; align-items: center; gap: 10px; border: 1px solid var(--line); border-radius: 8px; padding: 7px 11px; background: var(--bg); cursor: pointer; min-width: 110px; }
 .tile.withImage { padding: 5px 11px 5px 5px; }
 .txt { display: flex; flex-direction: column; gap: 2px; }
-small { color: var(--muted); font-size: 11.5px; }
+small { color: var(--muted); font-size: 14px; }
 img { width: 40px; height: 56px; object-fit: cover; object-position: 50% 20%; border-radius: 4px; }
 input:checked + .tile { border-color: var(--brass); box-shadow: inset 0 0 0 1px var(--brass); }
 input:focus-visible + .tile { outline: 2px solid var(--brass); outline-offset: 2px; }

@@ -261,9 +261,9 @@ watch(step, async () => {
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
   padding: 6px 2px;
-  font-family: var(--f-display);
-  font-size: 14px;
-  letter-spacing: .08em;
+  font-family: var(--font-display);
+  font-size: 20px;
+  letter-spacing: .06em;
   text-transform: uppercase;
   color: var(--muted);
 }
@@ -320,7 +320,8 @@ watch(step, async () => {
   border-radius: 4px;
   display: grid;
   place-items: center;
-  font-size: 24px;
+  font-family: var(--font-display);
+  font-size: 28px;
   color: var(--brass);
 }
 
@@ -333,7 +334,7 @@ watch(step, async () => {
 
 .txt small {
   color: var(--muted);
-  font-size: 11.5px;
+  font-size: 14px;
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -350,9 +351,9 @@ watch(step, async () => {
 }
 
 .cdb .lab {
-  font-family: var(--f-display);
-  font-size: 13px;
-  letter-spacing: .1em;
+  font-family: var(--font-display);
+  font-size: 20px;
+  letter-spacing: .06em;
   text-transform: uppercase;
   color: var(--muted);
 }
@@ -405,7 +406,7 @@ watch(step, async () => {
 .recap .change {
   margin-left: 8px;
   color: var(--brass);
-  font-size: 12.5px;
+  font-size: 14px;
 }
 
 /* les boutons restent visibles pendant que les choix défilent */

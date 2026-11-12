@@ -38,7 +38,7 @@ watch(() => ui.preview?.cardId, () => { if (previewElement.value) previewElement
 .preview::-webkit-scrollbar { display: none; }
 .preview :deep(.card) { --w: 100cqw; place-self: center; cursor: default; }
 .preview :deep(.card.land) { --w: calc(100cqw / 1.4); }
-.empty { place-self: center; color: var(--muted); font-size: 13px; text-align: center; }
+.empty { place-self: center; color: var(--muted); font-size: 14px; text-align: center; }
 /* téléphones : une seule colonne sous la table, la carte garde une taille raisonnable */
 @media (max-width: 700px) {
   .preview { min-height: 200px; }

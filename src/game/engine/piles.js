@@ -81,9 +81,9 @@ export function pickRandomHandCard(game) {
 // (encounterPile).
 
 /**
- * Paquet Rencontre épuisé : sa défausse est remélangée et devient le paquet, et un pion Accélération
- * s'ajoute (+1 menace par phase du méchant). Kang : tant que Le Maître du Temps attend, les pions se
- * posent sur lui et n'ajoutent pas de menace au stade 3. Rend false si la défausse est vide aussi.
+ * Paquet Rencontre épuisé : sa défausse est mélangée et devient le nouveau paquet Rencontre, et un pion
+ * Accélération s'ajoute (+1 menace par phase du méchant). Kang : tant que Le Maître du Temps attend, les
+ * pions se posent sur lui et n'ajoutent pas de menace au stade 3. Rend false si la défausse est vide aussi.
  */
 function refillEncounterDeck(game) {
   const discardPile = encounterPile(game, 'encounterDiscard')
@@ -98,8 +98,18 @@ function refillEncounterDeck(game) {
   const effect = masterOfTime
     ? `posé sur « ${cardName(masterOfTime)} », il n'ajoute pas de menace au stade 3`
     : '+1 menace par phase du méchant'
-  logMessage(game, `Paquet Rencontre${whose} épuisé : défausse remélangée. Jeton d'accélération : ${game.accelerationTokens} (${effect}).`, true)
+  logMessage(game, `Paquet Rencontre${whose} épuisé : sa défausse (${plural(discardPile.length, 'carte')}) est mélangée et devient le nouveau paquet Rencontre. Pion Accélération : ${game.accelerationTokens} (${effect}).`, true)
   return true
+}
+
+/**
+ * Règle du paquet Rencontre : dès que sa dernière carte en sort (révélée, distribuée, défaussée,
+ * déplacée…), sa défausse est mélangée et devient le nouveau paquet (refillEncounterDeck). Si la défausse
+ * est vide à ce moment-là, le paquet reste vide : il sera remélangé à la prochaine carte demandée
+ * (topEncounterCard). Appelé par moveCard.
+ */
+export function refillEncounterDeckIfEmpty(game) {
+  if (!encounterPile(game, 'encounterDeck').length) refillEncounterDeck(game)
 }
 
 /** La carte du dessus du paquet Rencontre en service (remélangé s'il est vide), ou null s'il ne reste rien. */

@@ -5,6 +5,10 @@
 // La table est vue de dessus : le méchant et ses cartes en haut, le joueur en bas. Toutes les mesures
 // sont en pixels et suivent la largeur d'une carte (`layout.cardWidth`) : une carte debout mesure
 // cardWidth × 1,4 cardWidth, une carte couchée (manigance) 1,4 cardWidth × cardWidth.
+//
+// Le bord gauche de la table est occupé par le décor du méchant : son illustration en haut
+// (`layout.villainInset`, en pixels depuis le bord gauche) et ses PV en grand en bas (`layout.heroInset`).
+// Les rangées du méchant et du héros commencent après eux ; sans ces mesures (tests), au bord de la table.
 
 import { cardsInZone, definitionOf, isEncounterCard, identityCard } from './state.js'
 
@@ -12,29 +16,34 @@ import { cardsInZone, definitionOf, isEncounterCard, identityCard } from './stat
 const CARD_RATIO = 1.4
 /** Marge à gauche de la table. */
 const LEFT_MARGIN = 16
-/** Marge en haut de la table (sous le titre « Zone du méchant »). */
-const TOP_MARGIN = 26
-/** Marge en bas de la table (au-dessus du titre « Zone du héros »). */
-const BOTTOM_MARGIN = 26
+/** Marge en haut de la table (sous la barre du haut, dont le titre déborde un peu). */
+const TOP_MARGIN = 34
+/** Marge en bas de la table (au-dessus de la main en éventail). */
+const BOTTOM_MARGIN = 34
 /** Écart horizontal entre deux cartes d'une rangée. */
 const CARD_GAP = 12
 
-/** Disposition prise quand l'appelant n'en donne pas (tests, anciens appels) : une table moyenne. */
-export const DEFAULT_LAYOUT = { width: 1100, height: 600, cardWidth: 80 }
+/** Disposition prise quand l'appelant n'en donne pas (tests, anciens appels) : une table moyenne, sans décor. */
+export const DEFAULT_LAYOUT = { width: 1100, height: 600, cardWidth: 80, villainInset: 0, heroInset: 0 }
+
+/** Bord gauche de la rangée du méchant : après l'illustration du méchant. */
+const villainRowLeft = layout => LEFT_MARGIN + (layout.villainInset ?? 0)
+/** Bord gauche de la rangée du héros : après les PV du méchant affichés en grand. */
+const heroRowLeft = layout => LEFT_MARGIN + (layout.heroInset ?? 0)
 
 /** Abscisse de la colonne n° `index` des Démolisseurs : une colonne par méchant, large comme une manigance couchée. */
-const crewColumnX = (layout, index) => LEFT_MARGIN + index * (layout.cardWidth * CARD_RATIO + CARD_GAP)
+const crewColumnX = (layout, index) => villainRowLeft(layout) + index * (layout.cardWidth * CARD_RATIO + CARD_GAP)
 
 /** Places fixes des grandes cartes : chaque fonction rend {x, y}. */
 export const SPOTS = {
-  /** Le méchant, en haut à gauche. */
-  villain: () => ({ x: LEFT_MARGIN, y: TOP_MARGIN }),
+  /** Le méchant, en haut à gauche (après son illustration). */
+  villain: layout => ({ x: villainRowLeft(layout), y: TOP_MARGIN }),
   /** La manigance principale, à droite du méchant. */
-  mainScheme: layout => ({ x: LEFT_MARGIN + layout.cardWidth + 20, y: TOP_MARGIN }),
+  mainScheme: layout => ({ x: villainRowLeft(layout) + layout.cardWidth + 20, y: TOP_MARGIN }),
   /** Kang : Le Maître du Temps attend sous la manigance principale pendant le stade 3. */
-  masterOfTime: layout => ({ x: LEFT_MARGIN + layout.cardWidth + 20, y: TOP_MARGIN + layout.cardWidth + 14 }),
-  /** L'identité du joueur, en bas à gauche. */
-  identity: layout => ({ x: LEFT_MARGIN, y: layout.height - layout.cardWidth * CARD_RATIO - BOTTOM_MARGIN }),
+  masterOfTime: layout => ({ x: villainRowLeft(layout) + layout.cardWidth + 20, y: TOP_MARGIN + layout.cardWidth + 14 }),
+  /** L'identité du joueur, en bas à gauche (après les PV du méchant). */
+  identity: layout => ({ x: heroRowLeft(layout), y: layout.height - layout.cardWidth * CARD_RATIO - BOTTOM_MARGIN }),
   /** Les Démolisseurs : le méchant n° index en haut de sa colonne… */
   crewVillain: (layout, index) => ({ x: crewColumnX(layout, index), y: TOP_MARGIN }),
   /** … sa manigance annexe (couchée) dessous… */
@@ -64,7 +73,7 @@ export function nextEncounterSpot(game, layout) {
   const hasFixedSpot = card => ['villain', 'main_scheme'].includes(definitionOf(card).type)
     || (game.crew && definitionOf(card).type === 'side_scheme' && game.crew.includes(definitionOf(card).set))
   const rowCards = cardsInZone(game, 'table').filter(card => isEncounterCard(card) && !hasFixedSpot(card) && !card.dealtToPlayer)
-  const rowStartX = game.crew ? LEFT_MARGIN : LEFT_MARGIN + layout.cardWidth + 20 + layout.cardWidth * CARD_RATIO + 24
+  const rowStartX = villainRowLeft(layout) + (game.crew ? 0 : layout.cardWidth + 20 + layout.cardWidth * CARD_RATIO + 24)
   const rowHeight = layout.cardWidth * CARD_RATIO + 16
   let x = rowStartX
   let y = game.crew ? TOP_MARGIN + layout.cardWidth * 2.4 + 26 : TOP_MARGIN
@@ -89,7 +98,7 @@ export function nextEncounterSpot(game, layout) {
 export function nextHeroSpot(game, layout) {
   const placedCount = cardsInZone(game, 'table')
     .filter(card => !isEncounterCard(card) && !card.isIdentity && !card.isPawn && !card.underSchemeId).length
-  const rowStartX = LEFT_MARGIN + layout.cardWidth + 24
+  const rowStartX = heroRowLeft(layout) + layout.cardWidth + 24
   const step = layout.cardWidth + CARD_GAP
   const cardsPerRow = Math.max(1, Math.floor((layout.width - rowStartX - 10) / step))
   const bottomRowY = layout.height - layout.cardWidth * CARD_RATIO - BOTTOM_MARGIN

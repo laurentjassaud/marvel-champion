@@ -10,7 +10,7 @@ import {
   scenarioRulesOf
 } from './state.js'
 import { SPOTS, nextEncounterSpot, nextHeroSpot } from './layout.js'
-import { refillInvocationDeck } from './piles.js'
+import { refillInvocationDeck, refillEncounterDeckIfEmpty } from './piles.js'
 import { crewVillainLeftTable, revealVillainStage } from './villains.js'
 
 /* ---------------------------------------------------------------------------------------------------- */
@@ -32,7 +32,8 @@ import { crewVillainLeftTable, revealVillainStage } from './villains.js'
  *     environnement défausse les autres si le scénario le veut (discardOtherEnvironments) ;
  *   - une étape du méchant ou une manigance principale qui arrive de « De côté » met à jour son compteur ;
  *   - un des Démolisseurs qui quitte la table emmène sa manigance (crewVillainLeftTable) ;
- *   - le deck Invocation vidé se remélange (refillInvocationDeck).
+ *   - le deck Invocation vidé se remélange (refillInvocationDeck) ;
+ *   - le paquet Rencontre vidé est aussitôt reconstitué avec sa défausse mélangée (refillEncounterDeckIfEmpty).
  */
 export function moveCard(game, card, targetZone, options = {}, quiet = false) {
   if (card.isPawn) {
@@ -74,6 +75,7 @@ export function moveCard(game, card, targetZone, options = {}, quiet = false) {
   }
   if (game.crew && fromZone === 'table' && zone !== 'table' && definitionOf(card).type === 'villain') crewVillainLeftTable(game, card)
   if (fromZone === 'invocationDeck' && zone !== 'invocationDeck' && !cardsInZone(game, 'invocationDeck').length) refillInvocationDeck(game)
+  if (fromZone === 'encounterDeck' && zone !== 'encounterDeck') refillEncounterDeckIfEmpty(game)
 }
 
 /** Un pion se déplace sur la table, ou disparaît s'il en sort. */
@@ -187,7 +189,7 @@ export function takeFromPile(game, layout, card, zone) {
   const type = definitionOf(card).type
   let spot
   if (!isEncounterCard(card)) spot = nextHeroSpot(game, layout)
-  else if (type === 'villain') spot = SPOTS.villain()
+  else if (type === 'villain') spot = SPOTS.villain(layout)
   else if (type === 'main_scheme') spot = SPOTS.mainScheme(layout)
   else spot = nextEncounterSpot(game, layout)
   moveCard(game, card, 'table', spot)

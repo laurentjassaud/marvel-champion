@@ -37,31 +37,34 @@ function moveToNextTab(event) {
 <template>
   <section class="side-tabs">
     <div ref="tabBar" class="tabbar" role="tablist" aria-label="Panneau latéral">
-      <button v-for="tab in TABS" :id="`tab-${tab.id}`" :key="tab.id" type="button" role="tab" class="tab" :class="{ on: ui.sideTab === tab.id }"
+      <button v-for="tab in TABS" :id="`tab-${tab.id}`" :key="tab.id" type="button" role="tab" class="slant tab" :class="{ dim: ui.sideTab !== tab.id }"
         :aria-selected="ui.sideTab === tab.id" :aria-controls="`pane-${tab.id}`" :tabindex="ui.sideTab === tab.id ? 0 : -1"
         @click="ui.sideTab = tab.id" @keydown.left.prevent="moveToNextTab" @keydown.right.prevent="moveToNextTab">
         {{ tab.label }}
         <span v-if="tab.id === 'log' && unreadCount" class="badge" :title="`${unreadCount} nouvelle${unreadCount > 1 ? 's' : ''} entrée${unreadCount > 1 ? 's' : ''}`">{{ unreadCount > 9 ? '9+' : unreadCount }}</span>
       </button>
     </div>
-    <CardPreview v-if="ui.sideTab === 'card'" id="pane-card" role="tabpanel" aria-labelledby="tab-card" />
-    <GameLog v-else id="pane-log" role="tabpanel" aria-labelledby="tab-log" />
+    <div class="pane">
+      <CardPreview v-if="ui.sideTab === 'card'" id="pane-card" role="tabpanel" aria-labelledby="tab-card" />
+      <GameLog v-else id="pane-log" role="tabpanel" aria-labelledby="tab-log" />
+    </div>
   </section>
 </template>
 
 <style scoped>
-.side-tabs { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; overflow: hidden; }
-.tabbar { display: flex; gap: 4px; padding: 0 8px; border-bottom: 1px solid var(--line); }
-.tab { display: inline-flex; align-items: center; gap: 6px; background: none; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; padding: 8px 10px 6px; font-family: var(--f-display); font-weight: 600; font-size: 12.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); transition: color .15s, border-color .15s; }
-.tab.on { color: var(--fg); border-bottom-color: var(--brass); }
-@media (hover: hover) and (pointer: fine) {
-  .tab:not(.on):hover { color: var(--fg); }
+/* les onglets en biais de la maquette au-dessus d'un panneau translucide posé sur la table */
+.side-tabs { display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 6px; min-height: 0; }
+.tabbar { display: flex; }
+.tab { --h: 36px; --lip-h: 4px; padding-inline: 26px; }
+.tab + .tab { margin-left: -14px; }
+.tab[aria-selected="true"] { cursor: default; }
+.tab[aria-selected="true"]:active { transform: none; }
+.pane {
+  display: grid; min-height: 0; overflow: hidden;
+  background: var(--panel-glass); border: 1px solid var(--line); border-radius: 4px; box-shadow: inset 0 1px 0 rgb(255 255 255 / .05);
 }
-.badge { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--brass); color: var(--brass-ink); font-family: var(--f-mono); font-size: 11px; font-weight: 600; letter-spacing: 0; display: grid; place-items: center; }
+.badge { min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; background: var(--yellow); color: var(--brass-ink); font: normal 600 14px/1 var(--font-text); letter-spacing: 0; display: grid; place-items: center; }
 @media (pointer: coarse) {
-  .tab { min-height: 40px; padding-inline: 12px; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .tab { transition: none; }
+  .tab { --h: 44px; }
 }
 </style>

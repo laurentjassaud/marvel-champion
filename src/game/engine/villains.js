@@ -67,19 +67,22 @@ export function addDamage(game, card, amount, layout = DEFAULT_LAYOUT) {
 /**
  * Ajoute de la menace (amount > 0) ou en retire (contre, amount < 0), sur les manigances seulement. La
  * manigance principale utilise le compteur de menace ; une manigance annexe reçoit un jeton de menace.
- * Sans carte : la manigance principale.
+ * Sans carte : la manigance principale. Quand la menace de la manigance principale atteint son seuil, elle
+ * est achevée (mainSchemeCompleted) : rend ce que cela a donné, pour que l'écran le présente.
  */
 export function addThreat(game, card, amount) {
-  if (card && counterKindOf(card) !== 'threat') return
-  if (!card || definitionOf(card).type === 'main_scheme') {
-    const threatCounter = game.counters[2]
-    threatCounter.value = Math.max(0, threatCounter.value + amount)
-    logMessage(game, `Menace sur la manigance principale : ${threatCounter.value}.`)
-    if (amount > 0) warnIfThresholdReached(game)
-  } else {
+  if (card && counterKindOf(card) !== 'threat') return undefined
+  if (card && definitionOf(card).type !== 'main_scheme') {
     card.threat = Math.max(0, card.threat + amount)
     logMessage(game, `${cardLabel(card)} : ${plural(card.threat, 'menace')}.`)
+    return undefined
   }
+  const threatCounter = game.counters[2]
+  threatCounter.value = Math.max(0, threatCounter.value + amount)
+  logMessage(game, `Menace sur la manigance principale : ${threatCounter.value}.`)
+  const threshold = threatThreshold(game)
+  if (amount > 0 && threshold && threatCounter.value >= threshold) return mainSchemeCompleted(game)
+  return undefined
 }
 
 /**
@@ -104,19 +107,49 @@ export function threatThreshold(game) {
   return Number((game.counters[2].label.match(/\/(\d+)/) || [])[1]) || null
 }
 
+/* ---------------------------------------------------------------------------------------------------- */
+/* Manigance principale achevée                                                                          */
+/* ---------------------------------------------------------------------------------------------------- */
+
 /**
- * La menace atteint le seuil : le journal dit quoi faire. Le stade 3 de Kang achevé n'est pas une
- * défaite : le stade 4 arrive, avec une carte Empire de Kang.
+ * La menace de la manigance principale atteint son seuil : le stade est achevé.
+ *   - Kang, stade 3 : une carte Empire de Kang passe sous le stade 4A, le stade 4 arrive à la fin de la
+ *     phase (completeKangStage3, présenté dans la fenêtre du méchant) ;
+ *   - un stade suivant attend de côté : il le remplace (advanceMainScheme) ;
+ *   - sinon c'est le dernier stade (« Si ce stade est achevé, les joueurs perdent la partie ») : défaite.
+ *     Les stades 2 à 4 de Kang ne se suivent pas dans l'ordre : ses stades 1 et 4 achevés sont des défaites.
+ * Rend {kind: 'pending', …} (Kang), {kind: 'schemeAdvance', …} ou {kind: 'schemeDefeat', …}.
  */
-function warnIfThresholdReached(game) {
-  const threshold = threatThreshold(game)
-  if (!threshold || game.counters[2].value < threshold) return
+function mainSchemeCompleted(game) {
   const kangStage3 = kangStage3Scheme(game)
-  if (kangStage3) {
-    logMessage(game, `La menace atteint le seuil de « ${cardName(kangStage3)} » : stade achevé. Clic droit sur la manigance → Stade achevé (une carte Empire de Kang passe sous le stade 4A).`, true)
-  } else {
-    logMessage(game, 'La menace atteint le seuil : passez à l\'étape suivante de la manigance (ou défaite à la dernière).', true)
-  }
+  if (kangStage3) return completeKangStage3(game) ?? undefined
+  const mainScheme = mainSchemesInPlay(game).find(card => card !== masterOfTimeScheme(game))
+  if (!mainScheme) return undefined
+  const nextStage = scenarioRulesOf(game).kang ? null : nextMainSchemeStage(game, mainScheme)
+  const reachedThreat = game.counters[2].value
+  const threshold = threatThreshold(game)
+  if (nextStage) return advanceMainScheme(game, mainScheme, nextStage, { reachedThreat, threshold })
+  logMessage(game, `« ${cardName(mainScheme)} » est achevée (${reachedThreat}/${threshold}) : les joueurs perdent la partie.`, true)
+  return { kind: 'schemeDefeat', fromCardId: mainScheme.id, reachedThreat, threshold }
+}
+
+/** Le stade suivant de la manigance principale, mis de côté à la mise en place (le premier dans l'ordre des stades), ou undefined. */
+const nextMainSchemeStage = (game, mainScheme) => cardsInZone(game, 'setAside')
+  .filter(card => definitionOf(card).type === 'main_scheme' && definitionOf(card).set === definitionOf(mainScheme).set)
+  .sort((first, second) => byStage(definitionOf(first), definitionOf(second)))[0]
+
+/**
+ * Le stade achevé quitte la partie ; le stade suivant prend sa place, face A, avec ses propres valeurs :
+ * le compteur de menace repart de sa menace de départ, avec son seuil (moveCard depuis « De côté ») ; la
+ * menace en trop ne passe pas au stade suivant. Le journal rappelle son « Une fois révélée ».
+ * Rend {kind: 'schemeAdvance', fromCardId, toCardId, reachedThreat, threshold}.
+ */
+function advanceMainScheme(game, mainScheme, nextStage, { reachedThreat, threshold }) {
+  const { x, y } = mainScheme // le stade suivant se pose à la même place
+  logMessage(game, `« ${cardName(mainScheme)} » est achevée (${reachedThreat}/${threshold}) : le stade suivant la remplace.`, true)
+  moveCard(game, mainScheme, 'outOfGame', {}, true)
+  moveCard(game, nextStage, 'table', { x, y }, true) // depuis « De côté » : nouveau compteur, « Nouvelle manigance » au journal
+  return { kind: 'schemeAdvance', fromCardId: mainScheme.id, toCardId: nextStage.id, reachedThreat, threshold }
 }
 
 /* ---------------------------------------------------------------------------------------------------- */

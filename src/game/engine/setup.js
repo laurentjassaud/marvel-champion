@@ -115,7 +115,7 @@ export function newGame(options, layout) {
     firstVillain = setUpCrew(game, layout, rules, expert, addCard)
     addCard(mainSchemeStages[0].id, 'encounter', 'table', { zIndex: 3, ...SPOTS.crewMainScheme(layout) })
   } else {
-    firstVillain = setUpVillainStages(game, rules, expert, addCard)
+    firstVillain = setUpVillainStages(game, layout, rules, expert, addCard)
     // la manigance principale : son premier stade sur la table (face A), les autres de côté
     addCard(mainSchemeStages[0].id, 'encounter', 'table', { zIndex: 3, ...SPOTS.mainScheme(layout) })
     for (const stage of mainSchemeStages.slice(1)) addCard(stage.id, 'encounter', 'setAside')
@@ -181,7 +181,7 @@ function setUpCrew(game, layout, rules, expert, addCard) {
  * expert forment un set à part, Kang Expert, joue toutes les étapes de ce set) — la première sur la
  * table, les autres de côté. Rend la fiche de la première étape du méchant.
  */
-function setUpVillainStages(game, rules, expert, addCard) {
+function setUpVillainStages(game, layout, rules, expert, addCard) {
   const villainSet = expert && rules.expertSet ? rules.expertSet : game.setup.scenario
   const allStages = CARD_DEFINITIONS.filter(definition => definition.type === 'villain' && definition.set === villainSet).sort(byStage)
   let usedStages = allStages.slice(0, 2)
@@ -189,7 +189,7 @@ function setUpVillainStages(game, rules, expert, addCard) {
   else if (expert) usedStages = allStages.slice(1, 3)
   const firstVillain = usedStages[0]
   // mot-clé Ténacité (Kang) : le méchant commence avec une carte d'état Tenace
-  addCard(firstVillain.id, 'encounter', 'table', { zIndex: 2, ...SPOTS.villain(), ...(firstVillain.toughness ? { tough: true } : {}) })
+  addCard(firstVillain.id, 'encounter', 'table', { zIndex: 2, ...SPOTS.villain(layout), ...(firstVillain.toughness ? { tough: true } : {}) })
   for (const stage of usedStages.slice(1)) addCard(stage.id, 'encounter', 'setAside')
   return firstVillain
 }

@@ -1,4 +1,5 @@
-// Adresses des images : la face d'une carte (et ses faces B et C), le dos des cartes, les cartes d'état.
+// Adresses des images : la face d'une carte (et ses faces B et C), le dos des cartes, les cartes d'état,
+// l'illustration du méchant en décor de la table.
 
 import { definitionOf, isEncounterCard } from '../game/engine.js'
 import { DEFINITION_BY_ID } from '../game/data.js'
@@ -33,6 +34,15 @@ export function cardBackUrl(card) {
   else if (definitionOf(card).type === 'villain') color = 'purple'
   return `${BASE_URL}backs/${color}.jpg`
 }
+
+/**
+ * Illustrations des méchants, en décor à gauche de la table, par scénario (setup.scenario). Chaque image fait
+ * 694 × 923 px, détourée en biais sur sa droite (maquette) ; les autres méchants n'en ont pas encore.
+ */
+const VILLAIN_ART_FILES = { rhino: 'villains/rhino.png' }
+
+/** Illustration du méchant de ce scénario, ou null s'il n'en a pas. */
+export const villainArtUrl = scenarioId => (VILLAIN_ART_FILES[scenarioId] ? `${BASE_URL}${VILLAIN_ART_FILES[scenarioId]}` : null)
 
 /** Image d'une carte d'état posée sur un personnage (stunned, confused, tough). */
 export const statusImageUrl = statusId => `${BASE_URL}status/${statusId}.png`

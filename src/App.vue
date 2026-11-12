@@ -1,12 +1,15 @@
 <script setup>
-// L'application : la barre du haut, puis deux colonnes — à gauche la table au-dessus du bandeau du joueur
-// (paquet, main, défausse), à droite les piles Rencontre au-dessus des onglets Carte / Journal — et les
-// fenêtres (une seule ouverte à la fois) et le menu contextuel.
+// L'application (maquette Figma « Table de jeu ») : la barre du haut ; la table, avec à gauche le décor et
+// les PV du méchant, et à droite les piles Rencontre au-dessus des onglets Carte / Journal ; en bas, de bord
+// à bord, le bandeau du joueur (piles, main en éventail, tour et PV). Puis les fenêtres (une seule ouverte à
+// la fois) et le menu contextuel.
 import { onMounted } from 'vue'
 import TopBar from './components/TopBar.vue'
+import VillainBackdrop from './components/VillainBackdrop.vue'
+import VillainHud from './components/VillainHud.vue'
 import GameTable from './components/GameTable.vue'
 import CardPile from './components/CardPile.vue'
-import HandStrip from './components/HandStrip.vue'
+import PlayerDock from './components/PlayerDock.vue'
 import SideTabs from './components/SideTabs.vue'
 import SideResizer from './components/SideResizer.vue'
 import ContextMenu from './components/ContextMenu.vue'
@@ -16,6 +19,7 @@ import MulliganModal from './components/modals/MulliganModal.vue'
 import HelpModal from './components/modals/HelpModal.vue'
 import RestartModal from './components/modals/RestartModal.vue'
 import VillainModal from './components/modals/VillainModal.vue'
+import SchemeModal from './components/modals/SchemeModal.vue'
 import { useGameStore } from './stores/game.js'
 import { useUiStore } from './stores/ui.js'
 import { usePointer } from './composables/usePointer.js'
@@ -35,23 +39,17 @@ onMounted(() => { if (!gameStore.isReady) gameStore.startExampleGame() })
 
 <template>
   <div class="app">
+    <!-- derrière tout le reste, sans rien capter -->
+    <VillainBackdrop />
     <TopBar />
     <!-- --side : la largeur de la colonne de droite, une fois son bord gauche glissé -->
     <main class="mid" :style="ui.sideColumnWidth ? { '--side': `${ui.sideColumnWidth}px` } : null">
-      <!-- colonne de gauche : la table au-dessus du bandeau du joueur (paquet, main, défausse), même largeur -->
+      <!-- la table, et par-dessus, en bas à gauche, le méchant en grand -->
       <div class="play">
         <GameTable />
-        <footer class="bottom" :class="{ inv: gameStore.hasInvocationDeck }">
-          <CardPile zone="playerDeck" label="Paquet" variant="p" title="Clic : piocher" />
-          <HandStrip />
-          <CardPile zone="playerDiscard" label="Défausse" variant="p" title="Clic : voir" />
-          <template v-if="gameStore.hasInvocationDeck">
-            <CardPile zone="invocationDeck" label="Invocation" variant="i" title="Clic : lancer l'invocation du dessus · appui long ou clic droit : autres choix" />
-            <CardPile zone="invocationDiscard" label="Défausse I." variant="i" title="Clic : voir" />
-          </template>
-        </footer>
+        <VillainHud />
       </div>
-      <!-- colonne de droite, jusqu'en bas de l'écran -->
+      <!-- colonne de droite, jusqu'au bandeau du joueur -->
       <aside class="side">
         <SideResizer />
         <div class="encrow" :class="{ x4: gameStore.scenarioDeck }">
@@ -66,6 +64,7 @@ onMounted(() => { if (!gameStore.isReady) gameStore.startExampleGame() })
         <SideTabs />
       </aside>
     </main>
+    <PlayerDock />
 
     <ContextMenu />
     <SetupModal v-if="ui.modal?.type === 'setup'" />
@@ -74,5 +73,6 @@ onMounted(() => { if (!gameStore.isReady) gameStore.startExampleGame() })
     <HelpModal v-else-if="ui.modal?.type === 'help'" />
     <RestartModal v-else-if="ui.modal?.type === 'restart' && gameStore.isReady" />
     <VillainModal v-else-if="ui.modal?.type === 'villain' && gameStore.isReady" :key="ui.modal.result.kind + ui.modal.result.fromCardId" />
+    <SchemeModal v-else-if="ui.modal?.type === 'scheme' && gameStore.isReady" :key="ui.modal.result.kind + ui.modal.result.fromCardId" />
   </div>
 </template>

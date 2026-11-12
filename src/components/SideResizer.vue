@@ -68,8 +68,9 @@ function resetWidth() {
 <style scoped>
 /* dans l'écart entre la table et la colonne de droite, une poignée en son milieu */
 .resizer { position: absolute; top: 0; bottom: 0; left: -10px; width: 10px; cursor: col-resize; touch-action: none; z-index: 5; }
-.resizer::after { content: ''; position: absolute; left: 3px; top: 50%; width: 4px; height: 44px; transform: translateY(-50%); border-radius: 2px; background: var(--line); transition: background .15s, height .15s; }
-.resizer.on::after, .resizer:focus-visible::after { background: var(--brass); height: 72px; }
+/* la poignée s'allonge en glissant : un agrandissement vertical (transform), pas un changement de hauteur */
+.resizer::after { content: ''; position: absolute; left: 3px; top: 50%; width: 4px; height: 44px; transform: translateY(-50%); border-radius: 2px; background: var(--line); transition: background-color 150ms ease, transform 200ms var(--ease-out); }
+.resizer.on::after, .resizer:focus-visible::after { background: var(--brass); transform: translateY(-50%) scaleY(1.6); }
 .resizer:focus-visible { outline: none; }
 @media (hover: hover) and (pointer: fine) {
   .resizer:hover::after { background: var(--brass); }
