@@ -99,13 +99,20 @@ input, textarea { -webkit-user-select: text; user-select: text; } /* sinon iOS n
 }
 /* la table, avec par-dessus, en bas à gauche, les PV du méchant (VillainHud) */
 .play { position: relative; min-height: 0; min-width: 0; display: grid; }
+/* tablette en portrait : les PV du méchant sous la table (VillainHud) */
+@media (min-width: 701px) and (max-width: 900px) {
+  .play { grid-template-rows: minmax(0, 1fr) auto; }
+}
 /* les onglets (carte agrandie, journal) prennent ce que laissent les piles Rencontre */
 .side {
   position: relative; container-type: inline-size; min-height: 0;
   display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 12px;
   padding: max(14px, calc(40 * var(--u))) 0 12px;
 }
-.encrow { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; justify-items: center; }
+.encrow { display: grid; grid-template-columns: repeat(3, minmax(0, 100px)); gap: 8px; 
+    justify-items: stretch;
+    justify-content: center;
+}
 /* un libellé trop long pour sa colonne (« Défausse R. » sur tablette) se termine par des points de suspension */
 .encrow .zone-label { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 /* + le deck propre au scénario (Armes Expérimentales, Manigance Annexe) : quatre piles se partagent la
@@ -139,7 +146,8 @@ input, textarea { -webkit-user-select: text; user-select: text; } /* sinon iOS n
   position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   height: var(--h); padding: 0 calc(var(--cut) + 12px) var(--lip-h); border: 0; color: #fff; white-space: nowrap;
   font: italic 700 20px/1 var(--font-display); letter-spacing: -.02em; text-transform: uppercase;
-  background: linear-gradient(to bottom, var(--fill) calc(100% - var(--lip-h)), var(--lip) 0);
+  /* le liseré en bas, par-dessus le remplissage : une couleur (--fill) ou un dégradé (--fill-paint) */
+  background: linear-gradient(var(--lip), var(--lip)) bottom / 100% var(--lip-h) no-repeat, var(--fill-paint, var(--fill));
   clip-path: polygon(var(--cut) 0, 100% 0, calc(100% - var(--cut)) 100%, 0 100%);
   transition: transform 140ms var(--ease-out), filter 150ms ease;
 }
@@ -150,7 +158,8 @@ input, textarea { -webkit-user-select: text; user-select: text; } /* sinon iOS n
 @media (hover: hover) and (pointer: fine) {
   .slant:hover:not(:disabled) { filter: brightness(1.14); }
 }
-.slant.red { --fill: var(--red); --lip: var(--red-lip); }
+/* rouge : le dégradé « actif » de la maquette, du rouge sombre au rouge vif (Nouvelle partie, phase du méchant en cours) */
+.slant.red { --fill: var(--red); --fill-paint: linear-gradient(90deg, #990000, #ff0000); --lip: var(--red-lip); }
 .slant.blue { --fill: var(--blue); --lip: var(--blue-lip); }
 /* inactif (phase qui n'est pas en cours, onglet fermé) */
 .slant.dim { --fill: rgb(83 105 146 / .32); --lip: rgb(50 69 103 / .55); color: var(--muted); }
@@ -163,16 +172,21 @@ input, textarea { -webkit-user-select: text; user-select: text; } /* sinon iOS n
 
 /* ---------- piles, main ---------- */
 .drop { position: relative; min-width: 0; }
-.drop.over, .table.over { box-shadow: inset 0 0 0 2px rgb(255 194 25 / .7); }
+/* zone où l'on glisse une carte (table, main) : un filet blanc pointillé à 15 %, aux coins arrondis, pendant
+   qu'une carte passe dessus. Dessiné à part (::after) : arrondir la table elle-même rognerait les cartes de ses coins */
+.table.over::after, .hand.over::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  border: 1px dashed rgb(255 255 255 / .15); border-radius: 20px;
+}
 /* une pile : son nom au-dessus, sa carte du dessus dans un cadre, son nombre de cartes dessous */
 .pile { display: flex; flex-direction: column; align-items: center; gap: 6px; --pw: var(--hw); cursor: pointer; }
 .pile.e .zone-label { color: var(--label-enc); }
 .pile.i .zone-label { color: var(--yellow); }
 .encrow .pile { --pw: var(--sw); min-width: 0; }
-.pile.over { box-shadow: none; }
+/* le cadre de la pile, sur un fond plein : l'arc sous la main ne transparaît pas dans une pile vide */
 .pile .slot {
   width: calc(var(--pw) + 8px); height: calc(var(--pw) * 1.4 + 8px); position: relative;
-  border: 1px solid var(--frame); border-radius: 4px;
+  border: 1px solid var(--frame); border-radius: 4px; background: var(--bg);
   transition: transform 140ms var(--ease-out), border-color 150ms ease, box-shadow 150ms ease;
 }
 .pile.over .slot { border-color: var(--yellow); box-shadow: 0 0 0 1px var(--yellow), 0 0 22px rgb(255 194 25 / .3); }
@@ -183,7 +197,8 @@ input, textarea { -webkit-user-select: text; user-select: text; } /* sinon iOS n
 .pile .count { font-size: 14px; line-height: 1; color: var(--fg); letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
 .pile:active .slot { transform: scale(.97); }
 @media (hover: hover) and (pointer: fine) {
-  .pile:hover .slot { border-color: rgb(120 158 202 / .9); }
+  /* pas pendant qu'une carte glissée passe dessus : le cadre jaune l'emporte */
+  .pile:not(.over):hover .slot { border-color: rgb(120 158 202 / .9); }
 }
 
 /* la main : un éventail centré, les cartes se recouvrent davantage quand elles sont nombreuses */
@@ -232,10 +247,34 @@ input, textarea { -webkit-user-select: text; user-select: text; } /* sinon iOS n
 /* la face, cerclée d'un filet noir comme sur la maquette */
 .card .face, .card .back { position: absolute; inset: 0; border-radius: inherit; background: #0d0e1f center / cover no-repeat; box-shadow: inset 0 0 0 1px rgb(0 0 0 / .85); }
 .card .face.plain { display: grid; place-items: center; padding: 8%; border: 1px solid var(--line); text-align: center; font-family: var(--font-display); font-size: max(20px, calc(var(--w) * .13)); line-height: 1.1; overflow: hidden; }
-.card .mk { position: absolute; right: -7px; top: -7px; min-width: 24px; height: 24px; padding: 0 6px; border-radius: 12px; font-size: 14px; display: grid; place-items: center; box-shadow: 0 1px 3px rgb(0 0 0 / .6); color: #fff; }
-.card .mk.dmg { background: #d42a1c; }
-.card .mk.thr { background: #6d4fd0; right: auto; left: -7px; }
-.card .mk.tok { background: #4d5f86; top: auto; bottom: -7px; }
+/* les pions posés sur la carte (GameCard) : l'image du pion, son nombre au milieu ; un peu de travers, pas
+   au même endroit d'une carte à l'autre ; leur taille suit celle de la carte (plus grands sur la carte
+   agrandie). Ils laissent passer le pointeur vers la carte.
+   Le pion reste droit et porte l'ombre ; sa face (image et nombre), à l'intérieur, est penchée. Une ombre
+   (filter) posée sur l'élément penché lui-même le ferait dessiner flou : le navigateur le peint d'abord
+   dans une image intermédiaire, qu'il fait ensuite pivoter. Et l'ombre tombe ainsi toujours vers le bas. */
+.card .chip {
+  position: absolute; left: var(--x); top: var(--y); width: calc(var(--w) * .3); aspect-ratio: 375 / 376;
+  pointer-events: none; translate: -50% -50%;
+  filter: drop-shadow(0 2px 3px rgb(0 0 0 / .45));
+  transition: opacity 200ms var(--ease-out), scale 220ms var(--ease-out);
+}
+.card .chip-face { position: absolute; inset: 0; display: grid; place-items: center; background: center / contain no-repeat; rotate: var(--angle); }
+/* tailles reprises par les zones de pose de GameCard (TOKEN_ZONES) : à changer ensemble */
+.card .chip.threat { width: calc(var(--w) * .36); aspect-ratio: 615 / 549; }
+.card .chip.tokens { aspect-ratio: 443 / 454; }
+.card .chip-value {
+  font: italic 900 calc(var(--w) * .18)/1 var(--font-display); letter-spacing: -.02em; color: #fff;
+  -webkit-text-stroke: calc(var(--w) * .032) #14151f; paint-order: stroke fill;
+}
+/* le triangle : son nombre un peu plus bas, au centre de sa forme */
+.card .chip.threat .chip-value { margin-top: 16%; }
+/* un pion qui arrive (ajouté au clic droit, au clavier) se pose : il grossit et apparaît */
+@starting-style {
+  .card .chip { opacity: 0; scale: .6; }
+}
+/* badge sur une carte (le jeton Actif des Démolisseurs) */
+.card .mk { position: absolute; min-width: 24px; padding: 0 8px; border-radius: 13px; display: grid; place-items: center; box-shadow: 0 1px 3px rgb(0 0 0 / .6); color: #fff; }
 /* jeton Actif des Démolisseurs, centré sous le méchant */
 .card .mk.act { background: var(--yellow); color: var(--brass-ink); top: auto; bottom: -9px; right: auto; left: 50%; transform: translateX(-50%); font: italic 900 20px/1 var(--font-display); height: 26px; letter-spacing: -.01em; text-transform: uppercase; }
 /* cartes d'état (sonné, désorienté, tenace) empilées sur l'illustration, elles peuvent se cumuler */
@@ -327,6 +366,6 @@ input, textarea { -webkit-user-select: text; user-select: text; } /* sinon iOS n
   .hand-row .card { margin-left: 0; transform: none; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .hand-row .card, .btn, .slant, .pile .slot, .menu, .modal, .modal .box { transition: none; }
+  .hand-row .card, .btn, .slant, .pile .slot, .menu, .modal, .modal .box, .card .chip { transition: none; }
   .hand-row .card:hover { transform: translateY(calc(var(--off) * var(--off) * 2px)) rotate(calc(var(--off) * var(--fan-step))); }
 }

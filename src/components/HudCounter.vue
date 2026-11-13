@@ -1,6 +1,7 @@
 <script setup>
-// Un compteur en grand (maquette « RHINO II / 21 PV ») : son nom, modifiable, au-dessus de sa valeur, avec
-// − et + à côté. Sert aux PV du méchant et à la menace (VillainHud), et aux PV du héros (PlayerDock).
+// Un compteur en grand (maquette « RHINO II / 21 PV ») : son nom au-dessus de sa valeur, avec − et + à côté.
+// Sert aux PV du méchant et à la menace (VillainHud), et aux PV du héros (PlayerDock). Le nom de la menace
+// se modifie ; ceux du méchant et du héros sont un simple texte, qui ne prend jamais le focus.
 import { ref, computed, watch } from 'vue'
 import { useGameStore } from '../stores/game.js'
 
@@ -17,7 +18,9 @@ const props = defineProps({
    * Le seuil écrit à la fin du nom (« Menace /7 ») passe après la valeur (« 3/7 ») ; le nom complet
    * reparaît pendant qu'on le modifie (le moteur y lit le seuil de la manigance).
    */
-  splitLimit: Boolean
+  splitLimit: Boolean,
+  /** Le nom se modifie (un champ) ; sinon c'est un simple texte, qu'on ne peut ni sélectionner ni atteindre au clavier. */
+  renamable: { type: Boolean, default: true }
 })
 
 const gameStore = useGameStore()
@@ -47,22 +50,25 @@ watch(() => counter.value?.value, (value, previousValue) => {
 
 <template>
   <div v-if="counter" class="counter" :class="[tone, size]">
-    <!-- le champ prend la largeur de son nom (une copie cachée derrière) ; size="1" : sans lui, sa largeur par
-         défaut (une vingtaine de caractères) élargirait le compteur -->
     <span class="name">
-      <span class="sizer" aria-hidden="true">{{ shownLabel }}</span>
-      <input
-        :id="`counter-${index}`"
-        size="1"
-        :value="shownLabel"
-        aria-label="Nom du compteur"
-        @focus="isEditing = true"
-        @blur="isEditing = false"
-        @change="gameStore.renameCounter(index, $event.target.value)"
-      >
+      <!-- modifiable : le champ prend la largeur de son nom (une copie cachée derrière) ; size="1" : sans lui, sa
+           largeur par défaut (une vingtaine de caractères) élargirait le compteur -->
+      <template v-if="renamable">
+        <span class="sizer" aria-hidden="true">{{ shownLabel }}</span>
+        <input
+          :id="`counter-${index}`"
+          size="1"
+          :value="shownLabel"
+          aria-label="Nom du compteur"
+          @focus="isEditing = true"
+          @blur="isEditing = false"
+          @change="gameStore.renameCounter(index, $event.target.value)"
+        >
+      </template>
+      <span v-else class="label">{{ shownLabel }}</span>
     </span>
     <div class="value-row">
-      <output ref="valueElement" class="value" :for="`counter-${index}`">{{ counter.value }}<small v-if="limit" class="limit">{{ limit }}</small><small v-if="unit">{{ unit }}</small></output>
+      <output ref="valueElement" class="value" :for="renamable ? `counter-${index}` : undefined">{{ counter.value }}<small v-if="limit" class="limit">{{ limit }}</small><small v-if="unit">{{ unit }}</small></output>
       <span class="steps">
         <button type="button" class="slant step" :aria-label="`${counter.label} : retirer 1`" @click="gameStore.changeCounter(index, -1)">−</button>
         <button type="button" class="slant step" :aria-label="`${counter.label} : ajouter 1`" @click="gameStore.changeCounter(index, 1)">+</button>
@@ -87,12 +93,19 @@ watch(() => counter.value?.value, (value, previousValue) => {
   grid-area: 1 / 1; padding: 0 .12em .04em 0; white-space: pre;
   font: italic 900 var(--name-size)/1 var(--font-display); letter-spacing: -.02em; text-transform: uppercase; text-shadow: var(--shadow);
 }
-.sizer { visibility: hidden; overflow: hidden; }
-input { width: 100%; min-width: 2ch; background: transparent; border: 0; border-bottom: 2px solid transparent; border-radius: 0; color: #fff; }
+/* le méchant : ses lettres blanches cernées d'un contour rouge de 3 px — un trait de 6 px peint avant la
+   lettre (paint-order), dont la moitié intérieure passe dessous */
+.counter.villain .name > *, .counter.villain .value { -webkit-text-stroke: 6px var(--red); paint-order: stroke fill; }
+/* un champ coupe ce qui sort de sa zone de texte : la copie cachée, plus large que le nom, lui laisse la
+   place du contour à gauche (le texte du champ est décalé d'autant), et à droite de la pente de l'italique,
+   de l'ombre portée et du contour */
+.sizer { visibility: hidden; overflow: hidden; padding-left: 4px; padding-right: .45em; }
+/* le nom non modifiable, aligné comme le texte du champ (décalé pour la place du contour) */
+.label { padding-left: 4px; cursor: default; }
+/* pas d'effet au survol, flèche ordinaire ; le curseur de texte et le trait jaune seulement pendant la modification */
+input { width: 100%; min-width: 2ch; background: transparent; border: 0; border-bottom: 2px solid transparent; border-radius: 0; color: #fff; cursor: default; text-indent: 4px; }
+input:focus { cursor: text; }
 input:focus-visible { outline: none; border-bottom-color: var(--yellow); }
-@media (hover: hover) and (pointer: fine) {
-  input:hover:not(:focus) { border-bottom-color: rgb(255 255 255 / .25); }
-}
 /* la valeur décalée vers la droite, en escalier sous le nom, comme sur la maquette */
 .value-row { display: flex; align-items: center; gap: max(8px, calc(16 * var(--u))); margin-left: calc(var(--name-size) * .5); }
 .value {
@@ -109,6 +122,8 @@ input:focus-visible { outline: none; border-bottom-color: var(--yellow); }
 @media (pointer: coarse) {
   .step, .counter.m .step { --h: 44px; padding-inline: 28px; }
   .step + .step, .counter.m .step + .step { margin-left: -17px; }
+  /* le champ du nom, plus haut sous le doigt (44 px) sans rien déplacer : sa marge négative reprend sa hauteur */
+  input { padding-block: 10px; margin-block: -10px; }
 }
 /* téléphones : le compteur reste lisible sans couvrir la table */
 @media (max-width: 700px) {

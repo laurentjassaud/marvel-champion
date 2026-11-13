@@ -1,5 +1,5 @@
 // Adresses des images : la face d'une carte (et ses faces B et C), le dos des cartes, les cartes d'état,
-// l'illustration du méchant en décor de la table.
+// le décor de la table (la ville de nuit, l'illustration du méchant).
 
 import { definitionOf, isEncounterCard } from '../game/engine.js'
 import { DEFINITION_BY_ID } from '../game/data.js'
@@ -41,8 +41,22 @@ export function cardBackUrl(card) {
  */
 const VILLAIN_ART_FILES = { rhino: 'villains/rhino.png' }
 
+/** Le fond de la table (maquette) : une ville de nuit vue d'en bas, 1672 × 941 px. */
+export const CITY_BACKGROUND_URL = `${BASE_URL}backgrounds/ville-nuit.png`
+
 /** Illustration du méchant de ce scénario, ou null s'il n'en a pas. */
 export const villainArtUrl = scenarioId => (VILLAIN_ART_FILES[scenarioId] ? `${BASE_URL}${VILLAIN_ART_FILES[scenarioId]}` : null)
+
+/** Nom de fichier de l'image de chaque pion (rond pour les dégâts, triangle pour la menace, carré pour les jetons). */
+const TOKEN_FILES = { damage: 'degats', threat: 'menace', tokens: 'jetons' }
+
+/**
+ * Image d'un pion posé sur une carte (fond transparent ; son nombre s'écrit par-dessus, GameCard), dans la
+ * version préparée pour sa taille (scripts/resize-tokens.py) : 'table' pour les cartes de la table et de la
+ * main, 'zoom' pour la carte agrandie. Le navigateur rendrait flou un pion très détaillé qu'il réduirait
+ * lui-même de dix fois.
+ */
+export const tokenImageUrl = (kind, usage) => `${BASE_URL}tokens/${TOKEN_FILES[kind]}-${usage}.png`
 
 /** Image d'une carte d'état posée sur un personnage (stunned, confused, tough). */
 export const statusImageUrl = statusId => `${BASE_URL}status/${statusId}.png`

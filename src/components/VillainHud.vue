@@ -30,7 +30,7 @@ onBeforeUnmount(() => resizeObserver?.disconnect())
 
 <template>
   <section ref="hudElement" class="hud villain-hud" aria-label="Méchant et manigance principale">
-    <HudCounter :index="1" tone="villain" size="xl" unit="PV" />
+    <HudCounter :index="1" tone="villain" size="xl" unit="PV" :renamable="false" />
     <HudCounter :index="2" tone="threat" size="m" split-limit />
   </section>
 </template>
@@ -40,7 +40,8 @@ onBeforeUnmount(() => resizeObserver?.disconnect())
    dessous se reprend à travers le texte */
 .villain-hud {
   position: absolute; z-index: 2; left: max(12px, calc(48 * var(--u))); bottom: max(12px, calc(70 * var(--u)));
-  min-width: max(200px, calc(400 * var(--u)));
+  /* assez large pour sa ligne de PV avant même qu'elle s'affiche : la partie d'exemple se met en place avant */
+  min-width: max(300px, calc(420 * var(--u)));
   display: grid; justify-items: start; gap: max(8px, calc(18 * var(--u))); pointer-events: none;
 }
 .villain-hud :deep(input), .villain-hud :deep(button) { pointer-events: auto; }
@@ -49,6 +50,12 @@ onBeforeUnmount(() => resizeObserver?.disconnect())
 /* arrivée (une fois par partie) : le nom, puis les PV, puis la menace montent en place */
 .villain-hud > * { animation: hud-enter 520ms var(--ease-out) both; }
 .villain-hud > :nth-child(2) { animation-delay: 70ms; }
+/* tablette en portrait : la table est étroite, le bloc passe sous elle, sur une ligne (la rangée du héros
+   garde toute la largeur) */
+@media (min-width: 701px) and (max-width: 900px) {
+  .villain-hud { position: static; min-width: 0; display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 32px; padding: 10px 0 4px 12px; }
+  .villain-hud > :last-child { margin-left: 0; }
+}
 /* téléphones : le bloc passe au-dessus de la table, sur une ligne */
 @media (max-width: 700px) {
   .villain-hud { position: static; order: -1; min-width: 0; display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 24px; padding: 4px 0 10px; }

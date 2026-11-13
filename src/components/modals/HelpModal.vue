@@ -27,7 +27,7 @@ const SHORTCUT_GROUPS = [
         </template>
       </div>
     </div>
-    <p class="note">Les dégâts ne vont que sur les personnages (identité, alliés, méchant, sbires), la menace que sur les manigances, les jetons sur toutes les autres cartes. Dégâts sur le méchant ou sur votre identité : ses PV, écrits en grand (le méchant à gauche de la table, vous en bas à droite), baissent. Menace sur la manigance principale : la menace, sous les PV du méchant, monte. Ailleurs, un jeton s'affiche sur la carte (rouge pour les dégâts, violet pour la menace, gris pour les jetons). Sans carte visée, G frappe le méchant et M agit sur la manigance principale.</p>
+    <p class="note">Les dégâts ne vont que sur les personnages (identité, alliés, méchant, sbires), la menace que sur les manigances, les jetons sur toutes les autres cartes. Dégâts sur le méchant ou sur votre identité : ses PV, écrits en grand (le méchant à gauche de la table, vous en bas à droite), baissent. Menace sur la manigance principale : la menace, sous les PV du méchant, monte, et un pion triangle la montre aussi sur la carte. Ailleurs, un pion se pose sur la carte, un peu de travers : rond pour les dégâts, triangle pour la menace, carré pour les jetons ; il se voit aussi, en grand, sur la carte agrandie. Sans carte visée, G frappe le méchant et M agit sur la manigance principale.</p>
     <div class="row"><button type="button" class="btn primary" @click="ui.closeModal()">Fermer</button></div>
   </BaseModal>
 </template>

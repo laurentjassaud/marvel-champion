@@ -72,7 +72,9 @@ onMounted(() => { if (!gameStore.isReady) gameStore.startExampleGame() })
     <MulliganModal v-else-if="ui.modal?.type === 'mulligan' && gameStore.isReady" />
     <HelpModal v-else-if="ui.modal?.type === 'help'" />
     <RestartModal v-else-if="ui.modal?.type === 'restart' && gameStore.isReady" />
-    <VillainModal v-else-if="ui.modal?.type === 'villain' && gameStore.isReady" :key="ui.modal.result.kind + ui.modal.result.fromCardId" />
-    <SchemeModal v-else-if="ui.modal?.type === 'scheme' && gameStore.isReady" :key="ui.modal.result.kind + ui.modal.result.fromCardId" />
+    <!-- une clé par changement présenté (la fenêtre repart de zéro pour le suivant), préfixée : deux branches
+         d'un même v-if ne peuvent pas avoir la même clé -->
+    <VillainModal v-else-if="ui.modal?.type === 'villain' && gameStore.isReady" :key="`villain-${ui.modal.result.kind}-${ui.modal.result.fromCardId}`" />
+    <SchemeModal v-else-if="ui.modal?.type === 'scheme' && gameStore.isReady" :key="`scheme-${ui.modal.result.kind}-${ui.modal.result.fromCardId}`" />
   </div>
 </template>

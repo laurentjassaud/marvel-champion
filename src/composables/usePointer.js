@@ -76,6 +76,8 @@ export function usePointer() {
     const target = pressableUnder(event.target)
     if (!target || target.closest('.menu')) return
     const hit = cardUnder(event.target)
+    // la carte appuyée est sélectionnée tout de suite (filet jaune), sans attendre que le bouton remonte
+    if (hit) ui.selectCard(hit.card.id)
     const rect = hit?.element.getBoundingClientRect()
     press = {
       hit,

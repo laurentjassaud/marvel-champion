@@ -37,11 +37,14 @@ function moveToNextTab(event) {
 <template>
   <section class="side-tabs">
     <div ref="tabBar" class="tabbar" role="tablist" aria-label="Panneau latéral">
-      <button v-for="tab in TABS" :id="`tab-${tab.id}`" :key="tab.id" type="button" role="tab" class="slant tab" :class="{ dim: ui.sideTab !== tab.id }"
-        :aria-selected="ui.sideTab === tab.id" :aria-controls="`pane-${tab.id}`" :tabindex="ui.sideTab === tab.id ? 0 : -1"
-        @click="ui.sideTab = tab.id" @keydown.left.prevent="moveToNextTab" @keydown.right.prevent="moveToNextTab">
+      <button v-for="tab in TABS" :id="`tab-${tab.id}`" :key="tab.id" type="button" role="tab" class="slant tab"
+        :class="{ dim: ui.sideTab !== tab.id }" :aria-selected="ui.sideTab === tab.id" :aria-controls="`pane-${tab.id}`"
+        :tabindex="ui.sideTab === tab.id ? 0 : -1" @click="ui.sideTab = tab.id" @keydown.left.prevent="moveToNextTab"
+        @keydown.right.prevent="moveToNextTab">
         {{ tab.label }}
-        <span v-if="tab.id === 'log' && unreadCount" class="badge" :title="`${unreadCount} nouvelle${unreadCount > 1 ? 's' : ''} entrée${unreadCount > 1 ? 's' : ''}`">{{ unreadCount > 9 ? '9+' : unreadCount }}</span>
+        <span v-if="tab.id === 'log' && unreadCount" class="badge"
+          :title="`${unreadCount} nouvelle${unreadCount > 1 ? 's' : ''} entrée${unreadCount > 1 ? 's' : ''}`">{{
+            unreadCount > 9 ? '9+' : unreadCount }}</span>
       </button>
     </div>
     <div class="pane">
@@ -53,18 +56,80 @@ function moveToNextTab(event) {
 
 <style scoped>
 /* les onglets en biais de la maquette au-dessus d'un panneau translucide posé sur la table */
-.side-tabs { display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 6px; min-height: 0; }
-.tabbar { display: flex; }
-.tab { --h: 36px; --lip-h: 4px; padding-inline: 26px; }
-.tab + .tab { margin-left: -14px; }
-.tab[aria-selected="true"] { cursor: default; }
-.tab[aria-selected="true"]:active { transform: none; }
-.pane {
-  display: grid; min-height: 0; overflow: hidden;
-  background: var(--panel-glass); border: 1px solid var(--line); border-radius: 4px; box-shadow: inset 0 1px 0 rgb(255 255 255 / .05);
+.side-tabs {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 6px;
+  min-height: 0;
 }
-.badge { min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; background: var(--yellow); color: var(--brass-ink); font: normal 600 14px/1 var(--font-text); letter-spacing: 0; display: grid; place-items: center; }
+
+.tabbar {
+  display: flex;
+}
+
+.tab {
+  --h: 36px;
+  --lip-h: 4px;
+  padding-inline: 26px;
+}
+
+.tab+.tab {
+  margin-left: -14px;
+}
+
+.tab[aria-selected="true"] {
+  cursor: default;
+}
+
+.tab[aria-selected="true"]:active {
+  transform: none;
+}
+
+.pane {
+  /* une seule rangée, de la hauteur du panneau : la carte agrandie s'y ajuste (CardPreview) */
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  min-height: 0;
+  overflow: hidden;
+  /* la place du filet, dessiné par ::before */
+  padding: 1px;
+  border-radius: 12px;
+}
+
+/* le fond et le filet du panneau s'estompent de haut en bas, de 100 % à 0 % d'opacité ; le dégradé est un
+   masque posé sur ce calque seulement : la carte agrandie et le journal restent nets */
+.pane::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border: 1px solid var(--line);
+  border-radius: inherit;
+  background: var(--panel-glass);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / .05);
+  -webkit-mask-image: linear-gradient(to bottom, #000, transparent);
+  mask-image: linear-gradient(to bottom, #000, transparent);
+  pointer-events: none;
+}
+
+.badge {
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 11px;
+  background: var(--yellow);
+  color: var(--brass-ink);
+  font: normal 600 14px/1 var(--font-text);
+  letter-spacing: 0;
+  display: grid;
+  place-items: center;
+}
+
 @media (pointer: coarse) {
-  .tab { --h: 44px; }
+  .tab {
+    --h: 44px;
+  }
 }
 </style>

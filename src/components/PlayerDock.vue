@@ -1,7 +1,7 @@
 <script setup>
-// Le bandeau du joueur, en bas de l'écran (maquette) : à gauche ce qu'on fait de sa main (piocher,
-// mulligan, carte au hasard) et ses piles ; au milieu sa main en éventail ; à droite le tour, les deux
-// phases et ses PV en grand.
+// Le bandeau du joueur, en bas de l'écran (maquette) : à gauche ses piles ; au milieu sa main en éventail ;
+// à droite le tour, les deux phases et ses PV en grand, et dessous ce qu'on fait de sa main (carte au hasard,
+// mulligan, piocher) en onglets posés sur la bande rouge du bas de l'écran.
 import { computed, nextTick } from 'vue'
 import CardPile from './CardPile.vue'
 import HandStrip from './HandStrip.vue'
@@ -27,25 +27,12 @@ async function pickRandomCard() {
 <template>
   <footer class="dock" :class="{ inv: gameStore.hasInvocationDeck }">
     <div class="dock-left">
-      <div class="actions" role="group" aria-label="Actions sur la main">
-        <div class="zone-label">Main<span v-if="handCount"> · {{ handCount }}</span></div>
-        <button type="button" class="slant" @click="gameStore.drawCard()">Piocher<kbd>D</kbd></button>
-        <button
-          type="button"
-          class="slant"
-          :disabled="!gameStore.canMulligan"
-          :title="gameStore.canMulligan ? 'Défausser des cartes de la main de départ et repiocher' : 'Seulement au tour 1, une fois par partie'"
-          @click="ui.openModal('mulligan')"
-        >
-          Mulligan
-        </button>
-        <button type="button" class="slant" :disabled="!handCount" title="Marque en rouge une carte de la main tirée au hasard" @click="pickRandomCard">Au hasard</button>
-      </div>
       <div class="piles">
         <CardPile zone="playerDeck" label="Paquet" variant="p" title="Clic : piocher" />
         <CardPile zone="playerDiscard" label="Défausse" variant="p" title="Clic : voir" />
         <template v-if="gameStore.hasInvocationDeck">
-          <CardPile zone="invocationDeck" label="Invocation" variant="i" title="Clic : lancer l'invocation du dessus · appui long ou clic droit : autres choix" />
+          <CardPile zone="invocationDeck" label="Invocation" variant="i"
+            title="Clic : lancer l'invocation du dessus · appui long ou clic droit : autres choix" />
           <CardPile zone="invocationDiscard" label="Défausse I." variant="i" title="Clic : voir" />
         </template>
       </div>
@@ -58,69 +45,235 @@ async function pickRandomCard() {
         <div class="turn" aria-live="polite"><span>Tour</span><output>{{ gameStore.turn }}</output></div>
         <!-- le round va phase du héros → phase du méchant → phase du héros du round suivant ; l'onglet allumé est la phase en cours -->
         <div class="phases" role="group" aria-label="Phase du tour">
-          <button
-            type="button"
-            class="slant"
-            :class="gameStore.phase === 'hero' ? 'blue' : 'dim'"
+          <button type="button" class="slant" :class="gameStore.phase === 'hero' ? 'blue' : 'dim'"
             :aria-pressed="gameStore.phase === 'hero'"
             :title="gameStore.phase === 'hero' ? 'Phase en cours : jouez votre tour' : 'Tour suivant'"
-            @click="gameStore.startHeroPhase()"
-          >
+            @click="gameStore.startHeroPhase()">
             <span><span class="long">Phase du </span>héros</span><kbd>N</kbd>
           </button>
-          <button
-            type="button"
-            class="slant"
-            :class="gameStore.phase === 'villain' ? 'red' : 'dim'"
+          <button type="button" class="slant" :class="gameStore.phase === 'villain' ? 'red' : 'dim'"
             :aria-pressed="gameStore.phase === 'villain'"
             :title="gameStore.phase === 'villain' ? 'Phase en cours' : 'Complète votre main et redresse vos cartes ; la phase du méchant se joue ensuite à la main'"
-            @click="gameStore.startVillainPhase()"
-          >
+            @click="gameStore.startVillainPhase()">
             <span><span class="long">{{ villainPhaseStart }}</span>{{ villainPhaseNoun }}</span><kbd>V</kbd>
           </button>
         </div>
       </div>
-      <HudCounter :index="0" tone="hero" size="l" unit="PV" />
+      <HudCounter :index="0" tone="hero" size="l" unit="PV" :renamable="false" />
+      <!-- les onglets de la main, posés sur la bande rouge, dans l'ordre de la maquette -->
+      <div class="actions" role="group" aria-label="Actions sur la main">
+        <button type="button" class="slant foot random" :disabled="!handCount"
+          title="Marque en rouge une carte de la main tirée au hasard" @click="pickRandomCard">Au hasard</button>
+        <button type="button" class="slant foot mulligan" :disabled="!gameStore.canMulligan"
+          :title="gameStore.canMulligan ? 'Défausser des cartes de la main de départ et repiocher' : 'Seulement au tour 1, une fois par partie'"
+          @click="ui.openModal('mulligan')">
+          Mulligan
+        </button>
+        <button type="button" class="slant foot draw" @click="gameStore.drawCard()">Piocher<kbd>D</kbd></button>
+      </div>
     </div>
   </footer>
 </template>
 
 <style scoped>
-/* trois colonnes : les côtés à leur largeur, la main au milieu ; elle se resserre quand la place manque */
+/* trois colonnes : les côtés à leur largeur, la main au milieu ; elle se resserre quand la place manque.
+   Le bandeau va jusqu'au bas de l'écran : la bande rouge et les onglets de la main y sont posés */
 .dock {
-  position: relative; z-index: 2; display: grid; align-items: end;
-  grid-template-columns: minmax(max-content, 1fr) minmax(calc(var(--hw) * 2.2), calc(var(--hw) * 6)) minmax(max-content, 1fr);
-  column-gap: max(16px, calc(36 * var(--u)));
-  padding: 0 max(12px, calc(20 * var(--u))) max(10px, calc(27 * var(--u)));
+  position: relative;
+  z-index: 2;
+  display: grid;
+  align-items: end;
+  grid-template-columns: minmax(max-content, 1fr) minmax(calc(var(--hw) * 2.2), calc(var(--hw) * 5)) minmax(max-content, 1fr);
+  column-gap: max(16px, calc(24 * var(--u)));
+  padding: 0 max(12px, calc(20 * var(--u)));
 }
-.dock-left { justify-self: end; display: flex; align-items: flex-end; gap: max(16px, calc(40 * var(--u))); }
-.actions { display: grid; justify-items: stretch; gap: 6px; }
-.actions .zone-label { padding-left: 4px; }
-.actions .slant { --h: 36px; --lip-h: 4px; justify-content: flex-start; padding-left: calc(var(--cut) + 8px); }
-.piles { display: flex; align-items: flex-end; gap: max(10px, calc(10 * var(--u))); }
-.dock-right { justify-self: start; display: grid; justify-items: start; gap: max(8px, calc(14 * var(--u))); }
-.turn-row { display: flex; align-items: center; gap: 14px; }
-.turn { display: flex; align-items: baseline; gap: 6px; }
-.turn span { font: italic 700 20px/1 var(--font-display); letter-spacing: -.01em; text-transform: uppercase; color: var(--muted); }
-.turn output { font: italic 900 32px/1 var(--font-display); font-variant-numeric: tabular-nums; }
+
+/* la bande rouge au ras de l'écran (maquette : 9 px visibles), sous les onglets, par-dessus l'arc de la main */
+.dock::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 9px;
+  background: #a21212;
+}
+
+/* les piles, à l'écart de la main, au ras de la bande rouge (maquette) */
+.dock-left {
+  justify-self: end;
+  margin: 0 calc(190 * var(--u)) max(12px, calc(10 * var(--u))) 0;
+}
+
+.piles {
+  display: flex;
+  align-items: flex-end;
+  gap: max(10px, calc(10 * var(--u)));
+}
+
+/* le tour et les PV du héros, bien à l'écart de l'éventail : sa dernière carte, inclinée, déborde de sa colonne */
+.dock-right {
+  --hud-gap: max(28px, calc(60 * var(--u)));
+  justify-self: start;
+  display: grid;
+  justify-items: start;
+  gap: max(8px, calc(14 * var(--u)));
+  margin-left: var(--hud-gap);
+}
+
+/* les onglets de la main : ils dépassent à gauche sous la fin de l'éventail, comme sur la maquette (l'écart
+   ajouté au bloc du héros est repris, ils restent à leur place) */
+.actions {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: flex-end;
+  margin-left: calc(-80 * var(--u) - var(--hud-gap));
+}
+
+/* onglets du bas : le liseré passe en haut (le bord libre), le texte suit la maquette (14 et 16 px) */
+.foot {
+  --lip-h: 4px;
+  --h: 34px;
+  justify-content: center;
+  padding: 0 0 var(--lip-h);
+  font-size: 14px;
+  background: linear-gradient(var(--lip), var(--lip)) top / 100% var(--lip-h) no-repeat, var(--fill-paint, var(--fill));
+}
+
+.foot.random {
+  --fill: #990000;
+  --lip: #860909;
+  width: 120px;
+}
+
+.foot.mulligan {
+  --fill: #a21212;
+  --lip: #990000;
+  width: 99px;
+  margin-left: -14px;
+}
+
+/* Piocher, le plus haut : le dégradé rouge « actif » ; la touche D écrite comme le reste du mot */
+.foot.draw {
+  --h: 55px;
+  --lip-h: 7px;
+  --fill-paint: linear-gradient(90deg, #990000, #ff0000);
+  --lip: #a21212;
+  width: 112.75px;
+  margin-left: -13.75px;
+  padding: 0;
+  gap: .22em;
+  font-size: 16px;
+}
+
+.foot.draw kbd {
+  font: inherit;
+  opacity: 1;
+}
+
+/* indisponible : seul le texte s'efface (20 % de blanc), la forme reste */
+.foot:disabled {
+  opacity: 1;
+  color: rgb(255 255 255 / .2);
+}
+
+.turn-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.turn {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.turn span {
+  font: italic 700 20px/1 var(--font-display);
+  letter-spacing: -.01em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.turn output {
+  font: italic 900 32px/1 var(--font-display);
+  font-variant-numeric: tabular-nums;
+}
+
 /* les deux phases, en onglets bord à bord ; celle en cours est allumée (bleu héros, rouge méchant) */
-.phases { display: flex; }
-.phases .slant + .slant { margin-left: -16px; }
-.phases .slant[aria-pressed="true"] { cursor: default; }
-.phases .slant[aria-pressed="true"]:active { transform: none; }
+.phases {
+  display: flex;
+}
+
+.phases .slant+.slant {
+  margin-left: -16px;
+}
+
+.phases .slant[aria-pressed="true"] {
+  cursor: default;
+}
+
+.phases .slant[aria-pressed="true"]:active {
+  transform: none;
+}
+
 /* écrans moins larges : « Héros » et « Méchant » suffisent */
 @media (max-width: 1500px) {
-  .long { display: none; }
+  .long {
+    display: none;
+  }
 }
+
 @media (max-width: 1100px) {
-  .dock { column-gap: 14px; }
-  .actions .zone-label { display: none; }
+  .dock {
+    column-gap: 14px;
+  }
 }
+
+/* tablette en portrait : la main prend toute la largeur ; dessous, les piles à gauche, le héros à droite */
+@media (min-width: 701px) and (max-width: 900px) {
+  .dock { grid-template-columns: auto 1fr; grid-template-areas: "hand hand" "left right"; row-gap: 4px; }
+  .hand { grid-area: hand; }
+  .dock-left { grid-area: left; justify-self: start; margin-right: 0; }
+  .dock-right { grid-area: right; justify-self: end; }
+}
+
+/* tactile : les petits onglets un peu plus hauts, pour le doigt */
+@media (pointer: coarse) {
+  .foot {
+    --h: 40px;
+  }
+
+  .foot.draw {
+    --h: 55px;
+  }
+}
+
 /* téléphones : une rangée par partie, la main d'abord */
 @media (max-width: 700px) {
-  .dock { grid-template-columns: 1fr; row-gap: 12px; padding-top: 8px; }
-  .hand { order: -1; }
-  .dock-left { justify-self: stretch; justify-content: space-between; }
-  .dock-right { justify-self: stretch; }
+  .dock {
+    grid-template-columns: 1fr;
+    row-gap: 12px;
+    padding-top: 8px;
+  }
+
+  .hand {
+    order: -1;
+  }
+
+  .dock-left {
+    justify-self: stretch;
+  }
+
+  .dock-right {
+    justify-self: stretch;
+    margin-left: 0;
+  }
+
+  .actions {
+    margin-left: 0;
+  }
 }
 </style>

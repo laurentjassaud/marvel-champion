@@ -123,7 +123,7 @@ export function threatThreshold(game) {
 function mainSchemeCompleted(game) {
   const kangStage3 = kangStage3Scheme(game)
   if (kangStage3) return completeKangStage3(game) ?? undefined
-  const mainScheme = mainSchemesInPlay(game).find(card => card !== masterOfTimeScheme(game))
+  const mainScheme = threatCounterScheme(game)
   if (!mainScheme) return undefined
   const nextStage = scenarioRulesOf(game).kang ? null : nextMainSchemeStage(game, mainScheme)
   const reachedThreat = game.counters[2].value
@@ -330,6 +330,12 @@ const kangSchemeAtStage = (game, stage) =>
 
 /** Le Maître du Temps sur la table : le stade 2, qui attend pendant le stade 3 ; null sinon. */
 export const masterOfTimeScheme = game => kangSchemeAtStage(game, '2A')
+
+/**
+ * La manigance principale dont la menace est le compteur de menace (game.counters[2]) : celle en jeu, hors
+ * Le Maître du Temps de Kang (qui garde, lui, ses pions Accélération en jetons) ; null s'il n'y en a pas.
+ */
+export const threatCounterScheme = game => mainSchemesInPlay(game).find(card => card !== masterOfTimeScheme(game)) ?? null
 
 /** Le stade 3 en jeu ; null sinon. */
 export const kangStage3Scheme = game => kangSchemeAtStage(game, '3A')

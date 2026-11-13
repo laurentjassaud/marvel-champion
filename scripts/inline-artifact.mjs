@@ -1,7 +1,7 @@
 // Transforme la construction `--mode artifact` en une seule page autonome (JS et CSS intégrés dans la page),
 // sans le squelette <html>/<head>/<body> que l'hébergeur d'artefacts de Claude ajoute lui-même.
 // Les images des cartes ne sont pas intégrées : elles sont publiées à côté de la page (cards/<boîte>/*.jpg,
-// backs/*.jpg, status/*.png et villains/*.png).
+// backs/*.jpg, status/*.png, tokens/*.png, villains/*.png et backgrounds/*.png).
 import { readFileSync, writeFileSync } from 'node:fs'
 
 const BUILD_FOLDER = 'dist-artifact'

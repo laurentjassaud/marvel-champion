@@ -1,8 +1,14 @@
 <script setup>
-// La barre du haut (maquette) : le titre dans son bandeau rouge, l'affiche de la partie (« Spider-Man VS
-// Rhino »), puis les onglets en biais : poser un pion, taille des cartes, aide, recommencer, nouvelle partie.
+// La barre du haut (maquette) : le titre dans son bandeau rouge, l'affiche de la partie (le héros sur un
+// bandeau rouge, le logo VS, le méchant en cours sur un bandeau bleu acier, le badge Expert), puis les
+// onglets en biais : poser un pion, taille des cartes, aide, recommencer, nouvelle partie.
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 import brandShapeUrl from '../assets/table/brand-shape.svg'
+import vsLogoUrl from '../assets/table/vs-logo.svg'
+import expertFrameUrl from '../assets/table/expert-frame.svg'
+import expertDotUrl from '../assets/table/expert-dot.svg'
+import expertBarUrl from '../assets/table/expert-bar.svg'
+import expertHookUrl from '../assets/table/expert-hook.svg'
 import { useGameStore } from '../stores/game.js'
 import { useUiStore } from '../stores/ui.js'
 
@@ -42,7 +48,17 @@ onBeforeUnmount(() => {
       <span class="brand-title">Marvel Champions</span>
     </div>
     <p v-if="gameStore.matchup" class="matchup" :title="gameStore.subtitle">
-      {{ gameStore.matchup.hero }} <span class="vs">vs</span> {{ gameStore.matchup.villain }}<span v-if="gameStore.matchup.expert" class="expert"> · expert</span>
+      <span class="plate hero">{{ gameStore.matchup.hero }}</span>
+      <img class="vs" :src="vsLogoUrl" alt="contre" width="31.0062" height="25.987" draggable="false">
+      <span class="plate villain">{{ gameStore.matchup.villain }}</span>
+      <!-- le badge Expert de la maquette : son cadre, son point, son mot, son trait et son crochet -->
+      <span v-if="gameStore.matchup.expert" class="expert">
+        <img class="expert-frame" :src="expertFrameUrl" alt="" width="88.1245" height="26" draggable="false">
+        <img class="expert-dot" :src="expertDotUrl" alt="" width="6" height="6" draggable="false">
+        <span class="expert-label">Expert</span>
+        <img class="expert-bar" :src="expertBarUrl" alt="" width="56" height="3" draggable="false">
+        <img class="expert-hook" :src="expertHookUrl" alt="" width="7.72742" height="7" draggable="false">
+      </span>
     </p>
     <div class="sp" />
     <nav class="tabs" aria-label="Partie">
@@ -84,12 +100,36 @@ onBeforeUnmount(() => {
   position: absolute; left: 0; top: 0; width: 272px; height: 68px; display: grid; place-items: center;
   font: italic 700 36px/1 var(--font-display); letter-spacing: -.02em; text-transform: uppercase; color: #fff; white-space: nowrap;
 }
-.matchup {
-  margin: 0 0 0 28px; align-self: center; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  font: italic 700 24px/1 var(--font-display); letter-spacing: -.02em; text-transform: uppercase;
+/* l'affiche : elle commence sous le bout du bandeau du titre (son début est transparent) ; mesures de la maquette */
+.matchup { position: relative; display: flex; align-items: center; height: 48px; margin: 0 0 0 -32px; min-width: 0; white-space: nowrap; }
+/* un bandeau de 40 px en biais derrière chaque nom, en dégradé qui s'efface vers l'extérieur ; ils s'ouvrent en V
+   de part et d'autre du VS */
+.plate {
+  display: flex; align-items: center; height: 40px;
+  font: italic 700 28px/1 var(--font-display); letter-spacing: -.02em; text-transform: uppercase; color: #fff;
 }
-.vs { color: var(--yellow); }
-.expert { color: var(--muted); }
+.plate.hero {
+  padding: 0 28px 0 50px;
+  background: linear-gradient(to left, #990000, rgb(255 0 0 / 0) 92.79%);
+  clip-path: polygon(0 0, calc(100% - 24.25px) 0, 100% 100%, 24.25px 100%);
+}
+.plate.villain {
+  margin-left: 6px; padding: 0 85px 0 30px;
+  background: linear-gradient(to right, #324567, rgb(101 103 198 / 0) 92.79%);
+  clip-path: polygon(24.25px 0, 100% 0, calc(100% - 24.25px) 100%, 0 100%);
+}
+.vs { flex: none; width: 31.0062px; height: 25.987px; margin-left: -1px; }
+/* le badge Expert, posé sur la fin du bandeau du méchant ; son mot fait 16 px, comme sur la maquette */
+.expert { position: relative; top: 2px; flex: none; width: 95.5px; height: 26px; margin-left: -63px; }
+.expert > img { position: absolute; max-width: none; }
+.expert-frame { left: 3.686px; top: 0; width: 88.1245px; height: 26px; transform: scaleY(-1); }
+.expert-dot { left: 20px; top: 8px; width: 6px; height: 6px; }
+.expert-bar { left: 35px; top: 23px; width: 56px; height: 3px; }
+.expert-hook { left: 84px; top: 17px; width: 7.72742px; height: 7px; }
+.expert-label {
+  position: absolute; left: 13px; top: -9px; width: 79px; height: 40px; display: grid; place-items: center;
+  font: italic 500 16px/1 var(--font-display); letter-spacing: -.02em; text-transform: uppercase; color: #6567c6;
+}
 /* les onglets : 55 px de haut (7 px de liseré sous la barre), en biais, posés bord à bord */
 .tabs { display: flex; flex: none; margin-right: 20px; }
 .tab { --h: 55px; --lip-h: 7px; --cut: 24.25px; padding-inline: 37px; font-size: 24px; }
@@ -107,8 +147,11 @@ onBeforeUnmount(() => {
 }
 .size-panel label { color: var(--muted); }
 .size-panel input { width: 100%; accent-color: var(--yellow); }
-/* écran moins large : l'affiche s'efface, puis le titre et les onglets se resserrent */
-@media (max-width: 1240px) {
+/* écran moins large : le badge Expert s'efface, puis l'affiche, puis le titre et les onglets se resserrent */
+@media (max-width: 1500px) {
+  .expert { display: none; }
+}
+@media (max-width: 1340px) {
   .matchup { display: none; }
 }
 @media (max-width: 900px) {

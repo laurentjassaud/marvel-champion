@@ -55,14 +55,16 @@ export const useGameStore = defineStore('game', () => {
   const turn = computed(() => game.value?.turn ?? 1)
   const phase = computed(() => game.value?.phase ?? 'hero')
   /**
-   * L'affiche de la partie, pour la barre du haut : {hero, villain, expert} ("Spider-Man", "Rhino", true) ;
-   * une difficulté tirée au hasard n'est pas dévoilée. null sans partie.
+   * L'affiche de la partie, pour la barre du haut : {hero, villain, expert} ("Spider-Man", "Rhino II", true).
+   * Le méchant est celui en cours, avec son étape (le nom de son compteur) ; Les Démolisseurs, à quatre,
+   * gardent le nom du scénario. Une difficulté tirée au hasard n'est pas dévoilée. null sans partie.
    */
   const matchup = computed(() => {
     const setup = game.value?.setup
     if (!setup) return null
     const scenario = SCENARIOS.find(candidate => candidate.id === setup.scenario)
-    return { hero: heroName(setup.hero), villain: scenario?.villainName ?? '', expert: !!setup.expert && !setup.randomChoices?.includes('expert') }
+    const currentVillain = game.value.crew ? null : game.value.counters?.[1]?.label
+    return { hero: heroName(setup.hero), villain: currentVillain || scenario?.villainName || '', expert: !!setup.expert && !setup.randomChoices?.includes('expert') }
   })
   /** La même affiche en une phrase : "Spider-Man contre Rhino · expert". */
   const subtitle = computed(() => {
@@ -70,6 +72,8 @@ export const useGameStore = defineStore('game', () => {
     const { hero, villain, expert } = matchup.value
     return `${hero} contre ${villain}${expert ? ' · expert' : ''}`
   })
+  /** La manigance principale qui porte le compteur de menace (son pion de menace en montre la valeur), ou null. */
+  const threatSchemeId = computed(() => (game.value ? Engine.threatCounterScheme(game.value)?.id ?? null : null))
   /** Le mulligan se fait une seule fois, pendant la phase du héros du round 1. */
   const canMulligan = computed(() => !!game.value && !game.value.mulliganTaken && turn.value === 1 && phase.value === 'hero')
 
@@ -149,7 +153,7 @@ export const useGameStore = defineStore('game', () => {
   }
 
   return {
-    game, isReady, cardsIn, pileOf, cardById, hasInvocationDeck, scenarioDeck, turn, phase, matchup, subtitle, canMulligan,
+    game, isReady, cardsIn, pileOf, cardById, hasInvocationDeck, scenarioDeck, turn, phase, matchup, subtitle, canMulligan, threatSchemeId,
     newGame, startExampleGame, restartGame,
     preconDeck: heroId => PRECON_DECKS[heroId],
     parseDeckFile: Engine.parseDeckFile,

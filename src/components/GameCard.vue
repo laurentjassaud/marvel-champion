@@ -1,18 +1,79 @@
 <script>
 /**
- * La carte telle qu'imprimée, pour les vues agrandies : sans rotation d'épuisement, ni jetons ni cartes
- * d'état par-dessus le texte.
+ * La carte telle qu'imprimée (menu, fenêtres) : sans rotation d'épuisement, ni pions ni cartes d'état
+ * par-dessus le texte. `printed` : même la menace du compteur n'y est pas posée.
  */
-export const printedCard = card => ({ ...card, exhausted: false, damage: 0, threat: 0, tokens: 0, stunned: false, confused: false, tough: false })
+export const printedCard = card => ({ ...card, exhausted: false, damage: 0, threat: 0, tokens: 0, stunned: false, confused: false, tough: false, printed: true })
+
+/** La carte agrandie de la colonne de droite : droite, sans ses cartes d'état (son texte reste lisible), avec ses pions. */
+export const zoomedCard = card => ({ ...card, exhausted: false, stunned: false, confused: false, tough: false })
+
+/** Nombre entre 0 et 1, toujours le même pour un même texte (hachage FNV-1a) : un pion ne bouge pas d'un affichage à l'autre. */
+function stableRandom(text) {
+  let hash = 2166136261
+  for (let index = 0; index < text.length; index++) {
+    hash ^= text.charCodeAt(index)
+    hash = Math.imul(hash, 16777619)
+  }
+  return (hash >>> 0) / 4294967295
+}
+
+/** Les pions posés sur une carte : dégâts (personnages), menace (manigances), jetons (les autres cartes, et la manigance principale). */
+const TOKEN_KINDS = [
+  { kind: 'damage', singular: 'dégât', plural: 'dégâts' },
+  { kind: 'threat', singular: 'menace', plural: 'menaces' },
+  { kind: 'tokens', singular: 'jeton', plural: 'jetons' }
+]
+
+/**
+ * Où poser le centre d'un pion, en % de la carte : toujours sur l'illustration, jamais sur le texte (zones
+ * relevées sur les cartes imprimées, vérifiées au pire cas : coins de la zone, pion penché de ±30°). Elles
+ * tiennent compte de la taille du pion (main.css : 30 % de la largeur d'une carte, 36 % pour le triangle)
+ * et de son inclinaison : penché de 30°, un carré ou un triangle déborde d'un tiers de plus. Le pion y est
+ * posé au hasard.
+ *  - upright : carte debout (allié, soutien, amélioration, pièce jointe, sbire, traîtrise, méchant…) :
+ *    l'illustration est entre le bandeau du titre et l'encadré du texte (qui commence parfois vers 48 % de
+ *    la hauteur, sur une pièce jointe), à droite des caractéristiques ou du titre vertical d'une
+ *    amélioration ; le rond des dégâts, qui ne déborde pas en penchant, y a plus de place ;
+ *  - artRight : manigance principale (couchée) : le texte à gauche (jusqu'à 58 % de la largeur),
+ *    l'illustration à droite ; la menace en haut, les jetons en bas (une carte qui porte les deux) ;
+ *  - artLeft : manigance annexe (couchée) : l'illustration à gauche, entre le titre en haut, les icônes
+ *    d'accélération à gauche et la menace de départ en bas ;
+ *  - back : carte face cachée : le dos, sans texte.
+ */
+const TOKEN_ZONES = {
+  upright: {
+    damage: { x: [36, 64], y: [25, 34] },
+    tokens: { x: [42, 60], y: [28, 31] },
+    threat: { x: [44, 58], y: [29, 30] }
+  },
+  artRight: {
+    damage: { x: [74, 82], y: [44, 56] },
+    threat: { x: [75, 80], y: [39, 43] },
+    tokens: { x: [74, 82], y: [60, 65] }
+  },
+  artLeft: {
+    damage: { x: [22, 27], y: [40, 57] },
+    threat: { x: [22, 27], y: [40, 57] },
+    tokens: { x: [22, 27], y: [40, 57] }
+  },
+  back: {
+    damage: { x: [40, 60], y: [38, 62] },
+    threat: { x: [40, 60], y: [38, 62] },
+    tokens: { x: [40, 60], y: [38, 62] }
+  }
+}
+/** Angle d'un pion : de -30° à +30°. */
+const MAX_TOKEN_ANGLE = 30
 </script>
 
 <script setup>
-// Une carte (ou un pion) : sa face ou son dos, ses cartes d'état, ses compteurs (dégâts, menace, jetons) et,
-// avec les Démolisseurs, le badge « Actif ». Sur la table elle est placée à sa position (positioned).
+// Une carte (ou un pion) : sa face ou son dos, ses cartes d'état, ses pions (dégâts, menace, jetons) posés de
+// travers, et, avec les Démolisseurs, le badge « Actif ». Sur la table elle est placée à sa position (positioned).
 import { computed } from 'vue'
 import { definitionOf, cardName } from '../game/engine.js'
 import { STATUS_CARDS } from '../game/data.js'
-import { cardImageUrl, cardBackUrl, statusImageUrl } from '../composables/useAssets.js'
+import { cardImageUrl, cardBackUrl, statusImageUrl, tokenImageUrl } from '../composables/useAssets.js'
 import { useGameStore } from '../stores/game.js'
 import { useUiStore } from '../stores/ui.js'
 
@@ -56,12 +117,47 @@ const isActiveVillain = computed(() => {
   const definition = definitionOf(props.card)
   return props.positioned && !!activeSet && definition.type === 'villain' && definition.set === activeSet
 })
+/**
+ * Les pions à poser : {kind, value, label, style}. La manigance principale porte la menace du compteur (le
+ * moteur la garde là, pas sur la carte), sauf sur une carte « telle qu'imprimée ». Place et angle viennent
+ * de l'identité de la carte : différents d'une carte à l'autre, les mêmes à chaque affichage.
+ */
+/** La mise en page de la carte telle qu'elle se voit, pour savoir où est son illustration (TOKEN_ZONES). */
+const tokenLayout = computed(() => {
+  if (!isFaceShown.value) return 'back'
+  const definition = definitionOf(props.card)
+  if (!definition.landscape) return 'upright'
+  return definition.type === 'main_scheme' ? 'artRight' : 'artLeft'
+})
+const tokens = computed(() => {
+  const card = props.card
+  const counterThreat = !card.printed && card.id === gameStore.threatSchemeId ? gameStore.game.counters[2].value : 0
+  const values = { damage: card.damage, threat: card.threat || counterThreat, tokens: card.tokens }
+  return TOKEN_KINDS.filter(({ kind }) => values[kind] > 0).map(({ kind, singular, plural }) => {
+    const { x, y } = TOKEN_ZONES[tokenLayout.value][kind]
+    const random = axis => stableRandom(`${card.id}:${kind}:${axis}`)
+    const between = ([low, high], axis) => `${(low + (high - low) * random(axis)).toFixed(1)}%`
+    return {
+      kind,
+      value: values[kind],
+      label: `${values[kind]} ${values[kind] > 1 ? plural : singular}`,
+      // place du pion (droit, il porte l'ombre) et angle de sa face (main.css, .chip et .chip-face)
+      style: {
+        '--x': between(x, 'x'),
+        '--y': between(y, 'y'),
+        '--angle': `${Math.round((random('angle') * 2 - 1) * MAX_TOKEN_ANGLE)}deg`
+      },
+      // la grande version sur la carte agrandie (une carte d'affichage), la petite sur la table et dans la main
+      faceStyle: { backgroundImage: `url('${tokenImageUrl(kind, props.inert ? 'zoom' : 'table')}')` }
+    }
+  })
+})
 // nom lu par les lecteurs d'écran, avec ce qui est posé sur la carte
 const accessibleLabel = computed(() => {
   let name = 'Carte face cachée'
   if (isPawn.value) name = 'Pion'
   else if (isFaceShown.value) name = cardName(props.card)
-  const notes = [...(isActiveVillain.value ? ['actif'] : []), ...statuses.value.map(status => status.label)]
+  const notes = [...(isActiveVillain.value ? ['actif'] : []), ...statuses.value.map(status => status.label), ...tokens.value.map(token => token.label)]
   return notes.length ? `${name} (${notes.join(', ')})` : name
 })
 </script>
@@ -86,9 +182,9 @@ const accessibleLabel = computed(() => {
     <div v-if="statuses.length" class="status">
       <img v-for="status in statuses" :key="status.id" :src="statusImageUrl(status.id)" alt="" draggable="false">
     </div>
-    <span v-if="card.damage" class="mk dmg" title="Dégâts">{{ card.damage }}</span>
-    <span v-if="card.threat" class="mk thr" title="Menace">{{ card.threat }}</span>
-    <span v-if="card.tokens" class="mk tok" title="Jetons">{{ card.tokens }}</span>
+    <span v-for="token in tokens" :key="token.kind" class="chip" :class="token.kind" :style="token.style" :title="token.label">
+      <span class="chip-face" :style="token.faceStyle"><span class="chip-value">{{ token.value }}</span></span>
+    </span>
     <span v-if="isActiveVillain" class="mk act" title="Jeton Actif">Actif</span>
   </div>
 </template>

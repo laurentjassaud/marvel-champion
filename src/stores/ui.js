@@ -25,12 +25,12 @@ const screenScale = () => Math.min((globalThis.innerWidth ?? 1920) / 1920, (glob
 const defaultCardWidth = () => Math.round(Math.min(130, Math.max(56, 110 * screenScale())))
 /**
  * Largeur occupée en haut de la table par l'illustration du méchant de ce scénario (VillainBackdrop :
- * 694 px sur la maquette, dont le poing de Rhino atteint 97 %) ; 0 s'il n'en a pas, ou sur téléphone, où
- * le décor est caché (main.css).
+ * 694 px sur la maquette, posée 13 px à gauche du bord, dont le poing de Rhino atteint 97 %) ; 0 s'il n'en
+ * a pas, ou sur téléphone, où le décor est caché (main.css).
  */
 function villainArtInset(scenarioId) {
   if (!villainArtUrl(scenarioId) || (globalThis.innerWidth ?? 1920) <= 700) return 0
-  return 694 * 0.97 * screenScale()
+  return (694 * 0.97 - 13) * screenScale()
 }
 
 export const useUiStore = defineStore('ui', () => {
