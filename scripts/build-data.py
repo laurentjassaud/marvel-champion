@@ -41,6 +41,10 @@ FRENCH_ENTRY_TOKENS = [
     re.compile(r'entre en jeu avec (\d+|une?)(?:\[per_hero\])? jetons? ([^\s.,<]+)', re.I)
 ]
 ENGLISH_ENTRY_TOKENS = re.compile(r'(?:\bUses \(|enters? play with )(\d+)(?:\[per_hero\])? [^.()]*?counters?', re.I)
+# menace en plus par héros quand une manigance annexe est révélée (mêmes règles que marvelCdbDefinition dans
+# src/game/marvelcdb.js) : « When Revealed: Place an additional 1[per_hero] threat here » (Réseau de Défense ;
+# pas un « When Revealed (Norman Osborn) », qui pose une condition), ou le mot-clé « Hinder 2[per_hero] »
+EXTRA_THREAT = re.compile(r'<b>When Revealed</b>: Place an additional (\d+)\s*\[per_hero\] threat here|\bHinder (\d+)\s*\[per_hero\]', re.I)
 
 
 def entry_tokens(french_text, english_text):
@@ -53,6 +57,12 @@ def entry_tokens(french_text, english_text):
             return {'tk': count + int(per_hero_extra or 0), 'tkn': match.group(2)}
     match = ENGLISH_ENTRY_TOKENS.search(english_text or '')
     return {'tk': int(match.group(1))} if match else {}
+
+
+def extra_threat(english_text):
+    """Menace qu'une manigance annexe révélée reçoit en plus par héros, en clé courte : {'xth': nombre}, ou {}."""
+    match = EXTRA_THREAT.search(english_text or '')
+    return {'xth': int(match.group(1) or match.group(2))} if match else {}
 
 
 def load_pack(marvelsdb_folder, pack):
@@ -108,6 +118,8 @@ def main():
         for marvelsdb_key, short_key in [('health', 'hp'), ('hand_size', 'hs'), ('threat', 'th'), ('escalation_threat', 'esc'), ('base_threat', 'bth')]:
             if marvelsdb_key in card:
                 definition[short_key] = card[marvelsdb_key]
+        if card['type_code'] == 'side_scheme':
+            definition.update(extra_threat(card.get('text')))
         # les alliés propres aux héros gardent leur coût (Prison d'Hydra, scénario de Zola)
         if card['type_code'] == 'ally' and card['faction_code'] == 'hero' and 'cost' in card:
             definition['cost'] = card['cost']

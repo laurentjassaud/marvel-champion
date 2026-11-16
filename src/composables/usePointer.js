@@ -60,7 +60,16 @@ export function usePointer() {
     return row && row.scrollWidth > row.clientWidth + 1 ? row : null
   }
   /** La zone de dépôt sous le point (x, y). */
-  const zoneElementAt = (x, y) => document.elementFromPoint(x, y)?.closest('[data-zone]') ?? null
+  // la première zone de la pile d'éléments à cet endroit : un élément posé par-dessus une zone sans en être une
+  // (les boutons et le nom des PV du méchant, la poignée de la colonne de droite) ne l'empêche pas de recevoir
+  // la carte ; la table la remonte ensuite au-dessus des PV du méchant (keepCardOnTable)
+  const zoneElementAt = (x, y) => {
+    for (const element of document.elementsFromPoint(x, y)) {
+      const zone = element.closest('[data-zone]')
+      if (zone) return zone
+    }
+    return null
+  }
   /** Efface la surbrillance des zones survolées pendant un glisser. */
   const clearDropHighlight = () => document.querySelectorAll('.over').forEach(element => element.classList.remove('over'))
 
@@ -180,11 +189,13 @@ export function usePointer() {
     const zoneElement = zoneElementAt(event.clientX, event.clientY)
     if (!zoneElement) return
     const zone = zoneElement.dataset.zone
-    const { card, cardElement } = finished
+    const { card } = finished
     if (zone === 'table') {
+      // à l'endroit lâché ; le moteur la garde entière sur la table, à sa taille sur la table (une carte de
+      // la main n'a pas la même) : décalée vers le haut si elle dépasse du bas ou passe sous les PV du méchant
       const tableRect = zoneElement.getBoundingClientRect()
-      const x = Math.max(0, Math.min(tableRect.width - cardElement.offsetWidth, event.clientX - tableRect.left - finished.offsetX))
-      const y = Math.max(0, Math.min(tableRect.height - cardElement.offsetHeight, event.clientY - tableRect.top - finished.offsetY))
+      const x = event.clientX - tableRect.left - finished.offsetX
+      const y = event.clientY - tableRect.top - finished.offsetY
       // une carte tirée d'une pioche arrive face cachée (une carte Invocation est alors glissée sous une manigance)
       gameStore.moveCard(card.id, 'table', { x, y, faceDown: DECK_PILES.includes(card.zone) })
     } else if (zone === 'hand' && card.zone === 'hand') {

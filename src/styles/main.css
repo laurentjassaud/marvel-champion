@@ -99,6 +99,10 @@ input, textarea { -webkit-user-select: text; user-select: text; } /* sinon iOS n
 }
 /* la table, avec par-dessus, en bas à gauche, les PV du méchant (VillainHud) */
 .play { position: relative; min-height: 0; min-width: 0; display: grid; }
+/* tablette (écran tactile assez large) : la barre du haut aux trois quarts de sa taille (zoom dans TopBar) */
+@media (pointer: coarse) and (min-width: 701px) {
+  .app { grid-template-rows: 36px minmax(0, 1fr) auto; }
+}
 /* tablette en portrait : les PV du méchant sous la table (VillainHud) */
 @media (min-width: 701px) and (max-width: 900px) {
   .play { grid-template-rows: minmax(0, 1fr) auto; }
@@ -191,7 +195,9 @@ input, textarea { -webkit-user-select: text; user-select: text; } /* sinon iOS n
 }
 .pile.over .slot { border-color: var(--yellow); box-shadow: 0 0 0 1px var(--yellow), 0 0 22px rgb(255 194 25 / .3); }
 .pile .slot .card { position: absolute; inset: 3px; --w: var(--pw); }
-.pile .slot .card.land { inset: auto; top: calc(var(--pw) * .2 + 3px); left: calc(var(--pw) * -.2 + 3px); }
+/* une carte couchée (manigance) sur le dessus d'une défausse : redressée, tournée d'un quart de tour vers la
+   gauche (sens trigonométrique), elle tient dans le cadre comme les autres */
+.pile .slot .card.land { inset: auto; top: calc(var(--pw) * .2 + 3px); left: calc(var(--pw) * -.2 + 3px); transform: rotate(-90deg); }
 /* l'épaisseur d'une pile de plusieurs cartes */
 .pile .slot .stack { position: absolute; inset: 3px; border-radius: 3px; transform: translate(3px, 3px); background: #17183a; box-shadow: 0 2px 4px rgb(0 0 0 / .3); }
 .pile .count { font-size: 14px; line-height: 1; color: var(--fg); letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
@@ -314,11 +320,19 @@ input, textarea { -webkit-user-select: text; user-select: text; } /* sinon iOS n
   box-shadow: 0 30px 80px -20px rgb(4 5 18 / .8), inset 0 1px 0 rgb(255 255 255 / .06);
   transition: opacity 240ms var(--ease-out), transform 240ms var(--ease-out);
 }
+/* la carte agrandie de la colonne de droite reste visible, nette, à sa place, par-dessus le fond (BaseModal) :
+   la boîte se centre dans la place qui reste à sa gauche ; le panneau a le même filet de 1 px que celui de
+   SideTabs, pour que la carte ne bouge pas d'un pixel quand la fenêtre s'ouvre */
+.modal.beside-zoom { padding-right: calc(var(--zoom-room) + 16px); }
+.modal-zoom { position: absolute; display: grid; grid-template-rows: minmax(0, 1fr); padding: 1px; pointer-events: none; }
 .modal h2 { font: italic 900 30px/1.1 var(--font-display); letter-spacing: -.02em; text-transform: uppercase; margin: 0; text-wrap: balance; }
 .modal p { margin: 0; color: var(--muted); line-height: 1.5; max-width: 68ch; }
 .modal .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .grid-cards { display: flex; flex-wrap: wrap; gap: 8px; }
 .grid-cards .card { --w: 96px; cursor: pointer; }
+/* fenêtre d'une défausse : toutes les cartes debout ; une carte couchée (manigance) tourne d'un quart de tour
+   vers la gauche, ses marges négatives lui donnent la place d'une carte debout (largeur w, hauteur 1,4 w) */
+.grid-cards.upright .card.land { margin: calc(var(--w) * .2) calc(var(--w) * -.2); transform: rotate(-90deg); }
 .fieldset { display: grid; gap: 6px; }
 .fieldset > .lab, .keys .lab { font: italic 700 20px/1.1 var(--font-display); letter-spacing: -.01em; text-transform: uppercase; color: var(--label); }
 .choices { display: flex; flex-wrap: wrap; gap: 8px; }

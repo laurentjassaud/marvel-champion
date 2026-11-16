@@ -6,13 +6,13 @@ import { heroRules, scenarioRules } from '../rules.js'
 import { SAVED_GAME_VERSION } from '../savedGame.js'
 import {
   definitionOf, cardName, cardsInZone, isInScenarioDeck, plural, listInFrench, logMessage, random, randomIndex,
-  uniqueId, shuffleZone, activeVillainCard
+  uniqueId, shuffleZone, activeVillainCard, startingThreatOf
 } from './state.js'
 import { SPOTS, nextEncounterSpot } from './layout.js'
 import { moveCard, entryTokensText } from './moves.js'
 import { drawCard, putOwnAllyUnder } from './piles.js'
 import { handSize } from './turns.js'
-import { byStage } from './villains.js'
+import { byStage, revealVillainStage } from './villains.js'
 
 /* ---------------------------------------------------------------------------------------------------- */
 /* Résumé et tirages                                                                                     */
@@ -141,6 +141,10 @@ export function newGame(options, layout) {
   }
 
   for (const zone of ['playerDeck', 'encounterDeck', 'invocationDeck', 'scenarioDeck']) shuffleZone(game, zone)
+  // l'« Une fois révélé » de la première étape du méchant, une fois le paquet Rencontre prêt : en expert,
+  // Rhino (II) commence la partie et révèle Casser et Emporter (rules.js villainStages)
+  const firstVillainCard = !rules.crew && cardsInZone(game, 'table').find(card => definitionOf(card).type === 'villain')
+  const villainRevealNote = firstVillainCard ? revealVillainStage(game, firstVillainCard, layout, { quiet: true }) : ''
   // les cartes lues sur MarvelCDB restent avec la partie : un rechargement ou « Recommencer » les rajoute
   const importedDefinitions = [...new Set(game.cards.map(card => card.definitionId))]
     .map(definitionId => DEFINITION_BY_ID[definitionId]).filter(definition => definition?.pack === 'marvelcdb')
@@ -150,8 +154,10 @@ export function newGame(options, layout) {
   const startingHandSize = heroDefinition.backHandSize ?? 6
   for (let i = 0; i < startingHandSize; i++) drawCard(game, layout, true)
   const setupCard = applyIdentitySetup(game)
+  // la mise en place a posé ses cartes sur la table (moveCard ferme alors le mulligan) : il reste à faire
+  game.mulliganTaken = false
 
-  logStartOfGame(game, { heroDefinition, scenario, firstVillain, startingHandSize, setupCard, setupReport, deckLabel: options.deckLabel })
+  logStartOfGame(game, { heroDefinition, scenario, firstVillain, startingHandSize, setupCard, setupReport, villainRevealNote, deckLabel: options.deckLabel })
   return game
 }
 
@@ -234,7 +240,7 @@ function applyScenarioSetup(game, layout, rules, addCard, setupReport) {
       : encounterDeck.findLast(candidate => definitionOf(candidate).type === step.type)
     if (!card) continue
     moveCard(game, card, 'table', nextEncounterSpot(game, layout), true) // avec ses jetons (enterPlay)
-    if (definitionOf(card).type === 'side_scheme') card.threat = definitionOf(card).startingThreat ?? 0
+    if (definitionOf(card).type === 'side_scheme') card.threat = startingThreatOf(card)
     const ally = step.allyUnder ? putOwnAllyUnder(game, card, layout) : null
     const counts = [card.tokens ? entryTokensText(card) || plural(card.tokens, 'jeton') : '', card.threat ? plural(card.threat, 'menace') : ''].filter(Boolean)
     const withCounts = counts.length ? ` avec ${counts.join(' et ')}` : ''
@@ -272,8 +278,8 @@ function applyScenarioSetup(game, layout, rules, addCard, setupReport) {
   setupReport.push(`deck ${scenarioDeck.name} de ${plural(cardsInZone(game, 'scenarioDeck').length, 'carte')} à côté du paquet Rencontre`)
 }
 
-/** Les messages du début de partie : le résumé, les paquets, la main de départ, ce qui reste à faire. */
-function logStartOfGame(game, { heroDefinition, scenario, firstVillain, startingHandSize, setupCard, setupReport, deckLabel }) {
+/** Les messages du début de partie : le résumé, les paquets, l'« Une fois révélé » du méchant, la main de départ, ce qui reste à faire. */
+function logStartOfGame(game, { heroDefinition, scenario, firstVillain, startingHandSize, setupCard, setupReport, villainRevealNote, deckLabel }) {
   const title = scenario.title ? ` (${scenario.title})` : ''
   logMessage(game, `Partie : ${heroDefinition.name} (${deckLabel}) contre ${scenario.villainName}${title}${setupSummary(game.setup)}.`, true)
   const invocationCount = cardsInZone(game, 'invocationDeck').length
@@ -287,6 +293,7 @@ function logStartOfGame(game, { heroDefinition, scenario, firstVillain, starting
     logMessage(game, `${start} Les quatre méchants et leurs manigances annexes sont en jeu, jeton Actif sur « ${firstVillain.name} » : les piles Rencontre affichées sont les siennes. Retournez la manigance (F) pour passer au stade 1B.`, true)
   } else {
     logMessage(game, `Paquet : ${deckSize} cartes · Rencontre : ${cardsInZone(game, 'encounterDeck').length} cartes · Némésis mis de côté.`)
+    if (villainRevealNote) logMessage(game, villainRevealNote, true)
     if (setupReport.length) logMessage(game, `${start} Mise en place de la manigance faite (${setupReport.join(', ')}) : retournez-la (F) pour passer au stade 1B.`, true)
     else logMessage(game, `${start} Lisez la face A de la manigance, appliquez sa mise en place puis retournez-la (F).`, true)
   }

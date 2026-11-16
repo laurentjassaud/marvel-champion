@@ -20,6 +20,8 @@ import HelpModal from './components/modals/HelpModal.vue'
 import RestartModal from './components/modals/RestartModal.vue'
 import VillainModal from './components/modals/VillainModal.vue'
 import SchemeModal from './components/modals/SchemeModal.vue'
+import DefeatModal from './components/modals/DefeatModal.vue'
+import ReshuffleModal from './components/modals/ReshuffleModal.vue'
 import { useGameStore } from './stores/game.js'
 import { useUiStore } from './stores/ui.js'
 import { usePointer } from './composables/usePointer.js'
@@ -76,5 +78,7 @@ onMounted(() => { if (!gameStore.isReady) gameStore.startExampleGame() })
          d'un même v-if ne peuvent pas avoir la même clé -->
     <VillainModal v-else-if="ui.modal?.type === 'villain' && gameStore.isReady" :key="`villain-${ui.modal.result.kind}-${ui.modal.result.fromCardId}`" />
     <SchemeModal v-else-if="ui.modal?.type === 'scheme' && gameStore.isReady" :key="`scheme-${ui.modal.result.kind}-${ui.modal.result.fromCardId}`" />
+    <DefeatModal v-else-if="ui.modal?.type === 'defeat' && gameStore.isReady" />
+    <ReshuffleModal v-else-if="ui.modal?.type === 'reshuffle' && gameStore.isReady" />
   </div>
 </template>

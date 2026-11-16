@@ -45,6 +45,8 @@ export const useUiStore = defineStore('ui', () => {
   const tableHeight = ref(0)
   /** Largeur, depuis le bord gauche de la table, des PV du méchant affichés en grand en bas (mesurée par VillainHud). */
   const heroInset = ref(0)
+  /** Bord haut de ce bloc, depuis le haut de la table ; null s'il n'est pas posé par-dessus la table (téléphone, tablette en portrait). */
+  const villainHudTop = ref(null)
   /** Carte sélectionnée (clic) : cible des raccourcis clavier quand la souris n'est sur aucune carte. */
   const selectedCardId = ref(null)
   /** Carte de la main tirée au hasard, entourée de rouge jusqu'à ce qu'on la touche. */
@@ -55,7 +57,10 @@ export const useUiStore = defineStore('ui', () => {
   const preview = ref(null)
   /** Menu contextuel ouvert : {x, y, title, items: [{label, key, run, checked?} | null (séparateur)], cardId?}. */
   const contextMenu = ref(null)
-  /** Fenêtre ouverte : {type: 'setup' | 'pile' | 'mulligan' | 'help' | 'restart' | 'villain' | 'scheme', zone?, result?}. */
+  /**
+   * Fenêtre ouverte : {type: 'setup' | 'pile' | 'mulligan' | 'help' | 'restart' | 'villain' | 'scheme' | 'defeat'
+   * | 'reshuffle', zone?, result?, fromPile?}.
+   */
   const modal = ref(null)
 
   watch(cardWidth, width => writeSetting(CARD_WIDTH_KEY, width))
@@ -69,7 +74,8 @@ export const useUiStore = defineStore('ui', () => {
 
   /**
    * Disposition de la table pour le moteur, dans une partie contre le méchant de ce scénario : {width,
-   * height, cardWidth, villainInset, heroInset}. Les minimums ne servent qu'à l'instant où la table n'est
+   * height, cardWidth, villainInset, heroInset, villainHud} (villainHud : {right, top}, les PV du méchant
+   * posés par-dessus la table, qu'une carte ne doit pas passer dessous ; null sinon). Les minimums ne servent qu'à l'instant où la table n'est
    * pas encore mesurée : plus grands que la vraie taille, ils poseraient des cartes hors de la table. Le
    * décor du méchant laisse toujours la place de quatre cartes en haut (méchant, manigance couchée, une
    * carte Rencontre) et de trois en bas.
@@ -82,12 +88,16 @@ export const useUiStore = defineStore('ui', () => {
       height: Math.max(tableHeight.value, 300),
       cardWidth: card,
       villainInset: Math.round(Math.min(villainArtInset(scenarioId), Math.max(0, width - card * 3.8 - 80))),
-      heroInset: Math.round(Math.min(heroInset.value, Math.max(0, width - card * 3.4 - 80)))
+      heroInset: Math.round(Math.min(heroInset.value, Math.max(0, width - card * 3.4 - 80))),
+      villainHud: heroInset.value && villainHudTop.value != null ? { right: heroInset.value, top: villainHudTop.value } : null
     }
   }
   const setTableSize = (width, height) => { tableWidth.value = width; tableHeight.value = height }
-  /** Place prise sur la table par les PV du méchant affichés en grand (mesurée par VillainHud). */
-  const setHeroInset = width => { heroInset.value = Math.max(0, width) }
+  /** Place prise sur la table par les PV du méchant affichés en grand (mesurée par VillainHud) : son bord droit et son bord haut (null : pas sur la table). */
+  const setHeroInset = (width, top = null) => {
+    heroInset.value = Math.max(0, width)
+    villainHudTop.value = top
+  }
   const selectCard = cardId => { selectedCardId.value = cardId }
   const showPreview = (cardId, showFace = false) => { preview.value = { cardId, showFace } }
   const openContextMenu = menu => { contextMenu.value = menu }

@@ -35,6 +35,10 @@ const FRENCH_ENTRY_TOKENS = [
   /entre en jeu avec (\d+|une?)(?:\[per_hero\])? jetons? ([^\s.,<]+)/i
 ]
 const ENGLISH_ENTRY_TOKENS = /(?:\bUses \(|enters? play with )(\d+)(?:\[per_hero\])? [^.()]*?counters?/i
+// La menace qu'une manigance annexe reçoit en plus par héros quand elle est révélée, lue dans le texte
+// anglais : « When Revealed: Place an additional 1[per_hero] threat here » (pas un « When Revealed (Norman
+// Osborn) », qui pose une condition), ou le mot-clé « Hinder 2[per_hero] » (Entrave).
+const ENGLISH_EXTRA_THREAT = /<b>When Revealed<\/b>: Place an additional (\d+)\s*\[per_hero\] threat here|\bHinder (\d+)\s*\[per_hero\]/i
 /** "3" → 3, "un" / "une" → 1. */
 const countFromWord = word => (/^une?$/i.test(word) ? 1 : Number(word))
 
@@ -70,6 +74,8 @@ export function marvelCdbDefinition(apiCard) {
   // coût des alliés propres au héros : Prison d'Hydra (Zola)
   if (type === 'ally' && apiCard.faction_code === 'hero' && apiCard.cost != null) definition.cost = apiCard.cost
   if (type === 'side_scheme' && apiCard.base_threat != null) definition.startingThreat = apiCard.base_threat
+  const extraThreat = type === 'side_scheme' && ENGLISH_EXTRA_THREAT.exec(apiCard.real_text ?? '')
+  if (extraThreat) definition.extraThreatPerHero = Number(extraThreat[1] ?? extraThreat[2])
   // traits : méchants et sbires, et améliorations du joueur (rules.js en compte certaines : Tech d'Iron Man)
   const isPlayerUpgrade = type === 'upgrade' && apiCard.faction_code !== 'encounter'
   if (apiCard.traits && (['villain', 'minion'].includes(type) || isPlayerUpgrade)) definition.traits = traitList(apiCard.traits)

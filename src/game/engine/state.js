@@ -20,7 +20,8 @@
 //   turn: number                  numéro du round, à partir de 1
 //   phase: 'hero' | 'villain'     phase du round ; la partie commence en phase du héros
 //   accelerationTokens: number    pions Accélération (un de plus à chaque paquet Rencontre épuisé)
-//   mulliganTaken: boolean        le mulligan (ou le choix de garder sa main) a été fait
+//   mulliganTaken: boolean        le mulligan n'est plus possible : il a été fait (ou la main gardée), ou
+//                                 une carte a été mise en jeu ou défaussée depuis la mise en place
 //   topZIndex: number             plus grand ordre d'empilement sur la table (la dernière carte posée dessus)
 //   setupCardId?: string          carte mise en main par la mise en place de l'identité (Bouclier de Captain America)
 //   crew?: string[]               plusieurs méchants à la fois (Les Démolisseurs) : leurs sets Rencontre
@@ -49,10 +50,11 @@
 // }
 //
 // ─── La disposition de la table (« layout ») ──────────────────────────────────────────────────────────
-// {width, height, cardWidth} : taille de la table et largeur d'une carte, en pixels, pour placer les cartes.
+// {width, height, cardWidth} : taille de la table et largeur d'une carte, en pixels, pour placer les cartes ;
+// et, mesurés à l'écran, la place du décor du méchant : villainInset, heroInset, villainHud (layout.js).
 
 import { DEFINITION_BY_ID, ZONE_LABELS, CHARACTER_TYPES, SCHEME_TYPES } from '../data.js'
-import { scenarioRules } from '../rules.js'
+import { scenarioRules, SHADOW_OF_THE_PAST_ID } from '../rules.js'
 
 /* ---------------------------------------------------------------------------------------------------- */
 /* Hasard et identifiants                                                                                */
@@ -153,6 +155,16 @@ export function counterKindOf(card) {
   if (isCharacter(card)) return 'damage'
   return SCHEME_TYPES.includes(definitionOf(card).type) ? 'threat' : 'tokens'
 }
+
+/**
+ * Menace avec laquelle une manigance annexe entre en jeu : sa menace de départ (imprimée pour un joueur),
+ * plus celle que son « Une fois révélée » ajoute par héros (Réseau de Défense : « placez 1 menace
+ * supplémentaire par héros ») ; en solo, « par héros » vaut 1.
+ */
+export const startingThreatOf = card => (definitionOf(card).startingThreat ?? 0) + (definitionOf(card).extraThreatPerHero ?? 0)
+
+/** Ce que le journal ajoute quand une carte est révélée et que son action est dans son menu (L'Ombre du Passé) ; '' sinon. */
+export const revealHint = card => (card.definitionId === SHADOW_OF_THE_PAST_ID ? ' Clic droit sur la carte → Mettre en jeu la Némésis.' : '')
 
 /* ---------------------------------------------------------------------------------------------------- */
 /* Zones et piles                                                                                        */

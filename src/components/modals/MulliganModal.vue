@@ -32,7 +32,7 @@ function confirm() {
 <template>
   <BaseModal title="Mulligan">
     <p>Pendant la mise en place, après la main de départ : défaussez autant de cartes que vous voulez, puis repiochez jusqu'à votre taille de main ({{ targetHandSize }}). Les cartes défaussées vont dans votre défausse, elles ne retournent pas dans le paquet. Une seule fois par partie.</p>
-    <p v-if="gameStore.game.mulliganTaken" class="err">Vous avez déjà fait un mulligan dans cette partie.</p>
+    <p v-if="gameStore.game.mulliganTaken" class="err">Le mulligan n'est plus possible : il a déjà été fait, ou une carte a été mise en jeu ou défaussée.</p>
     <p class="note">Cliquez sur les cartes à défausser.</p>
     <div class="grid-cards">
       <GameCard

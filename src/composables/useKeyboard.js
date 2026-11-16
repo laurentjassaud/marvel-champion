@@ -7,7 +7,8 @@ import { useUiStore } from '../stores/ui.js'
 /**
  * Installe les raccourcis clavier. Les raccourcis de carte visent la carte sous la souris (sur la table ou
  * dans la main), sinon la carte sélectionnée. G (dégâts) et M (menace) sans carte visent le méchant et la
- * manigance principale ; G, M et J n'agissent que sur une carte qui prend ce compteur (counterKindOf).
+ * manigance principale ; G, M et J n'agissent que sur une carte qui prend ce compteur (counterKindOf ; J
+ * aussi sur la manigance principale et sur un personnage qui porte des jetons : takesTokens).
  * Rien pendant la saisie dans un champ, quand une fenêtre est ouverte, ou avant la première partie.
  */
 export function useKeyboard() {
@@ -22,9 +23,10 @@ export function useKeyboard() {
   }
 
   function onKeyDown(event) {
+    // Échap ferme le menu ouvert (par-dessus une fenêtre de défausse, la fenêtre reste), sinon la fenêtre
     if (event.key === 'Escape') {
-      ui.closeContextMenu()
-      ui.closeModal()
+      if (ui.contextMenu) ui.closeContextMenu()
+      else ui.closeModal()
       return
     }
     if (event.ctrlKey || event.metaKey || event.altKey) return

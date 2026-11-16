@@ -61,7 +61,8 @@ function discardHandIfEnraged(game) {
 /**
  * Fin de la phase du héros : la main est complétée jusqu'à la taille de main de la forme en jeu (héros
  * ou alter ego), puis toutes les cartes du joueur sont redressées. Le journal détaille un bonus de taille
- * de main ("main de 4 en Iron Man : 1 + 3 améliorations Tech").
+ * de main ("main de 4 en Iron Man : 1 + 3 améliorations Tech") et les cartes qui manquent si le paquet
+ * s'est vidé (l'écran propose alors de remélanger la défausse, puis de les piocher).
  */
 function endHeroPhase(game, layout) {
   discardHandIfEnraged(game)
@@ -76,7 +77,10 @@ function endHeroPhase(game, layout) {
   const capped = printed + bonus > targetHandSize ? `, ${targetHandSize} au plus` : ''
   const bonusDetail = bonus ? ` : ${printed} + ${bonus} ${bonus > 1 ? pluralLabel : singular}${capped}` : ''
   const identityName = cardName(identityCard(game))
-  logMessage(game, `Fin de la phase du héros : +${plural(drawnCount, 'carte')} (main de ${targetHandSize} en ${identityName}${bonusDetail}), vos cartes sont redressées.`, true)
+  // le paquet vide ne se reconstitue pas tout seul : les cartes qui manquent se piochent après le remélange
+  const missing = targetHandSize - cardsInZone(game, 'hand').length
+  const missingNote = missing > 0 ? ` Votre paquet est vide : il manque ${plural(missing, 'carte')}, à piocher une fois la défausse remélangée.` : ''
+  logMessage(game, `Fin de la phase du héros : +${plural(drawnCount, 'carte')} (main de ${targetHandSize} en ${identityName}${bonusDetail}), vos cartes sont redressées.${missingNote}`, true)
 }
 
 /**

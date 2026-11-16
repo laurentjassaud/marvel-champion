@@ -96,6 +96,9 @@ export const heroRules = heroId => HERO_RULES[heroId] ?? {}
 //   mainSchemes        manigances principales, rappels au journal : ce que demande leur « Une fois révélée »
 //                      sur la face A (onRevealA, quand le stade entre en jeu) ou B (onRevealB, quand on la
 //                      retourne), et leur réponse forcée après l'étape 1 de la phase du méchant (eachVillainPhase)
+//   villainHitPointsFromSchemes  manigances annexes qui donnent des PV au méchant tant qu'elles sont en jeu,
+//                      par identifiant : {cardId: PV} (Klaw « l'Immortel » : +10) ; quand elle quitte le jeu
+//                      (vaincue, défaussée), le méchant les perd, et peut en être vaincu
 //   villainStages      étapes du méchant : leur « Une fois révélée » quand l'étape remplace celle qui est
 //                      vaincue (ou est posée depuis « De côté »). Fait par la table :
 //                        revealCardId           carte cherchée dans le paquet Rencontre et sa défausse, puis
@@ -120,10 +123,9 @@ const REVEAL_WEAPON = 'révélez la carte du dessus du deck Armes Expérimentale
 export const SCENARIO_RULES = {
   rhino: {
     automated: [
-      'Rhino (II) révélé : la manigance annexe Casser et Emporter est cherchée dans le paquet Rencontre et sa défausse, et révélée.',
+      'Rhino (II) révélé : la manigance annexe Casser et Emporter est cherchée dans le paquet Rencontre et sa défausse, et révélée (avec 1 menace de plus par héros, son « Une fois révélée »).',
       'Rhino (III) entre en jeu Tenace (Ténacité) ; révélé, il sonne votre héros (pas votre alter ego).'
     ],
-    byHand: ['Casser et Emporter révélée : 1 menace de plus (son « Une fois révélée »).'],
     villainStages: {
       'd02475f1-4bfb-476a-a76d-b69dbd33e47a': { revealCardId: 'ef2f8584-2a72-46a2-81ac-076f10e7b883' }, // Rhino (II) : Casser et Emporter
       'bb54b9af-cada-43e0-8602-258169423892': { stunHero: true } // Rhino (III)
@@ -131,8 +133,9 @@ export const SCENARIO_RULES = {
   },
   klaw: {
     automated: [
-      'Mise en place : la manigance annexe Réseau de Défense est révélée, avec sa menace de départ.',
+      'Mise en place : la manigance annexe Réseau de Défense est révélée, avec sa menace de départ et 1 menace de plus par héros (son « Une fois révélée »).',
       'Klaw (II) révélé : la manigance annexe Klaw « l\'Immortel » est cherchée dans le paquet Rencontre et sa défausse, et révélée.',
+      'Tant que Klaw « l\'Immortel » est en jeu, Klaw a +10 PV (une nouvelle étape de Klaw aussi) ; la manigance vaincue ou défaussée, il les perd.',
       'Klaw (III) entre en jeu Tenace (Ténacité).'
     ],
     byHand: [
@@ -144,6 +147,7 @@ export const SCENARIO_RULES = {
       '77e9fb39-e38c-4b35-bf58-39072e9c6c10': { onRevealB: PUT_MINION_INTO_PLAY }, // Trafic Clandestin
       '76806fd2-3552-44be-98a5-17ab83880eca': { onRevealA: PUT_MINION_INTO_PLAY } // Rendez-Vous Secret
     },
+    villainHitPointsFromSchemes: { '41d90a95-581a-40c6-b73f-acfc209b6522': 10 }, // Klaw « l'Immortel »
     villainStages: {
       '87da60fb-2502-4e5d-a8fc-9f06c447ab67': { revealCardId: '41d90a95-581a-40c6-b73f-acfc209b6522' } // Klaw (II) : Klaw « l'Immortel »
     }
@@ -335,3 +339,16 @@ export const MAIN_SCHEME_NOTES = Object.assign({}, ...Object.values(SCENARIO_RUL
 
 /** Règles des étapes du méchant de tous les scénarios, par identifiant de carte (voir villainStages ci-dessus). */
 export const VILLAIN_STAGE_RULES = Object.assign({}, ...Object.values(SCENARIO_RULES).map(rules => rules.villainStages ?? {}))
+
+/** PV que donnent au méchant les manigances annexes de tous les scénarios, par identifiant de carte (voir villainHitPointsFromSchemes). */
+export const VILLAIN_HIT_POINTS_FROM_SCHEMES = Object.assign({}, ...Object.values(SCENARIO_RULES).map(rules => rules.villainHitPointsFromSchemes ?? {}))
+
+/* ---------------------------------------------------------------------------------------------------- */
+/* Cartes Rencontre communes                                                                             */
+/* ---------------------------------------------------------------------------------------------------- */
+
+/**
+ * L'Ombre du Passé (set Standard) : son menu propose « Mettre en jeu la Némésis » (moteur, piles.js :
+ * putNemesisIntoPlay) ; révélée, le journal le rappelle.
+ */
+export const SHADOW_OF_THE_PAST_ID = '6d4aa932-4d9b-40d3-bf02-283bdfff9abf'

@@ -18,7 +18,7 @@
   {"id": "bw-24", "code": "24", "n": "Cible Verrouillée", "t": "upgrade", "f": "basic", "s": "", "q": 3, "l": 0, "en": "Target Acquired", "tr": ["préparation", "compétence"]},
   {"id": "bw-25", "code": "25", "n": "Désaveu Officiel", "t": "obligation", "f": "encounter", "s": "black_widow", "q": 1, "l": 0},
   {"id": "bw-26", "code": "26", "n": "Taskmaster", "t": "minion", "f": "encounter", "s": "black_widow_nemesis", "q": 1, "l": 0, "hp": 4},
-  {"id": "bw-27", "code": "27", "n": "Tueur à Louer", "t": "side_scheme", "f": "encounter", "s": "black_widow_nemesis", "q": 1, "l": 1, "bth": 3},
+  {"id": "bw-27", "code": "27", "n": "Tueur à Louer", "t": "side_scheme", "f": "encounter", "s": "black_widow_nemesis", "q": 1, "l": 1, "bth": 3, "xth": 1},
   {"id": "bw-28", "code": "28", "n": "Mercenaire d'Hydra", "t": "minion", "f": "encounter", "s": "black_widow_nemesis", "q": 2, "l": 0, "hp": 3},
   {"id": "bw-29", "code": "29", "n": "Tir Mortel", "t": "treachery", "f": "encounter", "s": "black_widow_nemesis", "q": 1, "l": 0},
   {"id": "bw-30", "code": "30", "n": "Contre-Attaque", "t": "upgrade", "f": "aggression", "s": "", "q": 3, "l": 0, "en": "Counterattack", "tr": ["préparation", "tactique"]},

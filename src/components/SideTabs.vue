@@ -47,7 +47,8 @@ function moveToNextTab(event) {
             unreadCount > 9 ? '9+' : unreadCount }}</span>
       </button>
     </div>
-    <div class="pane">
+    <!-- data-zoom-anchor : une fenêtre ouverte montre la carte agrandie à cette place, par-dessus son fond (BaseModal) -->
+    <div class="pane" data-zoom-anchor>
       <CardPreview v-if="ui.sideTab === 'card'" id="pane-card" role="tabpanel" aria-labelledby="tab-card" />
       <GameLog v-else id="pane-log" role="tabpanel" aria-labelledby="tab-log" />
     </div>

@@ -2,8 +2,8 @@
 // (l'étape suivante la remplace et fait son « Une fois révélée »), le jeton Actif des Démolisseurs, et les
 // stades de Kang le Conquérant.
 
-import { DEFINITION_BY_ID, STATUS_CARDS, TYPE_LABELS } from '../data.js'
-import { VILLAIN_STAGE_RULES } from '../rules.js'
+import { DEFINITION_BY_ID, STATUS_CARDS, TYPE_LABELS, SCENARIOS, heroName, isFeminineHero } from '../data.js'
+import { VILLAIN_STAGE_RULES, VILLAIN_HIT_POINTS_FROM_SCHEMES } from '../rules.js'
 import {
   definitionOf, cardName, cardLabel, cardsInZone, identityCard, isAlterEgo, counterKindOf, plural, logMessage,
   randomIndex, moveToTop, shuffleZone, encounterPile, activeVillainCard, activeVillainName, sideSchemeOfSet,
@@ -25,7 +25,8 @@ export const byStage = (first, second) => first.stage.length - second.stage.leng
  * l'identité utilisent les compteurs de PV du haut de l'écran ; alliés et sbires reçoivent un jeton de
  * dégâts. Sans carte (card = null) : le méchant. Avec les Démolisseurs, chaque méchant garde ses dégâts
  * sur sa carte et le compteur montre le méchant actif.
- * Rend ce qu'a donné la défaite d'un méchant (voir defeatVillain), pour que l'écran le présente.
+ * Rend ce qu'a donné la défaite d'un méchant (voir defeatVillain) ou celle du héros, tombé à 0 PV
+ * (heroDefeated), pour que l'écran le présente.
  */
 export function addDamage(game, card, amount, layout = DEFAULT_LAYOUT) {
   if (card && counterKindOf(card) !== 'damage') return undefined
@@ -54,14 +55,39 @@ export function addDamage(game, card, amount, layout = DEFAULT_LAYOUT) {
   }
   if (card.isIdentity) {
     const heroCounter = game.counters[0]
+    const hitPointsBefore = heroCounter.value
     heroCounter.value = Math.max(0, heroCounter.value - amount)
     logMessage(game, `${amount > 0 ? 'Dégât' : 'Soin'} sur ${cardName(card)} : ${heroCounter.value} PV.`)
-    if (amount > 0 && heroCounter.value === 0) logMessage(game, 'Votre identité tombe à 0 PV : défaite.', true)
+    if (amount > 0 && hitPointsBefore > 0 && heroCounter.value === 0) return heroDefeated(game, card)
     return undefined
   }
   card.damage = Math.max(0, card.damage + amount)
   logMessage(game, `${cardLabel(card)} : ${plural(card.damage, 'dégât')}.`)
   return undefined
+}
+
+/** "Le Bouffon Vert" → "le Bouffon Vert", "L'Homme Absorbant" → "l'Homme Absorbant" : un nom au milieu d'une phrase. */
+const inSentence = name => name.replace(/^(Les|Le|La) /, article => article.toLowerCase()).replace(/^L'/, 'l\'')
+
+/**
+ * Le méchant qui a battu le héros, pour la phrase de défaite : celui en jeu (la face visible : Le Bouffon
+ * Vert plutôt que Norman Osborn), les Démolisseurs tous ensemble, sinon le nom du méchant du scénario.
+ */
+function winningVillainName(game) {
+  const scenarioName = SCENARIOS.find(scenario => scenario.id === game.setup?.scenario)?.villainName ?? 'le méchant'
+  const villain = !game.crew && cardsInZone(game, 'table').find(card => definitionOf(card).type === 'villain')
+  return inSentence(villain ? cardName(villain) : scenarioName)
+}
+
+/**
+ * Les PV de l'identité tombent à 0 : le héros est battu, les joueurs perdent la partie. Rend
+ * {kind: 'heroDefeat', fromCardId, text} ; text : « Spider-Man a été battu par Rhino. »
+ */
+function heroDefeated(game, identity) {
+  const hero = game.setup?.hero
+  const text = `${heroName(hero) || cardName(identity)} a été ${isFeminineHero(hero) ? 'battue' : 'battu'} par ${winningVillainName(game)}.`
+  logMessage(game, `${text.slice(0, -1)} au tour ${game.turn} : défaite.`, true)
+  return { kind: 'heroDefeat', fromCardId: identity.id, text }
 }
 
 /**
@@ -92,12 +118,29 @@ export function addThreat(game, card, amount) {
 export const mainSchemeTakesTokens = card => card.zone === 'table' && card.faceUp && definitionOf(card).type === 'main_scheme'
 
 /**
- * Ajoute (amount > 0) ou retire (amount < 0) des jetons génériques sur une carte qui n'est ni un
- * personnage ni une manigance (utilisations, compteurs…), ou sur la manigance principale. À ne pas
+ * Un personnage qui porte aussi des jetons (Hawkeye entre en jeu avec 4 jetons Flèche, Iron Fist avec ses
+ * jetons Mystique) : sa face en jeu a des jetons d'entrée, ou il en porte déjà. Il prend des dégâts et des
+ * jetons, posés chacun à sa place sur la carte (GameCard).
+ */
+export function characterTakesTokens(card) {
+  if (counterKindOf(card) !== 'damage') return false
+  const definition = definitionOf(card)
+  return !!(card.side ? definition.backEntryTokens : definition.entryTokens) || card.tokens > 0
+}
+
+/**
+ * La carte prend des jetons génériques : ce sont ses seuls pions (ni personnage ni manigance), ou ils
+ * s'ajoutent à la menace de la manigance principale ou aux dégâts d'un personnage qui en porte.
+ */
+export const takesTokens = card => counterKindOf(card) === 'tokens' || mainSchemeTakesTokens(card) || characterTakesTokens(card)
+
+/**
+ * Ajoute (amount > 0) ou retire (amount < 0) des jetons génériques sur une carte qui en prend (takesTokens :
+ * utilisations, compteurs, jetons Flèche de Hawkeye, jetons de la manigance principale…). À ne pas
  * confondre avec addPawn, qui pose un pion libre sur la table.
  */
 export function addTokens(game, card, amount) {
-  if (!card || (counterKindOf(card) !== 'tokens' && !mainSchemeTakesTokens(card))) return
+  if (!card || !takesTokens(card)) return
   card.tokens = Math.max(0, (card.tokens || 0) + amount)
   logMessage(game, `${cardLabel(card)} : ${plural(card.tokens, 'jeton')}.`)
 }
@@ -105,6 +148,52 @@ export function addTokens(game, card, amount) {
 /** Seuil de menace de la manigance principale, lu dans le libellé de son compteur ("Menace /7" → 7) ; null s'il est inconnu. */
 export function threatThreshold(game) {
   return Number((game.counters[2].label.match(/\/(\d+)/) || [])[1]) || null
+}
+
+/* ---------------------------------------------------------------------------------------------------- */
+/* PV donnés au méchant par une manigance annexe                                                         */
+/* ---------------------------------------------------------------------------------------------------- */
+// Klaw « l'Immortel » : « Klaw gagne +10 PV » tant qu'elle est en jeu ; vaincue, Klaw perd ces PV
+// (rules.js villainHitPointsFromSchemes). Le compteur du méchant montre ses PV restants : il gagne les PV
+// quand la manigance entre en jeu, et les perd quand elle en sort ; une nouvelle étape du méchant arrive
+// avec (moves.js, updateCountersForNewStage). Les Démolisseurs n'ont pas de telle manigance.
+
+/** PV que cette carte donne au méchant : en jeu (face visible sur la table, pas un boost) et nommée par rules.js ; sinon 0. */
+const hitPointsGivenBy = card => (card.zone === 'table' && card.faceUp && !card.isBoost ? VILLAIN_HIT_POINTS_FROM_SCHEMES[card.definitionId] ?? 0 : 0)
+
+/** Le méchant sur la table, s'il n'y en a qu'un (pas avec les Démolisseurs). */
+const soleVillain = game => (game.crew ? null : cardsInZone(game, 'table').find(card => definitionOf(card).type === 'villain') ?? null)
+
+/** PV que les manigances en jeu donnent en plus au méchant. */
+export const villainHitPointsBonus = game => (game.crew ? 0 : cardsInZone(game, 'table').reduce((total, card) => total + hitPointsGivenBy(card), 0))
+
+/** " (+10 : « Klaw "l'Immortel" »)" : d'où viennent les PV en plus du méchant, pour le journal ; '' s'il n'en a pas. */
+export const villainHitPointsBonusNote = game => (game.crew ? '' : cardsInZone(game, 'table')
+  .filter(hitPointsGivenBy).map(card => ` (+${hitPointsGivenBy(card)} : « ${cardName(card)} »)`).join(''))
+
+/** ", Klaw gagne 10 PV (24 PV)" : ce qu'une carte qui vient d'entrer en jeu a donné au méchant ; '' sinon. */
+export function villainHitPointsGainNote(game, card) {
+  const villain = soleVillain(game)
+  return villain && hitPointsGivenBy(card) ? `, ${cardName(villain)} gagne ${hitPointsGivenBy(card)} PV (${game.counters[1].value} PV)` : ''
+}
+
+/**
+ * Une carte vient d'entrer en jeu face visible (entering), ou d'en sortir : si elle donne des PV au méchant,
+ * le compteur du méchant les gagne ou les perd. Rend {text, villain, villainDefeated} (text pour le
+ * journal : « Klaw perd ses 10 PV de plus (4 PV) » ; villainDefeated : tombé à 0 PV en les perdant, il est
+ * vaincu, à l'appelant d'appeler defeatVillain), ou null si la carte n'en donne pas.
+ */
+export function villainHitPointsChanged(game, card, entering) {
+  const bonus = VILLAIN_HIT_POINTS_FROM_SCHEMES[card.definitionId]
+  const villain = soleVillain(game)
+  if (!bonus || !villain) return null
+  const counter = game.counters[1]
+  const hitPointsBefore = counter.value
+  counter.value = Math.max(0, counter.value + (entering ? bonus : -bonus))
+  const text = entering
+    ? `${cardName(villain)} gagne ${bonus} PV (${counter.value} PV)`
+    : `${cardName(villain)} perd ses ${bonus} PV de plus (${counter.value} PV)`
+  return { text, villain, villainDefeated: !entering && hitPointsBefore > 0 && counter.value === 0 }
 }
 
 /* ---------------------------------------------------------------------------------------------------- */
@@ -163,9 +252,11 @@ function advanceMainScheme(game, mainScheme, nextStage, { reachedThreat, thresho
  * sa manigance annexe et le jeton Actif passe à un autre. Plus aucun méchant : victoire. Les stades de
  * Kang ont leurs propres règles (plus bas) : ses changements de stade attendent la fin de la phase.
  * Rend, avec des identifiants de cartes :
- *   {kind: 'stage', fromCardId, toCardId, keptStatuses, note?, stageLeft?}
- *        étape suivante (keptStatuses : cartes d'état passées à la suivante ; Kang : note, ce que le
- *        changement de stade a amené, stageLeft : le stade 3 a été achevé et non le méchant vaincu)
+ *   {kind: 'stage', fromCardId, toCardId, keptStatuses, note?, stageLeft?, hitPoints?}
+ *        étape suivante (keptStatuses : cartes d'état passées à la suivante ; note : ce qu'a fait son « Une
+ *        fois révélé », ou, Kang, ce que le changement de stade a amené ; stageLeft : le stade 3 de Kang a
+ *        été achevé et non le méchant vaincu ; hitPoints : ses PV en entrant en jeu, avec ceux que donne une
+ *        manigance, Klaw « l'Immortel »)
  *   {kind: 'pending', fromCardId, note, title?}  Kang : changement de stade à la fin de la phase
  *   {kind: 'crew', fromCardId, activeVillainId, sideSchemeId}  Démolisseurs : méchant parti, nouveau méchant actif
  *   {kind: 'victory', villainId, mainSchemeId}  victoire (la manigance principale en jeu, pour le texte de victoire)
@@ -202,27 +293,33 @@ export function defeatVillain(game, villain, layout = DEFAULT_LAYOUT) {
   moveCard(game, nextStage, 'table', { x, y }, true) // depuis « De côté » : nouveau compteur, « Nouvelle étape du méchant » au journal
   for (const statusId of keptStatuses) nextStage[statusId] = true
   game.counters[1].label = `${cardName(nextStage)} ${definitionOf(nextStage).stage}`
-  revealVillainStage(game, nextStage, layout)
-  return { kind: 'stage', fromCardId: villain.id, toCardId: nextStage.id, keptStatuses }
+  // ce qu'a fait son « Une fois révélé » (Casser et Emporter révélée…) est aussi montré dans la fenêtre
+  const note = revealVillainStage(game, nextStage, layout) || undefined
+  // ses PV : ceux de la carte, plus ceux que donne une manigance en jeu (Klaw « l'Immortel »)
+  return { kind: 'stage', fromCardId: villain.id, toCardId: nextStage.id, keptStatuses, note, hitPoints: game.counters[1].value }
 }
 
 /**
- * Une étape du méchant vient d'entrer en jeu (elle remplace l'étape vaincue, ou elle est posée depuis
- * « De côté ») : la table fait son « Une fois révélée » quand elle le peut (rules.js villainStages :
- * revealCardId, dealEncounterCards, revealScenarioDeckTop, stunHero) et l'écrit au journal. Ce qui se joue
- * à la main (onRevealA) est rappelé par moveCard ; une étape qui arrive sur sa face B n'a que des rappels.
+ * Une étape du méchant vient d'entrer en jeu (elle remplace l'étape vaincue, est posée depuis « De côté »,
+ * ou commence la partie, en expert) : la table fait son « Une fois révélée » quand elle le peut (rules.js
+ * villainStages : revealCardId, dealEncounterCards, revealScenarioDeckTop, stunHero) et l'écrit au journal.
+ * Ce qui se joue à la main (onRevealA) est rappelé par moveCard ; une étape qui arrive sur sa face B n'a
+ * que des rappels. Rend la phrase du journal ('' si la table n'a rien fait).
+ *   quiet  ne pas l'écrire au journal (la mise en place l'écrit à sa place parmi ses messages)
  */
-export function revealVillainStage(game, villain, layout) {
+export function revealVillainStage(game, villain, layout, { quiet = false } = {}) {
   const stageRules = VILLAIN_STAGE_RULES[definitionOf(villain).id]
-  if (!stageRules || villain.side) return
+  if (!stageRules || villain.side) return ''
   const effects = []
   if (stageRules.revealCardId) effects.push(revealCardFromEncounter(game, stageRules, layout))
   if (stageRules.dealEncounterCards) effects.push(dealEncounterCardsToPlayer(game, layout, stageRules.dealEncounterCards))
   if (stageRules.stunHero) effects.push(stunIdentity(game))
   const scenarioDeck = stageRules.revealScenarioDeckTop && scenarioDeckOf(game)
   if (scenarioDeck) effects.push(`la carte du dessus du deck ${scenarioDeck.name} est révélée`)
-  if (effects.length) logMessage(game, `« ${cardName(villain)} » ${definitionOf(villain).stage}, une fois révélé : ${effects.join(' ; ')}.`, true)
+  const text = effects.length ? `« ${cardName(villain)} » ${definitionOf(villain).stage}, une fois révélé : ${effects.join(' ; ')}.` : ''
+  if (text && !quiet) logMessage(game, text, true)
   if (scenarioDeck) revealScenarioDeckCard(game, layout) // écrit la carte révélée au journal
+  return text
 }
 
 /**

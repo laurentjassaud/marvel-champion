@@ -1,9 +1,10 @@
 // Menus contextuels (clic droit, ou appui long sur écran tactile) des cartes et des piles.
 
 import {
-  definitionOf, isCharacter, counterKindOf, discardZoneOf, cardName, mainSchemeTakesTokens, isAlterEgo, kangStage3Scheme
+  definitionOf, isCharacter, counterKindOf, discardZoneOf, cardName, takesTokens, isAlterEgo, kangStage3Scheme
 } from '../game/engine.js'
 import { STATUS_CARDS } from '../game/data.js'
+import { SHADOW_OF_THE_PAST_ID } from '../game/rules.js'
 import { useGameStore } from '../stores/game.js'
 import { useUiStore } from '../stores/ui.js'
 
@@ -43,7 +44,7 @@ export function useCardMenu() {
     ui.selectCard(card.id)
     const items = card.isPawn
       ? [menuItem('Supprimer le pion', () => gameStore.moveCard(card.id, 'discard'), 'Suppr')]
-      : [...tableItems(card), ...handItems(card), ...moveItems(card)]
+      : [...tableItems(card), ...handItems(card), ...discardItems(card), ...moveItems(card)]
     const isKnown = !card.isPawn && (card.faceUp || card.zone === 'hand')
     let title = 'Carte face cachée'
     if (card.isPawn) title = 'Pion'
@@ -68,20 +69,27 @@ export function useCardMenu() {
       const [targetName, targetSide] = card.side === 2 ? [heroForms[0], 0] : [heroForms[1], 2]
       otherFormItem = menuItem(`Passer en ${targetName}`, () => gameStore.setIdentityForm(cardId, targetSide))
     }
-    // dégâts sur les personnages, menace sur les manigances, jetons sur le reste (et sur la manigance
-    // principale : jetons Retard de L'Homme Absorbant, jetons Test de Zola)
+    // dégâts sur les personnages, menace sur les manigances, jetons sur le reste ; des jetons en plus sur la
+    // manigance principale (jetons Retard de L'Homme Absorbant, jetons Test de Zola) et sur un personnage qui
+    // en porte (jetons Flèche de Hawkeye)
     const counterItems = {
       damage: [menuItem('Dégât +1', () => gameStore.addDamage(cardId, 1), 'G'), menuItem('Dégât −1', () => gameStore.addDamage(cardId, -1), '⇧G')],
       threat: [menuItem('Menace +1', () => gameStore.addThreat(cardId, 1), 'M'), menuItem('Menace −1', () => gameStore.addThreat(cardId, -1), '⇧M')],
       tokens: [menuItem('Jeton +1', () => gameStore.addTokens(cardId, 1), 'J'), menuItem('Jeton −1', () => gameStore.addTokens(cardId, -1), '⇧J')]
     }
+    // L'Ombre du Passé révélée : son « Une fois révélée » en une ligne, en tête du menu
+    const nemesisItem = card.faceUp && card.definitionId === SHADOW_OF_THE_PAST_ID
+      ? menuItem('Mettre en jeu la Némésis', () => gameStore.putNemesisIntoPlay(cardId))
+      : null
     const items = [
+      nemesisItem,
+      null,
       menuItem(card.exhausted ? 'Redresser' : 'Épuiser', () => gameStore.toggleExhausted(cardId), 'T'),
       menuItem(flipLabel, () => gameStore.flipCard(cardId), 'F'),
       otherFormItem,
       null,
       ...counterItems[counterKindOf(card)],
-      ...(mainSchemeTakesTokens(card) ? counterItems.tokens : []),
+      ...(counterKindOf(card) !== 'tokens' && takesTokens(card) ? counterItems.tokens : []),
       null
     ]
     const game = gameStore.game
@@ -107,6 +115,16 @@ export function useCardMenu() {
       menuItem('Jouer face cachée', () => gameStore.playToTable(card.id, true)),
       null
     ]
+  }
+
+  /**
+   * Lignes d'une carte d'une défausse (un clic, dans la fenêtre de la défausse, ne fait que l'agrandir) : la
+   * remettre en jeu (Rencontre) ou la poser sur la table (Invocation) ; « Prendre en main » suit.
+   */
+  function discardItems(card) {
+    if (card.zone === 'encounterDiscard') return [menuItem('Remettre en jeu', () => gameStore.takeFromPile(card.id, 'encounterDiscard')), null]
+    if (card.zone === 'invocationDiscard') return [menuItem('Poser sur la table', () => gameStore.takeFromPile(card.id, 'invocationDiscard')), null]
+    return []
   }
 
   /** Lignes pour ranger une carte ailleurs (pas l'identité) : main, défausse, de côté, sur ou sous sa pioche. */
@@ -154,14 +172,17 @@ export function useCardMenu() {
         menuItem('Mélanger', () => gameStore.shuffle('scenarioDeck')),
         menuItem('Chercher dans le deck…', () => ui.openModal('pile', { zone: 'scenarioDeck' }))
       ]],
-      // les défausses : y chercher, ou reprendre la carte du dessus
+      // les défausses : y chercher, reprendre la carte du dessus, ou tout remélanger dans le paquet (confirmé
+      // dans une fenêtre)
       playerDiscard: ['Défausse', [
         menuItem('Chercher dans la défausse…', () => ui.openModal('pile', { zone: 'playerDiscard' })),
-        topCardItem('playerDiscard', name => `Reprendre « ${name} » en main`, cardId => gameStore.moveCard(cardId, 'hand'))
+        topCardItem('playerDiscard', name => `Reprendre « ${name} » en main`, cardId => gameStore.moveCard(cardId, 'hand')),
+        reshuffleItem('playerDiscard', 'Remélanger dans le paquet…')
       ]],
       encounterDiscard: ['Défausse Rencontre', [
         menuItem('Chercher dans la défausse…', () => ui.openModal('pile', { zone: 'encounterDiscard' })),
-        topCardItem('encounterDiscard', name => `Remettre « ${name} » en jeu`, cardId => gameStore.takeFromPile(cardId, 'encounterDiscard'))
+        topCardItem('encounterDiscard', name => `Remettre « ${name} » en jeu`, cardId => gameStore.takeFromPile(cardId, 'encounterDiscard')),
+        reshuffleItem('encounterDiscard', 'Remélanger dans le paquet Rencontre…')
       ]],
       invocationDiscard: ['Défausse Invocation', [
         menuItem('Chercher dans la défausse…', () => ui.openModal('pile', { zone: 'invocationDiscard' })),
@@ -170,6 +191,11 @@ export function useCardMenu() {
     }
     const [title, items] = menus[zone]
     ui.openContextMenu({ x, y, title, items: items.filter(Boolean) })
+  }
+
+  /** Ligne « Remélanger dans le paquet » d'une défausse, qui ouvre sa fenêtre de confirmation ; rien si elle est vide. */
+  function reshuffleItem(zone, label) {
+    return gameStore.pileOf(zone).length ? menuItem(label, () => ui.openModal('reshuffle', { zone })) : null
   }
 
   /** Ligne qui agit sur la carte du dessus d'une pile ; rien si la pile est vide. */

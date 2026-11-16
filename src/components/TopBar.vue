@@ -122,10 +122,12 @@ onBeforeUnmount(() => {
 /* le badge Expert, posé sur la fin du bandeau du méchant ; son mot fait 16 px, comme sur la maquette */
 .expert { position: relative; top: 2px; flex: none; width: 95.5px; height: 26px; margin-left: -63px; }
 .expert > img { position: absolute; max-width: none; }
-.expert-frame { left: 3.686px; top: 0; width: 88.1245px; height: 26px; transform: scaleY(-1); }
+/* le cadre penche comme le bandeau du méchant (« / ») ; son trait et son crochet soulignent son angle aigu
+   en bas à gauche : ils sont retournés et posés en miroir autour du milieu du cadre (x' = 95,5 − x) */
+.expert-frame { left: 3.686px; top: 0; width: 88.1245px; height: 26px; }
 .expert-dot { left: 20px; top: 8px; width: 6px; height: 6px; }
-.expert-bar { left: 35px; top: 23px; width: 56px; height: 3px; }
-.expert-hook { left: 84px; top: 17px; width: 7.72742px; height: 7px; }
+.expert-bar { left: 4.5px; top: 23px; width: 56px; height: 3px; transform: scaleX(-1); }
+.expert-hook { left: 3.773px; top: 17px; width: 7.72742px; height: 7px; transform: scaleX(-1); }
 .expert-label {
   position: absolute; left: 13px; top: -9px; width: 79px; height: 40px; display: grid; place-items: center;
   font: italic 500 16px/1 var(--font-display); letter-spacing: -.02em; text-transform: uppercase; color: #6567c6;
@@ -161,6 +163,11 @@ onBeforeUnmount(() => {
   .tab { --h: 50px; --lip-h: 6px; --cut: 22px; padding-inline: 30px; font-size: 20px; }
   .tabs { margin-right: 8px; }
   .tabs > * + * { margin-left: -21px; }
+}
+/* tablette (écran tactile assez large) : toute la barre aux trois quarts de sa taille, titre, affiche et
+   onglets compris ; la rangée de la page qui la porte fait 36 px (main.css) */
+@media (pointer: coarse) and (min-width: 701px) {
+  .bar { zoom: .75; }
 }
 /* téléphones : les onglets passent sous le titre, sur deux rangées s'il le faut */
 @media (max-width: 700px) {

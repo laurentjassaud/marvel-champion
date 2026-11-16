@@ -7,11 +7,13 @@ import { MAIN_SCHEME_NOTES, VILLAIN_STAGE_RULES } from '../rules.js'
 import {
   definitionOf, cardName, cardLabel, cardsInZone, cardById, isEncounterCard, isCharacter, isAlterEgo, plural,
   logMessage, uniqueId, moveToTop, moveToBottom, DECK_ZONES, DISCARD_ZONES, deckZoneOf, discardZoneOf, zoneLabel,
-  scenarioRulesOf
+  scenarioRulesOf, startingThreatOf, revealHint
 } from './state.js'
-import { SPOTS, nextEncounterSpot, nextHeroSpot } from './layout.js'
-import { refillInvocationDeck, refillEncounterDeckIfEmpty } from './piles.js'
-import { crewVillainLeftTable, revealVillainStage } from './villains.js'
+import { SPOTS, DEFAULT_LAYOUT, nextEncounterSpot, nextHeroSpot, keepCardOnTable } from './layout.js'
+import { refillInvocationDeck } from './piles.js'
+import {
+  crewVillainLeftTable, revealVillainStage, defeatVillain, villainHitPointsChanged, villainHitPointsBonus, villainHitPointsBonusNote
+} from './villains.js'
 
 /* ---------------------------------------------------------------------------------------------------- */
 /* Déplacer une carte                                                                                    */
@@ -21,7 +23,9 @@ import { crewVillainLeftTable, revealVillainStage } from './villains.js'
  * Déplace une carte vers une zone.
  *   targetZone  la zone d'arrivée ; 'deck' ou n'importe quelle pioche désigne la pioche propre à la carte,
  *               'discard' ou n'importe quelle défausse sa défausse propre (joueur, Rencontre, Invocation…)
- *   options     {x, y} position sur la table ; faceDown : posée face cachée ; bottom : sous la pioche
+ *   options     {x, y} position sur la table ; faceDown : posée face cachée ; bottom : sous la pioche ;
+ *               layout : la disposition de la table, pour garder la carte entière sur la table
+ *               (keepCardOnTable) et placer ce qu'amène la défaite du méchant
  *   quiet       ne rien écrire au journal (l'appelant écrit son propre message)
  * Un pion qui quitte la table disparaît. Ce que fait la carte en arrivant :
  *   - en quittant la table, elle est remise à zéro (jetons, dégâts, menace, cartes d'état, épuisement,
@@ -31,19 +35,29 @@ import { crewVillainLeftTable, revealVillainStage } from './villains.js'
  *   - en entrant en jeu face visible : ses jetons d'entrée et sa carte Tenace (enterPlay), et un
  *     environnement défausse les autres si le scénario le veut (discardOtherEnvironments) ;
  *   - une étape du méchant ou une manigance principale qui arrive de « De côté » met à jour son compteur ;
+ *   - une manigance qui donne des PV au méchant (Klaw « l'Immortel ») les lui donne en entrant en jeu, et
+ *     les lui reprend en sortant (villainHitPointsChanged) ;
  *   - un des Démolisseurs qui quitte la table emmène sa manigance (crewVillainLeftTable) ;
- *   - le deck Invocation vidé se remélange (refillInvocationDeck) ;
- *   - le paquet Rencontre vidé est aussitôt reconstitué avec sa défausse mélangée (refillEncounterDeckIfEmpty).
+ *   - le deck Invocation vidé se remélange (refillInvocationDeck), sans pénalité ; le paquet du joueur et le
+ *     paquet Rencontre vidés, eux, ne se reconstituent qu'à la main (shuffleDiscardIntoDeck) ;
+ *   - une carte qui arrive sur la table ou dans une défausse met fin au mulligan (mulliganTaken).
+ * Rend ce qu'a donné la défaite du méchant (defeatVillain), tombé à 0 PV quand une telle manigance est
+ * sortie du jeu, pour que l'écran le présente ; sinon undefined.
  */
 export function moveCard(game, card, targetZone, options = {}, quiet = false) {
   if (card.isPawn) {
     movePawn(game, card, targetZone, options, quiet)
-    return
+    return undefined
   }
   let zone = targetZone
   if (zone === 'deck' || DECK_ZONES.includes(zone)) zone = deckZoneOf(game, card)
   if (zone === 'discard' || DISCARD_ZONES.includes(zone)) zone = discardZoneOf(card)
   const fromZone = card.zone
+  // le mulligan se fait avant tout le reste : une carte mise en jeu ou défaussée y met fin (la mise en place,
+  // qui pose ses propres cartes, le laisse ouvert : newGame)
+  if (fromZone !== zone && (zone === 'table' || DISCARD_ZONES.includes(zone))) game.mulliganTaken = true
+  // en jeu : face visible sur la table, pas un boost (on ne fait que le regarder)
+  const wasInPlay = fromZone === 'table' && card.faceUp && !card.isBoost
   card.zone = zone
 
   if (zone !== 'table') resetCard(card)
@@ -59,23 +73,31 @@ export function moveCard(game, card, targetZone, options = {}, quiet = false) {
     card.x = options.x ?? card.x
     card.y = options.y ?? card.y
     card.zIndex = ++game.topZIndex
+    // posée à la main (glissée) : toujours entière sur la table, remontée si elle dépasse du bas
+    if (options.layout) keepCardOnTable(card, options.layout)
   }
 
   const entersPlayFaceUp = zone === 'table' && fromZone !== 'table' && card.faceUp
   const entryTokensText = entersPlayFaceUp ? enterPlay(card) : ''
   if (entersPlayFaceUp) discardOtherEnvironments(game, card)
   if (zone === 'table' && fromZone === 'setAside') updateCountersForNewStage(game, card)
+  const isInPlay = zone === 'table' && card.faceUp && !card.isBoost
+  const hitPointsChange = wasInPlay !== isInPlay ? villainHitPointsChanged(game, card, isInPlay) : null
 
   if (!quiet && fromZone !== zone) {
     const name = card.faceUp || fromZone === 'hand' ? `« ${cardName(card)} »` : 'Une carte face cachée'
     const destination = DECK_ZONES.includes(zone)
       ? `${options.bottom ? 'sous le' : 'sur le'} ${zoneLabel(game, zone)}`
       : `→ ${zoneLabel(game, zone)}`
-    logMessage(game, `${name} : ${zoneLabel(game, fromZone)} ${destination}${entryTokensText && `, avec ${entryTokensText}`}.`)
+    const hitPointsText = hitPointsChange ? ` ${hitPointsChange.text}.` : ''
+    logMessage(game, `${name} : ${zoneLabel(game, fromZone)} ${destination}${entryTokensText && `, avec ${entryTokensText}`}.${hitPointsText}`, !!hitPointsChange)
+  } else if (hitPointsChange && !isInPlay) {
+    // entrée sans bruit : l'appelant l'écrit (applyStartingThreat) ; une sortie l'est toujours
+    logMessage(game, `« ${cardName(card)} » quitte le jeu : ${hitPointsChange.text}.`, true)
   }
   if (game.crew && fromZone === 'table' && zone !== 'table' && definitionOf(card).type === 'villain') crewVillainLeftTable(game, card)
   if (fromZone === 'invocationDeck' && zone !== 'invocationDeck' && !cardsInZone(game, 'invocationDeck').length) refillInvocationDeck(game)
-  if (fromZone === 'encounterDeck' && zone !== 'encounterDeck') refillEncounterDeckIfEmpty(game)
+  return hitPointsChange?.villainDefeated ? defeatVillain(game, hitPointsChange.villain, options.layout ?? DEFAULT_LAYOUT) : undefined
 }
 
 /** Un pion se déplace sur la table, ou disparaît s'il en sort. */
@@ -110,8 +132,10 @@ function resetCard(card) {
 function updateCountersForNewStage(game, card) {
   const definition = definitionOf(card)
   if (definition.type === 'villain' && !game.crew) {
-    Object.assign(game.counters[1], { value: definition.hitPoints, label: `${definition.name} ${definition.stage}` })
-    logMessage(game, `Nouvelle étape du méchant : ${definition.name} ${definition.stage}, ${definition.hitPoints} PV.`, true)
+    // avec les PV que lui donne une manigance en jeu (Klaw « l'Immortel »)
+    const hitPoints = definition.hitPoints + villainHitPointsBonus(game)
+    Object.assign(game.counters[1], { value: hitPoints, label: `${definition.name} ${definition.stage}` })
+    logMessage(game, `Nouvelle étape du méchant : ${definition.name} ${definition.stage}, ${hitPoints} PV${villainHitPointsBonusNote(game)}.`, true)
     // son « Une fois révélée » à jouer à la main, sur la face par laquelle elle arrive
     const note = VILLAIN_STAGE_RULES[definition.id]?.[card.side ? 'onRevealB' : 'onRevealA']
     if (note) logMessage(game, `« ${cardName(card)} » ${definition.stage}, une fois révélé : ${note}.`, true)
@@ -193,7 +217,7 @@ export function takeFromPile(game, layout, card, zone) {
   else if (type === 'main_scheme') spot = SPOTS.mainScheme(layout)
   else spot = nextEncounterSpot(game, layout)
   moveCard(game, card, 'table', spot)
-  if (type === 'side_scheme') card.threat = definitionOf(card).startingThreat ?? 0
+  if (type === 'side_scheme') card.threat = startingThreatOf(card)
   if (type === 'villain' && zone === 'setAside') revealVillainStage(game, card, layout)
 }
 
@@ -263,17 +287,23 @@ export function setIdentityForm(game, card, side) {
  *   - sinon la carte passe de face cachée à face visible et inversement. Révélée sur la table, elle entre
  *     en jeu (jetons, Tenace, menace de départ) : une carte jouée face cachée, une carte Rencontre reçue
  *     ou glissée face cachée depuis le paquet ; pas un boost, qu'on ne fait que regarder, ni une carte qui
- *     porte déjà quelque chose (un double retournement par erreur ne recharge pas ses jetons).
+ *     porte déjà quelque chose (un double retournement par erreur ne recharge pas ses jetons). Une
+ *     manigance qui donne des PV au méchant les lui donne, retournée face visible, et les reprend, face
+ *     cachée : le méchant peut en être vaincu.
+ * Rend ce qu'a donné la défaite du méchant, pour que l'écran le présente ; sinon undefined.
  */
-export function flipCard(game, card) {
-  if (card.isPawn) return
+export function flipCard(game, card, layout = DEFAULT_LAYOUT) {
+  if (card.isPawn) return undefined
   const definition = definitionOf(card)
   if (card.isIdentity && definition.backName) {
     setIdentityForm(game, card, isAlterEgo(card) ? 0 : 1)
-    return
+    return undefined
   }
-  if (card.faceUp && definition.backName) turnToOtherSide(game, card)
-  else turnFaceUpOrDown(game, card)
+  if (card.faceUp && definition.backName) {
+    turnToOtherSide(game, card)
+    return undefined
+  }
+  return turnFaceUpOrDown(game, card, layout)
 }
 
 /** Une carte face visible passe sur son autre face (voir flipCard). */
@@ -297,25 +327,31 @@ function turnToOtherSide(game, card) {
   }
 }
 
-/** Une carte passe de face cachée à face visible ou inversement (voir flipCard). */
-function turnFaceUpOrDown(game, card) {
+/** Une carte passe de face cachée à face visible ou inversement (voir flipCard). Rend la défaite du méchant, ou undefined. */
+function turnFaceUpOrDown(game, card, layout) {
   const definition = definitionOf(card)
-  card.faceUp = !card.faceUp
-  if (!card.faceUp) {
-    logMessage(game, 'Carte retournée face cachée.')
-    return
-  }
   const onTable = card.zone === 'table'
+  card.faceUp = !card.faceUp
+  // Klaw « l'Immortel » retournée : elle entre en jeu ou en sort, et Klaw gagne ou perd ses PV (un boost,
+  // qu'on ne fait que regarder, n'entre pas en jeu)
+  const hitPointsChange = onTable && !card.isBoost ? villainHitPointsChanged(game, card, card.faceUp) : null
+  const hitPointsText = hitPointsChange ? ` ${hitPointsChange.text}.` : ''
+  if (!card.faceUp) {
+    logMessage(game, `Carte retournée face cachée.${hitPointsText}`, !!hitPointsChange)
+    return hitPointsChange?.villainDefeated ? defeatVillain(game, hitPointsChange.villain, layout) : undefined
+  }
   const entersPlay = onTable && !card.isBoost && !card.tokens && !card.damage && !card.threat
   const details = []
   if (entersPlay) {
     details.push(enterPlay(card))
-    if (definition.type === 'side_scheme') card.threat = definition.startingThreat ?? 0
+    if (definition.type === 'side_scheme') card.threat = startingThreatOf(card)
     if (card.threat) details.push(plural(card.threat, 'menace'))
     delete card.dealtToPlayer
   }
   const detailsText = details.filter(Boolean).join(', ')
-  logMessage(game, `Retournée : « ${cardName(card)} »${detailsText && ` (${detailsText})`}.`)
+  const hint = entersPlay ? revealHint(card) : ''
+  logMessage(game, `Retournée : « ${cardName(card)} »${detailsText && ` (${detailsText})`}.${hitPointsText}${hint}`, !!hitPointsChange)
   // un environnement retourné face visible entre en jeu, même en boost (Personne ne Passe)
   if (onTable) discardOtherEnvironments(game, card)
+  return undefined
 }

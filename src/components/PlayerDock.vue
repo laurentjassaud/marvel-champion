@@ -59,13 +59,13 @@ async function pickRandomCard() {
           </button>
         </div>
       </div>
-      <HudCounter :index="0" tone="hero" size="l" unit="PV" :renamable="false" />
+      <HudCounter class="hero-hp" :index="0" tone="hero" size="l" unit="PV" :renamable="false" />
       <!-- les onglets de la main, posés sur la bande rouge, dans l'ordre de la maquette -->
       <div class="actions" role="group" aria-label="Actions sur la main">
         <button type="button" class="slant foot random" :disabled="!handCount"
           title="Marque en rouge une carte de la main tirée au hasard" @click="pickRandomCard">Au hasard</button>
         <button type="button" class="slant foot mulligan" :disabled="!gameStore.canMulligan"
-          :title="gameStore.canMulligan ? 'Défausser des cartes de la main de départ et repiocher' : 'Seulement au tour 1, une fois par partie'"
+          :title="gameStore.canMulligan ? 'Défausser des cartes de la main de départ et repiocher' : 'Seulement au tour 1, une fois par partie, avant de mettre une carte en jeu ou d\'en défausser une'"
           @click="ui.openModal('mulligan')">
           Mulligan
         </button>
@@ -238,6 +238,13 @@ async function pickRandomCard() {
   .hand { grid-area: hand; }
   .dock-left { grid-area: left; justify-self: start; margin-right: 0; }
   .dock-right { grid-area: right; justify-self: end; }
+}
+
+/* tablette : le nom du héros remonte de 15 px au-dessus de ses PV */
+@media (pointer: coarse) and (min-width: 701px) {
+  .hero-hp :deep(.name) {
+    translate: 0 -15px;
+  }
 }
 
 /* tactile : les petits onglets un peu plus hauts, pour le doigt */

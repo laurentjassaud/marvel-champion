@@ -60,6 +60,12 @@ describe('MarvelCDB : cartes lues sur le site', () => {
   it('manigance annexe à l\'horizontale avec sa menace de départ, Ténacité, traits, manigance annexe de joueur', () => {
     const [, , , bella, guild] = GAMBIT_PACK
     expect(marvelCdbDefinition(guild)).toMatchObject({ type: 'side_scheme', landscape: true, startingThreat: 4 })
+    expect(marvelCdbDefinition(guild).extraThreatPerHero).toBeUndefined()
+    // the threat its "When Revealed" adds per hero, or its Hinder keyword; not under a condition
+    const extra = realText => marvelCdbDefinition(card('99014', 'side_scheme', 'encounter', 'x_nemesis', 'Plan', { base_threat: 3, real_text: realText })).extraThreatPerHero
+    expect(extra('<b>When Revealed</b>: Place an additional 1[per_hero] threat here.')).toBe(1)
+    expect(extra('Hinder 2[per_hero]. <i>(When revealed, place 2[per_hero] threat here.)</i>')).toBe(2)
+    expect(extra('<b>When Revealed (Norman Osborn)</b>: Place an additional 1[per_hero] threat here.')).toBeUndefined()
     expect(marvelCdbDefinition(bella)).toMatchObject({ type: 'minion', hitPoints: 5, toughness: true, traits: ['assassin', 'élite'] })
     expect(marvelCdbDefinition(card('99010', 'player_side_scheme', 'hero', 'x', 'Plan'))).toMatchObject({ type: 'side_scheme', landscape: true })
     expect(marvelCdbDefinition({ ...card('99011', 'event', 'basic', null, 'Sans image'), imagesrc: null }).imageUrl).toBeNull()

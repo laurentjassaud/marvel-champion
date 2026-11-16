@@ -40,7 +40,7 @@
   {"id": "rrs-049", "code": "49", "n": "Dégager la Zone", "t": "event", "f": "justice", "s": "", "q": 3, "l": 0, "en": "Clear the Area"},
   {"id": "rrs-053", "code": "53", "n": "Loyauté Douteuse", "t": "obligation", "f": "encounter", "s": "spider_woman", "q": 1, "l": 0},
   {"id": "rrs-054", "code": "54", "n": "La Vipère", "t": "minion", "f": "encounter", "s": "spider_woman_nemesis", "q": 1, "l": 0, "hp": 5, "tr": ["élite", "hydra"]},
-  {"id": "rrs-055", "code": "55", "n": "Les Ambitions de la Vipère", "t": "side_scheme", "f": "encounter", "s": "spider_woman_nemesis", "q": 1, "l": 1, "bth": 2},
+  {"id": "rrs-055", "code": "55", "n": "Les Ambitions de la Vipère", "t": "side_scheme", "f": "encounter", "s": "spider_woman_nemesis", "q": 1, "l": 1, "bth": 2, "xth": 1},
   {"id": "rrs-056", "code": "56", "n": "Recrue d'Hydra", "t": "minion", "f": "encounter", "s": "spider_woman_nemesis", "q": 2, "l": 0, "hp": 2, "tr": ["hydra"]},
   {"id": "rrs-057", "code": "57", "n": "Hail Hydra !", "t": "treachery", "f": "encounter", "s": "spider_woman_nemesis", "q": 1, "l": 0},
   {"id": "rrs-058", "code": "58", "n": "Crossbones", "t": "villain", "f": "encounter", "s": "crossbones", "q": 1, "l": 0, "st": "I", "hp": 12, "tr": ["hydra", "mercenaire"]},

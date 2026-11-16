@@ -1,61 +1,100 @@
-// Les piles : piocher dans le paquet du joueur (et le remélanger quand il est vide), révéler et
-// distribuer les cartes Rencontre (et remélanger le paquet Rencontre, avec un pion Accélération), révéler
-// le deck du scénario, lancer les cartes du deck Invocation de Docteur Strange.
+// Les piles : piocher dans le paquet du joueur, révéler et distribuer les cartes Rencontre, remélanger une
+// défausse dans son paquet (à la main : un paquet vide ne se reconstitue jamais tout seul, et c'est alors
+// le remélange qui applique la pénalité), révéler le deck du scénario, lancer les cartes du deck
+// Invocation de Docteur Strange.
 
 import { TYPE_LABELS } from '../data.js'
 import {
   definitionOf, cardName, cardsInZone, identityCard, plural, logMessage, randomIndex, moveToTop, shuffleZone,
-  encounterPile, activeVillainName, scenarioDeckOf
+  encounterPile, activeVillainName, scenarioDeckOf, startingThreatOf, revealHint
 } from './state.js'
-import { nextEncounterSpot, nextDealtSpot } from './layout.js'
+import { DEFAULT_LAYOUT, nextEncounterSpot, nextDealtSpot } from './layout.js'
 import { moveCard, entryTokensNote } from './moves.js'
-import { masterOfTimeScheme } from './villains.js'
+import { masterOfTimeScheme, villainHitPointsGainNote } from './villains.js'
 
 /* ---------------------------------------------------------------------------------------------------- */
 /* Paquet du joueur                                                                                      */
 /* ---------------------------------------------------------------------------------------------------- */
 
 /**
- * Pioche une carte. Si le paquet est vide (règle de Marvel Champions) : la défausse est remélangée et
- * devient le paquet, vous recevez une carte Rencontre face cachée devant votre identité, puis la pioche
- * continue. Rend false si le paquet et la défausse sont vides tous les deux.
+ * Pioche une carte. Un paquet vide ne se reconstitue pas tout seul : rend false, et l'écran propose de
+ * remélanger la défausse (shuffleDiscardIntoDeck, avec la pénalité du paquet vide).
  *   quiet  ne rien écrire pour la pioche elle-même (l'appelant compte les cartes et écrit le total)
  */
 export function drawCard(game, layout, quiet = false) {
-  if (!cardsInZone(game, 'playerDeck').length && !reshuffleDiscardIntoDeck(game, layout)) {
-    if (!quiet) logMessage(game, 'Paquet et défausse vides.')
+  const card = cardsInZone(game, 'playerDeck').at(-1)
+  if (!card) {
+    if (!quiet) logMessage(game, cardsInZone(game, 'playerDiscard').length ? 'Votre paquet est vide : remélangez votre défausse pour le reconstituer.' : 'Paquet et défausse vides.')
     return false
   }
-  const card = cardsInZone(game, 'playerDeck').at(-1)
   Object.assign(card, { zone: 'hand', faceUp: true, exhausted: false })
   moveToTop(game, card)
   if (!quiet) logMessage(game, 'Vous piochez une carte.')
   return true
 }
 
+/** La pioche où se remélange chaque défausse (« Remélanger dans le paquet »). */
+export const DECK_OF_DISCARD = { playerDiscard: 'playerDeck', encounterDiscard: 'encounterDeck' }
+
 /**
- * Paquet vide : la défausse est remélangée et devient le paquet (la défausse est alors vide), et vous
- * recevez une carte Rencontre face cachée devant votre identité. Rend false s'il n'y a rien à remélanger.
+ * « Remélanger dans le paquet » (menu d'une défausse, ou pioche dans un paquet vide, après confirmation) :
+ * les cartes de la défausse du joueur ou de la défausse Rencontre rejoignent leur paquet, qui est mélangé.
+ * Un paquet vide ne se reconstitue que de cette façon ; s'il était vide, la règle du paquet épuisé
+ * s'applique : vous recevez une carte Rencontre face cachée devant votre identité (paquet du joueur), ou
+ * un pion Accélération s'ajoute (paquet Rencontre). Un paquet qui avait encore des cartes est remélangé
+ * sans pénalité. Avec les Démolisseurs, la défausse et le paquet du méchant actif.
+ * Rend le nombre de cartes remélangées.
  */
-function reshuffleDiscardIntoDeck(game, layout) {
-  const discardPile = cardsInZone(game, 'playerDiscard')
-  if (!discardPile.length) return false
+export function shuffleDiscardIntoDeck(game, discardZone, layout = DEFAULT_LAYOUT) {
+  const deckZone = DECK_OF_DISCARD[discardZone]
+  if (!deckZone) return 0
+  const isPlayer = discardZone === 'playerDiscard'
+  // les piles Rencontre du méchant actif (Démolisseurs) ; celles du joueur entières
+  const pileOf = zone => (isPlayer ? cardsInZone(game, zone) : encounterPile(game, zone))
+  const discardPile = pileOf(discardZone)
+  if (!discardPile.length) return 0
+  const deckWasEmpty = !pileOf(deckZone).length
   // changement de zone direct : les cartes d'une défausse sont déjà remises à zéro
-  for (const card of discardPile) Object.assign(card, { zone: 'playerDeck', faceUp: false })
-  shuffleZone(game, 'playerDeck')
-  const dealtCard = dealEncounterCardToPlayer(game, layout)
-  const identity = identityCard(game)
-  const where = identity ? `, posée devant ${cardName(identity)}` : ''
-  const penalty = dealtCard ? `Vous recevez une carte Rencontre face cachée${where}.` : 'Plus aucune carte Rencontre à recevoir.'
-  logMessage(game, `Paquet vide : votre défausse est remélangée et devient votre paquet. ${penalty}`, true)
-  return true
+  for (const card of discardPile) Object.assign(card, { zone: deckZone, faceUp: false })
+  shuffleZone(game, deckZone)
+  const deckSize = pileOf(deckZone).length
+  const what = isPlayer ? 'Votre défausse' : `La défausse Rencontre${game.activeVillainSet ? ` de « ${activeVillainName(game)} »` : ''}`
+  const where = isPlayer ? 'votre paquet' : 'le paquet Rencontre'
+  let penalty = ''
+  if (deckWasEmpty) penalty = ` ${isPlayer ? emptyPlayerDeckPenalty(game, layout) : emptyEncounterDeckPenalty(game)}`
+  logMessage(game, `${what} (${plural(discardPile.length, 'carte')}) est remélangée dans ${where}, qui compte maintenant ${plural(deckSize, 'carte')}.${penalty}`, true)
+  return discardPile.length
 }
 
-/** Pioche plusieurs cartes et écrit le total au journal ; rend le nombre de cartes piochées. */
+/** Paquet du joueur vide, reconstitué : une carte Rencontre face cachée devant votre identité. Rend la phrase du journal. */
+function emptyPlayerDeckPenalty(game, layout) {
+  const dealtCard = dealEncounterCardToPlayer(game, layout)
+  if (!dealtCard) return 'Paquet vide : le paquet Rencontre l\'est aussi, remélangez-le puis attribuez-vous une carte Rencontre (clic droit sur le paquet Rencontre → Carte face cachée pour vous).'
+  const identity = identityCard(game)
+  return `Paquet vide : vous recevez une carte Rencontre face cachée${identity ? `, posée devant ${cardName(identity)}` : ''}.`
+}
+
+/**
+ * Paquet Rencontre épuisé, reconstitué : un pion Accélération (+1 menace par phase du méchant). Kang : tant
+ * que Le Maître du Temps attend, les pions se posent sur lui et n'ajoutent pas de menace au stade 3. Rend
+ * la phrase du journal.
+ */
+function emptyEncounterDeckPenalty(game) {
+  game.accelerationTokens += 1
+  const masterOfTime = masterOfTimeScheme(game)
+  if (masterOfTime) masterOfTime.tokens = game.accelerationTokens
+  const effect = masterOfTime
+    ? `posé sur « ${cardName(masterOfTime)} », il n'ajoute pas de menace au stade 3`
+    : '+1 menace par phase du méchant'
+  return `Paquet épuisé : pion Accélération ${game.accelerationTokens} (${effect}).`
+}
+
+/** Pioche plusieurs cartes et écrit le total au journal ; rend le nombre de cartes piochées (moins si le paquet se vide). */
 export function drawCards(game, layout, count) {
   let drawnCount = 0
   for (let i = 0; i < count; i++) if (drawCard(game, layout, true)) drawnCount++
-  logMessage(game, `Vous piochez ${plural(drawnCount, 'carte')}.`)
+  const emptyNote = drawnCount < count ? ' Votre paquet est vide.' : ''
+  logMessage(game, `Vous piochez ${plural(drawnCount, 'carte')}.${emptyNote}`)
   return drawnCount
 }
 
@@ -80,55 +119,71 @@ export function pickRandomHandCard(game) {
 // Avec plusieurs méchants (Les Démolisseurs), seuls le paquet et la défausse du méchant actif servent
 // (encounterPile).
 
-/**
- * Paquet Rencontre épuisé : sa défausse est mélangée et devient le nouveau paquet Rencontre, et un pion
- * Accélération s'ajoute (+1 menace par phase du méchant). Kang : tant que Le Maître du Temps attend, les
- * pions se posent sur lui et n'ajoutent pas de menace au stade 3. Rend false si la défausse est vide aussi.
- */
-function refillEncounterDeck(game) {
-  const discardPile = encounterPile(game, 'encounterDiscard')
-  if (!discardPile.length) return false
-  // changement de zone direct : les cartes d'une défausse sont déjà remises à zéro
-  for (const card of discardPile) Object.assign(card, { zone: 'encounterDeck', faceUp: false })
-  shuffleZone(game, 'encounterDeck')
-  game.accelerationTokens += 1
-  const whose = game.activeVillainSet ? ` de « ${activeVillainName(game)} »` : ''
-  const masterOfTime = masterOfTimeScheme(game)
-  if (masterOfTime) masterOfTime.tokens = game.accelerationTokens
-  const effect = masterOfTime
-    ? `posé sur « ${cardName(masterOfTime)} », il n'ajoute pas de menace au stade 3`
-    : '+1 menace par phase du méchant'
-  logMessage(game, `Paquet Rencontre${whose} épuisé : sa défausse (${plural(discardPile.length, 'carte')}) est mélangée et devient le nouveau paquet Rencontre. Pion Accélération : ${game.accelerationTokens} (${effect}).`, true)
-  return true
-}
+/** La carte du dessus du paquet Rencontre en service, ou null s'il est vide (il ne se reconstitue pas tout seul). */
+const topEncounterCard = game => encounterPile(game, 'encounterDeck').at(-1) ?? null
 
 /**
- * Règle du paquet Rencontre : dès que sa dernière carte en sort (révélée, distribuée, défaussée,
- * déplacée…), sa défausse est mélangée et devient le nouveau paquet (refillEncounterDeck). Si la défausse
- * est vide à ce moment-là, le paquet reste vide : il sera remélangé à la prochaine carte demandée
- * (topEncounterCard). Appelé par moveCard.
+ * Révèle la carte du dessus du paquet Rencontre dans la rangée Rencontre (touche E, clic sur le paquet).
+ * Paquet vide : rend null, et l'écran propose de remélanger la défausse Rencontre.
  */
-export function refillEncounterDeckIfEmpty(game) {
-  if (!encounterPile(game, 'encounterDeck').length) refillEncounterDeck(game)
-}
-
-/** La carte du dessus du paquet Rencontre en service (remélangé s'il est vide), ou null s'il ne reste rien. */
-function topEncounterCard(game) {
-  if (!encounterPile(game, 'encounterDeck').length && !refillEncounterDeck(game)) return null
-  return encounterPile(game, 'encounterDeck').at(-1)
-}
-
-/** Révèle la carte du dessus du paquet Rencontre dans la rangée Rencontre (touche E, clic sur le paquet). */
 export function revealEncounterCard(game, layout) {
   const card = topEncounterCard(game)
   if (!card) {
-    logMessage(game, 'Plus aucune carte Rencontre.')
+    logMessage(game, encounterPile(game, 'encounterDiscard').length ? 'Paquet Rencontre vide : remélangez sa défausse pour le reconstituer.' : 'Plus aucune carte Rencontre.')
     return null
   }
   moveCard(game, card, 'table', nextEncounterSpot(game, layout), true) // face visible, avec ses jetons
   const details = applyStartingThreat(game, card, layout) + entryTokensNote(card)
-  logMessage(game, `Carte Rencontre révélée : « ${cardName(card)} » (${typeLabelOf(card)}${details}).`)
+  logMessage(game, `Carte Rencontre révélée : « ${cardName(card)} » (${typeLabelOf(card)}${details}).${revealHint(card)}`)
   return card
+}
+
+/**
+ * Le sbire Némésis d'un set Némésis : son sbire en un seul exemplaire, le premier dans l'ordre des cartes
+ * (Thomas Edison avant son Robot Géant) ; les sbires en plusieurs exemplaires (Mercenaire d'Hydra) n'en
+ * sont pas. Un set sans sbire en un exemplaire : son premier sbire.
+ */
+const nemesisMinionOf = cards => cards.find(card => definitionOf(card).type === 'minion' && definitionOf(card).quantity === 1)
+  ?? cards.find(card => definitionOf(card).type === 'minion') ?? null
+
+/**
+ * L'Ombre du Passé (son menu : « Mettre en jeu la Némésis ») : le sbire Némésis du héros, mis de côté, entre
+ * en jeu engagé avec vous (dans la rangée Rencontre) et sa manigance annexe Némésis avec sa menace de départ
+ * (et celle de son « Une fois révélée ») ; le reste du set Némésis est mélangé dans le paquet Rencontre.
+ * Si aucun sbire n'entre en jeu ainsi, la carte gagne Renfort : le journal demande de révéler une autre carte
+ * Rencontre. La traîtrise, résolue, est défaussée (sourceCard, si elle est sur la table).
+ * Rend {minion, sideScheme} : ce qui est entré en jeu, ou null.
+ */
+export function putNemesisIntoPlay(game, layout, sourceCard = null) {
+  const nemesisSet = `${game.setup.hero}_nemesis`
+  const setAside = cardsInZone(game, 'setAside').filter(card => definitionOf(card).set === nemesisSet)
+  const source = sourceCard ? `« ${cardName(sourceCard)} »` : 'La carte'
+  const discardedSource = sourceCard?.zone === 'table'
+  if (discardedSource) moveCard(game, sourceCard, 'discard', {}, true) // sa place libérée pour la Némésis
+
+  const minion = nemesisMinionOf(setAside)
+  const sideScheme = setAside.find(card => definitionOf(card).type === 'side_scheme') ?? null
+  const done = []
+  if (minion) {
+    moveCard(game, minion, 'table', nextEncounterSpot(game, layout), true) // face visible, Tenace, avec ses jetons
+    done.push(`« ${cardName(minion)} » entre en jeu, engagé avec vous${entryTokensNote(minion)}`)
+  }
+  if (sideScheme) {
+    moveCard(game, sideScheme, 'table', nextEncounterSpot(game, layout), true)
+    done.push(`« ${cardName(sideScheme)} » en jeu (manigance annexe${applyStartingThreat(game, sideScheme, layout)})`)
+  }
+  const rest = setAside.filter(card => card !== minion && card !== sideScheme)
+  for (const card of rest) moveCard(game, card, 'encounterDeck', {}, true)
+  if (rest.length) {
+    shuffleZone(game, 'encounterDeck')
+    done.push(rest.length > 1
+      ? `les ${rest.length} autres cartes du set Némésis sont mélangées dans le paquet Rencontre`
+      : 'l\'autre carte du set Némésis est mélangée dans le paquet Rencontre')
+  }
+  if (!minion) done.push('aucun sbire Némésis de côté, elle gagne Renfort (révélez une autre carte Rencontre, E)')
+  if (discardedSource) done.push('elle est défaussée')
+  logMessage(game, `${source} : ${done.join(' ; ')}.`, true)
+  return { minion, sideScheme }
 }
 
 /** Libellé français du type d'une carte ("Manigance annexe"). */
@@ -153,16 +208,17 @@ export function revealScenarioDeckCard(game, layout) {
 }
 
 /**
- * Une manigance annexe révélée entre en jeu avec sa menace de départ (imprimée pour un joueur) ; Capturé
- * par Hydra prend en plus un allié Captif. Rend ce que le journal ajoute après le type de la carte
- * (", 2 menaces…"), ou '' pour une autre carte.
+ * Une manigance annexe révélée entre en jeu avec sa menace de départ (imprimée pour un joueur, plus celle
+ * que son « Une fois révélée » ajoute par héros : startingThreatOf) ; Capturé par Hydra prend en plus un
+ * allié Captif. Rend ce que le journal ajoute après le type de la carte (", 2 menaces…", et les PV
+ * qu'elle a donnés au méchant en entrant en jeu : Klaw « l'Immortel »), ou '' pour une autre carte.
  */
 export function applyStartingThreat(game, card, layout) {
   const definition = definitionOf(card)
   if (definition.type !== 'side_scheme') return ''
-  card.threat = definition.startingThreat ?? 0
+  card.threat = startingThreatOf(card)
   const captiveNote = definition.capturesAlly ? captureAlly(game, card, layout) : ''
-  return `, ${plural(card.threat, 'menace')}${captiveNote}`
+  return `, ${plural(card.threat, 'menace')}${captiveNote}${villainHitPointsGainNote(game, card)}`
 }
 
 /**

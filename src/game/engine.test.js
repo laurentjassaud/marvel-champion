@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { existsSync } from 'node:fs'
 import * as E from './engine.js'
 import { CARD_DEFINITIONS, PRECON_DECKS, HEROES, SCENARIOS, DEFINITION_BY_ID, DEFINITION_BY_CODE, MODULAR_SETS, VICTORY_TEXTS } from './data.js'
-import { HERO_RULES, SCENARIO_RULES } from './rules.js'
+import { HERO_RULES, SCENARIO_RULES, SHADOW_OF_THE_PAST_ID } from './rules.js'
 import { migrateSavedGame, SAVED_GAME_VERSION } from './savedGame.js'
 
 const L = { width: 1100, height: 580, cardWidth: 80 }
@@ -18,6 +18,8 @@ function seeded(seed) {
 const game = (over = {}) =>
   E.newGame({ hero: 'spider_man', deckList: PRECON_DECKS.spider_man, scenario: 'rhino', modulars: ['bomb_scare'], expert: false, deckLabel: 'test', ...over }, L)
 const qty = pred => CARD_DEFINITIONS.filter(pred).reduce((n, d) => n + d.quantity, 0)
+// the log, as text
+const logTexts = s => s.log.map(e => e.text)
 // puts the first card of type `t` from a pile face up on the table
 const onTable = (s, t, zone = 'encounterDeck') => {
   const c = E.cardsInZone(s, zone).find(x => E.definitionOf(x).type === t)
@@ -28,6 +30,11 @@ const onTable = (s, t, zone = 'encounterDeck') => {
 beforeEach(() => E.setRandomSource(seeded(42)))
 
 describe('données', () => {
+  it("noms français des sets modulaires : Civils Attaqués, Le Siège de l'Apocalypse", () => {
+    expect(MODULAR_SETS.find(m => m.id === 'under_attack').name).toBe('Civils Attaqués')
+    expect(MODULAR_SETS.find(m => m.id === 'the_doomsday_chair').name).toBe("Le Siège de l'Apocalypse")
+  })
+
   it('chaque précon fait 40 cartes hors identité et obligation', () => {
     for (const h of HEROES) {
       const n = PRECON_DECKS[h.id].reduce((t, [g, q]) => t + (['hero', 'obligation'].includes(DEFINITION_BY_ID[g].type) ? 0 : q), 0)
@@ -317,29 +324,70 @@ describe('mise en place', () => {
 })
 
 describe('paquets', () => {
-  it('paquet vide : remélange la défausse et donne une Rencontre face cachée', () => {
+  it('remélanger la défausse du joueur dans son paquet : sans carte Rencontre', () => {
+    const s = game()
+    const hand = E.cardsInZone(s, 'hand')
+    for (const card of hand.slice(0, 3)) E.moveCard(s, card, 'discard', {}, true)
+    const deckBefore = E.cardsInZone(s, 'playerDeck').length
+    const encounterBefore = E.cardsInZone(s, 'encounterDeck').length
+    expect(E.shuffleDiscardIntoDeck(s, 'playerDiscard')).toBe(3)
+    expect(E.cardsInZone(s, 'playerDiscard')).toHaveLength(0)
+    expect(E.cardsInZone(s, 'playerDeck')).toHaveLength(deckBefore + 3)
+    expect(E.cardsInZone(s, 'playerDeck').every(c => !c.faceUp)).toBe(true)
+    expect(E.cardsInZone(s, 'encounterDeck')).toHaveLength(encounterBefore)
+    expect(logTexts(s).at(-1)).toBe(`Votre défausse (3 cartes) est remélangée dans votre paquet, qui compte maintenant ${deckBefore + 3} cartes.`)
+    expect(E.shuffleDiscardIntoDeck(s, 'playerDiscard')).toBe(0) // vide : rien
+    expect(E.shuffleDiscardIntoDeck(s, 'invocationDiscard')).toBe(0) // pas cette défausse
+  })
+
+  it('remélanger la défausse Rencontre dans son paquet : sans pion Accélération ; Démolisseurs : le méchant actif', () => {
+    const s = game()
+    for (const card of E.cardsInZone(s, 'encounterDeck').slice(0, 2)) E.moveCard(s, card, 'discard', {}, true)
+    const deckBefore = E.cardsInZone(s, 'encounterDeck').length
+    expect(E.shuffleDiscardIntoDeck(s, 'encounterDiscard')).toBe(2)
+    expect(E.cardsInZone(s, 'encounterDeck')).toHaveLength(deckBefore + 2)
+    expect(s.accelerationTokens).toBe(0)
+    expect(logTexts(s).at(-1)).toBe(`La défausse Rencontre (2 cartes) est remélangée dans le paquet Rencontre, qui compte maintenant ${deckBefore + 2} cartes.`)
+    const t = game({ scenario: 'wrecking_crew', modulars: [] })
+    const other = E.cardsInZone(t, 'encounterDeck').find(c => E.definitionOf(c).set === 'thunderball')
+    E.moveCard(t, other, 'discard', {}, true)
+    E.moveCard(t, E.encounterPile(t, 'encounterDeck')[0], 'discard', {}, true)
+    expect(E.shuffleDiscardIntoDeck(t, 'encounterDiscard')).toBe(1)
+    expect(other.zone).toBe('encounterDiscard')
+    expect(E.encounterPile(t, 'encounterDeck')).toHaveLength(15)
+  })
+
+  it('paquet vide : il reste vide ; le remélanger reconstitue le paquet et donne une Rencontre face cachée', () => {
     const s = game()
     E.cardsInZone(s, 'playerDeck').forEach(c => E.moveCard(s, c, 'discard', {}, true))
     const enc = E.cardsInZone(s, 'encounterDeck').length
     const total = E.cardsInZone(s, 'playerDiscard').length
-    expect(E.drawCard(s, L)).toBe(true)
-    // the discard became the deck, one card of it drawn
+    const hand = E.cardsInZone(s, 'hand').length
+    // piocher dans un paquet vide ne fait rien : il ne se reconstitue jamais tout seul
+    expect(E.drawCard(s, L)).toBe(false)
+    expect(E.cardsInZone(s, 'playerDeck')).toHaveLength(0)
+    expect(E.cardsInZone(s, 'playerDiscard')).toHaveLength(total)
+    expect(E.cardsInZone(s, 'hand')).toHaveLength(hand)
+    expect(logTexts(s).at(-1)).toBe('Votre paquet est vide : remélangez votre défausse pour le reconstituer.')
+    expect(E.drawCards(s, L, 2)).toBe(0)
+    // remélanger la défausse dans le paquet vide : la défausse devient le paquet, avec la pénalité
+    expect(E.shuffleDiscardIntoDeck(s, 'playerDiscard', L)).toBe(total)
     expect(E.cardsInZone(s, 'playerDiscard')).toHaveLength(0)
-    expect(E.cardsInZone(s, 'playerDeck')).toHaveLength(total - 1)
-    expect(E.cardsInZone(s, 'hand').length).toBeGreaterThan(0)
+    expect(E.cardsInZone(s, 'playerDeck')).toHaveLength(total)
     expect(E.cardsInZone(s, 'encounterDeck')).toHaveLength(enc - 1)
     // the encounter card, face down in front of the identity (above it)
     const id = E.identityCard(s)
     const dealt = E.cardsInZone(s, 'table').filter(c => E.isEncounterCard(c) && !c.faceUp)
     expect(dealt).toHaveLength(1)
     expect(dealt[0]).toMatchObject({ dealtToPlayer: true, x: id.x, y: id.y - L.cardWidth * 1.4 - 12 })
-    expect(s.log.at(-2).text).toBe(`Paquet vide : votre défausse est remélangée et devient votre paquet. Vous recevez une carte Rencontre face cachée, posée devant ${E.cardName(id)}.`)
-    // it follows the identity once moved; a second one fans out to the right
+    expect(logTexts(s).at(-1)).toBe(`Votre défausse (${total} cartes) est remélangée dans votre paquet, qui compte maintenant ${total} cartes. Paquet vide : vous recevez une carte Rencontre face cachée, posée devant ${E.cardName(id)}.`)
+    expect(E.drawCard(s, L)).toBe(true)
+    // it follows the identity once moved; a second one fans out to the left (the identity is on the right)
     id.x = 300
     E.cardsInZone(s, 'playerDeck').forEach(c => E.moveCard(s, c, 'discard', {}, true))
-    E.drawCard(s, L)
+    E.shuffleDiscardIntoDeck(s, 'playerDiscard', L)
     const next = E.cardsInZone(s, 'table').find(c => c.dealtToPlayer && c !== dealt[0])
-    expect(next).toMatchObject({ x: 300 + L.cardWidth * 0.35, y: id.y - L.cardWidth * 1.4 - 12 })
+    expect(next).toMatchObject({ x: 300 - L.cardWidth * 0.35, y: id.y - L.cardWidth * 1.4 - 12 })
     // back in a pile, it is no longer dealt
     E.moveCard(s, next, 'discard')
     expect(next.dealtToPlayer).toBeUndefined()
@@ -348,34 +396,43 @@ describe('paquets', () => {
     // nothing left to draw at all
     E.cardsInZone(s, 'playerDeck').forEach(c => E.moveCard(s, c, 'hand', {}, true))
     expect(E.drawCard(s, L)).toBe(false)
+    expect(logTexts(s).at(-1)).toBe('Paquet et défausse vides.')
   })
 
-  it('Rencontre vide : dès que sa dernière carte en sort, sa défausse mélangée devient le nouveau paquet, +1 accélération', () => {
+  it('Rencontre vide : il reste vide ; le remélanger le reconstitue avec +1 accélération', () => {
     const s = game()
     const total = E.cardsInZone(s, 'encounterDeck').length
     E.cardsInZone(s, 'encounterDeck').forEach(c => E.moveCard(s, c, 'discard', {}, true))
-    // la dernière carte défaussée a vidé le paquet : la défausse, elle comprise, est aussitôt remélangée
+    // la dernière carte défaussée a vidé le paquet : il ne se reconstitue pas tout seul
+    expect(E.cardsInZone(s, 'encounterDeck')).toHaveLength(0)
+    expect(E.cardsInZone(s, 'encounterDiscard')).toHaveLength(total)
+    expect(s.accelerationTokens).toBe(0)
+    expect(E.revealEncounterCard(s, L)).toBeNull()
+    expect(logTexts(s).at(-1)).toBe('Paquet Rencontre vide : remélangez sa défausse pour le reconstituer.')
+    expect(E.dealBoostCard(s, L)).toBeNull()
+    expect(E.dealEncounterCardToPlayer(s, L)).toBeNull()
+    // remélanger la défausse dans le paquet vide : pion Accélération
+    expect(E.shuffleDiscardIntoDeck(s, 'encounterDiscard', L)).toBe(total)
     expect(E.cardsInZone(s, 'encounterDeck')).toHaveLength(total)
-    expect(E.cardsInZone(s, 'encounterDiscard')).toHaveLength(0)
     expect(s.accelerationTokens).toBe(1)
-    expect(s.log.at(-1).text).toBe(`Paquet Rencontre épuisé : sa défausse (${total} cartes) est mélangée et devient le nouveau paquet Rencontre. Pion Accélération : 1 (+1 menace par phase du méchant).`)
-    // révéler la dernière carte : le paquet se reconstitue aussitôt avec la défausse
-    const t = game()
-    const deck = E.cardsInZone(t, 'encounterDeck')
-    deck.slice(0, -1).forEach(c => E.moveCard(t, c, 'discard', {}, true))
-    expect(E.cardsInZone(t, 'encounterDeck')).toHaveLength(1)
-    const last = E.revealEncounterCard(t, L)
-    expect(last.zone).toBe('table')
-    expect(E.cardsInZone(t, 'encounterDeck')).toHaveLength(total - 1)
-    expect(t.accelerationTokens).toBe(1)
-    // paquet et défausse vides : le paquet reste vide jusqu'à la prochaine carte demandée
+    expect(logTexts(s).at(-1)).toBe(`La défausse Rencontre (${total} cartes) est remélangée dans le paquet Rencontre, qui compte maintenant ${total} cartes. Paquet épuisé : pion Accélération 1 (+1 menace par phase du méchant).`)
+    expect(E.revealEncounterCard(s, L).zone).toBe('table')
+    // paquet et défausse vides : rien à révéler
     const u = game()
     E.cardsInZone(u, 'encounterDeck').forEach(c => E.moveCard(u, c, 'setAside', {}, true))
-    expect(E.cardsInZone(u, 'encounterDeck')).toHaveLength(0)
+    expect(E.revealEncounterCard(u, L)).toBeNull()
+    expect(logTexts(u).at(-1)).toBe('Plus aucune carte Rencontre.')
+    expect(E.shuffleDiscardIntoDeck(u, 'encounterDiscard', L)).toBe(0)
     expect(u.accelerationTokens).toBe(0)
-    E.moveCard(u, E.cardsInZone(u, 'setAside')[0], 'discard', {}, true)
-    expect(E.revealEncounterCard(u, L).zone).toBe('table')
-    expect(u.accelerationTokens).toBe(1)
+  })
+
+  it('fin de la phase du héros, paquet vide : la main n\'est pas complétée, les cartes manquantes sont annoncées', () => {
+    const s = game()
+    E.cardsInZone(s, 'hand').slice(0, 2).forEach(c => E.moveCard(s, c, 'discard', {}, true))
+    E.cardsInZone(s, 'playerDeck').forEach(c => E.moveCard(s, c, 'discard', {}, true))
+    E.startVillainPhase(s, L)
+    expect(E.cardsInZone(s, 'hand')).toHaveLength(E.handSize(s) - 2)
+    expect(logTexts(s).join('\n')).toContain('Votre paquet est vide : il manque 2 cartes, à piocher une fois la défausse remélangée.')
   })
 
   it('une carte Rencontre défaussée va dans la défausse Rencontre', () => {
@@ -454,6 +511,26 @@ describe('mulligan', () => {
     expect(E.cardsInZone(s, 'hand').map(c => c.id)).toEqual(hand)
     expect(s.mulliganTaken).toBe(true)
   })
+
+  it('une carte mise en jeu ou défaussée y met fin ; la mise en place, piocher ou déplacer une carte de la table, non', () => {
+    // la mise en place pose des cartes sur la table (Réseau de Défense, Klaw « l'Immortel » en expert)
+    const klaw = game({ scenario: 'klaw', modulars: ['masters_of_evil'], expert: true })
+    expect(klaw.mulliganTaken).toBe(false)
+    E.drawCard(klaw, L)
+    E.moveCard(klaw, E.identityCard(klaw), 'table', { x: 300, y: 300 })
+    expect(klaw.mulliganTaken).toBe(false)
+    // une carte jouée sur la table
+    E.playToTable(klaw, L, E.cardsInZone(klaw, 'hand')[0])
+    expect(klaw.mulliganTaken).toBe(true)
+    // une carte défaussée
+    const s = game()
+    E.moveCard(s, E.cardsInZone(s, 'hand')[0], 'discard')
+    expect(s.mulliganTaken).toBe(true)
+    // une carte Rencontre révélée
+    const t = game()
+    E.revealEncounterCard(t, L)
+    expect(t.mulliganTaken).toBe(true)
+  })
 })
 
 describe('main et partie', () => {
@@ -489,6 +566,27 @@ describe('main et partie', () => {
 })
 
 describe('dégâts et menace', () => {
+  it('héros à 0 PV : « Spider-Man a été battu par Rhino », une seule fois', () => {
+    const s = game()
+    expect(E.addDamage(s, E.identityCard(s), 9)).toBeUndefined()
+    const result = E.addDamage(s, E.identityCard(s), 3)
+    expect(result).toEqual({ kind: 'heroDefeat', fromCardId: E.identityCard(s).id, text: 'Spider-Man a été battu par Rhino.' })
+    expect(s.counters[0].value).toBe(0)
+    expect(logTexts(s).at(-1)).toBe('Spider-Man a été battu par Rhino au tour 1 : défaite.')
+    // déjà à 0 : pas de nouvelle défaite ; un soin n'en est pas une
+    expect(E.addDamage(s, E.identityCard(s), 1)).toBeUndefined()
+    expect(E.addDamage(s, E.identityCard(s), -2)).toBeUndefined()
+  })
+
+  it('héros battu : accordé au féminin, article du méchant en minuscule, Démolisseurs ensemble', () => {
+    const s = game({ hero: 'black_widow', deckList: PRECON_DECKS.black_widow, scenario: 'mutagen_formula', modulars: ['goblin_gimmicks'] })
+    expect(E.addDamage(s, E.identityCard(s), 99).text).toBe('Black Widow a été battue par le Bouffon Vert.')
+    const t = game({ scenario: 'absorbing_man', modulars: ['hydra_patrol'] })
+    expect(E.addDamage(t, E.identityCard(t), 99).text).toBe("Spider-Man a été battu par l'Homme Absorbant.")
+    const u = game({ scenario: 'wrecking_crew', modulars: [] })
+    expect(E.addDamage(u, E.identityCard(u), 99).text).toBe('Spider-Man a été battu par les Démolisseurs.')
+  })
+
   it('dégâts : compteurs pour le méchant et l\'identité, jeton sur les sbires, rien sur les manigances', () => {
     const s = game()
     const villain = E.cardsInZone(s, 'table').find(c => E.definitionOf(c).type === 'villain')
@@ -718,11 +816,16 @@ describe('Les Démolisseurs', () => {
   it('paquet du méchant actif vide : seule sa défausse est remélangée, +1 accélération', () => {
     const s = crewGame()
     E.encounterPile(s, 'encounterDeck').forEach(c => E.moveCard(s, c, 'discard', {}, true))
-    // vidé, son paquet est aussitôt reconstitué avec sa défausse ; ceux des autres n'ont pas bougé
+    // vidé, son paquet le reste ; ceux des autres n'ont pas bougé
+    expect(E.encounterPile(s, 'encounterDeck')).toHaveLength(0)
+    expect(E.cardsInZone(s, 'encounterDeck')).toHaveLength(45)
+    expect(E.revealEncounterCard(s, L)).toBeNull()
+    expect(E.shuffleDiscardIntoDeck(s, 'encounterDiscard', L)).toBe(15)
     expect(s.accelerationTokens).toBe(1)
     expect(E.encounterPile(s, 'encounterDiscard')).toHaveLength(0)
     expect(E.encounterPile(s, 'encounterDeck')).toHaveLength(15)
     expect(E.cardsInZone(s, 'encounterDeck')).toHaveLength(60)
+    expect(logTexts(s).at(-1)).toMatch(/^La défausse Rencontre de « Le Démolisseur » \(15 cartes\)/)
     E.revealEncounterCard(s, L)
     expect(s.accelerationTokens).toBe(1)
     expect(E.encounterPile(s, 'encounterDeck')).toHaveLength(14)
@@ -999,7 +1102,7 @@ describe('Kang le Conquérant', () => {
     // the acceleration tokens wait on Le Maître du Temps
     E.startHeroPhase(s, L)
     E.cardsInZone(s, 'encounterDeck').forEach(c => E.moveCard(s, c, 'discard', {}, true))
-    E.revealEncounterCard(s, L)
+    E.shuffleDiscardIntoDeck(s, 'encounterDiscard', L)
     expect(keeper.tokens).toBe(2)
     E.startVillainPhase(s, L)
     expect(s.log.map(e => e.text).join('\n')).toContain('les 2 pions Accélération restent sur « Le Maître du Temps »')
@@ -1139,11 +1242,13 @@ describe('règles spéciales (rules.js)', () => {
         known(id, 'villain')
         if (st.revealCardId) known(st.revealCardId)
       }
+      for (const id of Object.keys(r.villainHitPointsFromSchemes ?? {})) known(id, 'side_scheme')
       for (const set of r.crew ?? []) if (!CARD_DEFINITIONS.some(d => d.type === 'villain' && d.set === set)) missing.push(set)
       for (const set of [...(r.extraSets ?? []), ...(r.expertSet ? [r.expertSet] : []), ...(r.scenarioDeck ? [r.scenarioDeck.set] : [])]) {
         if (!CARD_DEFINITIONS.some(d => d.set === set)) missing.push(set)
       }
     }
+    known(SHADOW_OF_THE_PAST_ID, 'treachery')
     expect(missing).toEqual([])
     // every text is a sentence of its own
     const texts = [...Object.values(HERO_RULES), ...Object.values(SCENARIO_RULES)].flatMap(r => [...(r.automated ?? []), ...(r.byHand ?? [])])
@@ -1153,8 +1258,9 @@ describe('règles spéciales (rules.js)', () => {
   it('Klaw : Réseau de Défense révélée à la mise en place ; Ultron : Drones d\'Ultron en jeu', () => {
     const klaw = game({ scenario: 'klaw', modulars: ['masters_of_evil'] })
     const net = E.cardsInZone(klaw, 'table').find(c => E.cardName(c) === 'Réseau de Défense')
-    expect(net.threat).toBe(2)
-    expect(msgs(klaw).at(-1)).toContain('« Réseau de Défense » avec 2 menaces en jeu')
+    // 2 menaces de départ, plus 1 par héros (son « Une fois révélée »)
+    expect(net.threat).toBe(3)
+    expect(msgs(klaw).at(-1)).toContain('« Réseau de Défense » avec 3 menaces en jeu')
     expect(E.cardsInZone(klaw, 'encounterDeck').some(c => E.cardName(c) === 'Réseau de Défense')).toBe(false)
     const ultron = game({ scenario: 'ultron', modulars: ['under_attack'] })
     expect(E.cardsInZone(ultron, 'table').some(c => E.cardName(c) === 'Drones d\'Ultron')).toBe(true)
@@ -1168,9 +1274,10 @@ describe('règles spéciales (rules.js)', () => {
     const s = game()
     E.defeatVillain(s, villainOn(s), L)
     const [side] = named(s, 'Casser et Emporter')
-    expect(side).toMatchObject({ faceUp: true, threat: 2 })
+    // 2 menaces de départ, plus 1 par héros (son « Une fois révélée »)
+    expect(side).toMatchObject({ faceUp: true, threat: 3 })
     expect(named(s, 'Casser et Emporter', 'encounterDeck')).toHaveLength(0)
-    expect(msgs(s).at(-1)).toBe('« Rhino » II, une fois révélé : « Casser et Emporter » révélée (Manigance annexe, 2 menaces), paquet Rencontre mélangé.')
+    expect(msgs(s).at(-1)).toBe('« Rhino » II, une fois révélé : « Casser et Emporter » révélée (Manigance annexe, 3 menaces), paquet Rencontre mélangé.')
     // from the encounter discard pile; nowhere to be found
     const t = game()
     const [card] = named(t, 'Casser et Emporter', 'encounterDeck')
@@ -1181,6 +1288,29 @@ describe('règles spéciales (rules.js)', () => {
     E.moveCard(u, named(u, 'Casser et Emporter', 'encounterDeck')[0], 'outOfGame', {}, true)
     E.defeatVillain(u, villainOn(u), L)
     expect(msgs(u).at(-1)).toBe('« Rhino » II, une fois révélé : « Casser et Emporter » n\'est ni dans le paquet Rencontre ni dans sa défausse.')
+  })
+
+  it('expert : Rhino II commence la partie et révèle Casser et Emporter dès la mise en place', () => {
+    const s = game({ expert: true })
+    expect(E.definitionOf(villainOn(s)).stage).toBe('II')
+    const [side] = named(s, 'Casser et Emporter')
+    expect(side).toMatchObject({ faceUp: true, threat: 3 })
+    expect([...named(s, 'Casser et Emporter', 'encounterDeck'), ...named(s, 'Casser et Emporter', 'encounterDiscard')]).toHaveLength(0)
+    const texts = msgs(s)
+    const revealIndex = texts.indexOf('« Rhino » II, une fois révélé : « Casser et Emporter » révélée (Manigance annexe, 3 menaces), paquet Rencontre mélangé.')
+    // après le résumé et les paquets, avant ce qui reste à faire
+    expect(revealIndex).toBe(2)
+    expect(texts[1]).toMatch(/^Paquet : /)
+    // en standard, Rhino I n'a pas d'« Une fois révélé » : rien de plus
+    expect(named(game(), 'Casser et Emporter')).toHaveLength(0)
+  })
+
+  it("l'« Une fois révélé » de l'étape suivante est rendu pour la fenêtre du méchant", () => {
+    const s = game()
+    const result = E.defeatVillain(s, villainOn(s), L)
+    expect(result).toMatchObject({ kind: 'stage', hitPoints: 15, note: '« Rhino » II, une fois révélé : « Casser et Emporter » révélée (Manigance annexe, 3 menaces), paquet Rencontre mélangé.' })
+    const t = game({ scenario: 'ultron', modulars: ['under_attack'] })
+    expect(E.defeatVillain(t, villainOn(t), L).note).toBeUndefined() // Ultron II : rien à faire
   })
 
   it('Rhino III révélé : votre héros sonné, pas votre alter ego', () => {
@@ -1376,6 +1506,24 @@ describe('manigance principale achevée', () => {
     const side = onTable(s, 'side_scheme')
     expect(E.addThreat(s, side, 20)).toBeUndefined()
   })
+
+  it('chaque scénario (hors Kang, testé à part) : au seuil, le stade suivant à chaque fois, puis la défaite au dernier', () => {
+    for (const scenario of SCENARIOS.filter(v => v.id !== 'kang')) {
+      for (const expert of [false, true]) {
+        const s = game({ scenario: scenario.id, modulars: scenario.advisedModulars.length ? scenario.advisedModulars : ['bomb_scare'], expert })
+        const stageCount = CARD_DEFINITIONS.filter(d => d.type === 'main_scheme' && d.set === scenario.id).length
+        const results = []
+        for (let stage = 0; stage < stageCount; stage++) {
+          const threshold = E.threatThreshold(s)
+          const scheme = mainSchemeOf(s)
+          expect(threshold, `${scenario.id} : seuil de « ${E.cardName(scheme)} »`).toBe(E.definitionOf(scheme).threshold)
+          expect(s.counters[2].value, scenario.id).toBeLessThan(threshold)
+          results.push(E.addThreat(s, null, threshold - s.counters[2].value)?.kind)
+        }
+        expect(results, `${scenario.id}${expert ? ' expert' : ''}`).toEqual([...Array(stageCount - 1).fill('schemeAdvance'), 'schemeDefeat'])
+      }
+    }
+  })
 })
 
 describe('placement', () => {
@@ -1386,6 +1534,46 @@ describe('placement', () => {
     expect(E.nextEncounterSpot(s, L)).toEqual(before)
     E.revealEncounterCard(s, L)
     expect(E.nextEncounterSpot(s, L).x).toBeGreaterThan(before.x)
+  })
+
+  it('l\'identité en bas à droite ; vos cartes à sa gauche, de droite à gauche, puis une rangée plus haut', () => {
+    const layout = { ...L, heroInset: 200 }
+    const s = game()
+    const id = E.identityCard(s)
+    expect(id).toMatchObject({ x: L.width - L.cardWidth - 16, y: L.height - L.cardWidth * 1.4 - 34 })
+    const step = L.cardWidth + 12
+    const xs = []
+    for (const card of E.cardsInZone(s, 'hand').slice(0, 5)) {
+      xs.push(E.nextHeroSpot(s, layout).x)
+      E.playToTable(s, layout, card)
+    }
+    const first = id.x - 24 - L.cardWidth
+    // de 900 à 216 (après les PV du méchant, 200 px), par pas de 92 : 8 cartes par rangée
+    expect(xs).toEqual([0, 1, 2, 3, 4].map(n => first - n * step))
+    expect(Math.min(...E.cardsInZone(s, 'table').filter(c => !E.isEncounterCard(c)).map(c => c.x))).toBeGreaterThanOrEqual(216)
+    for (let n = 5; n < 9; n++) E.playToTable(s, layout, E.cardsInZone(s, 'playerDeck').at(-1))
+    expect(E.nextHeroSpot(s, layout)).toEqual({ x: first - step, y: id.y - (L.cardWidth * 1.4 + 16) })
+  })
+
+  it('une carte posée à la main reste entière sur la table : remontée si elle dépasse du bas ou passe sous les PV du méchant', () => {
+    const layout = { ...L, heroInset: 200, villainHud: { right: 200, top: 400 } }
+    const s = game()
+    const [card, other, third] = E.cardsInZone(s, 'hand')
+    const height = L.cardWidth * 1.4
+    // lâchée tout en bas à droite : ramenée dans la table
+    E.moveCard(s, card, 'table', { x: L.width - 10, y: L.height - 10, layout })
+    expect(card).toMatchObject({ x: L.width - L.cardWidth - 4, y: L.height - height - 4 })
+    // lâchée sur les PV du méchant : remontée au-dessus
+    E.moveCard(s, other, 'table', { x: 50, y: 450, layout })
+    expect(other).toMatchObject({ x: 50, y: 400 - height - 4 })
+    // épuisée au bord gauche : elle pivote sur son centre, sa boîte reste dans la table
+    E.moveCard(s, third, 'table', { x: 0, y: 100, layout })
+    third.exhausted = true
+    E.keepCardOnTable(third, layout)
+    expect(third.x).toBeCloseTo(L.cardWidth * 0.2)
+    // sans disposition (moteur, tests), la position demandée est gardée
+    E.moveCard(s, card, 'table', { x: -30, y: 2000 })
+    expect(card).toMatchObject({ x: -30, y: 2000 })
   })
 })
 
@@ -1573,5 +1761,150 @@ describe('deck MarvelCDB (API)', () => {
 
   it('héros absent de la table : pas d\'identité', () => {
     expect(E.parseMarvelCdbDeck({ name: 'A', hero_code: '17001a', slots: { '01088': 1 } }).hero).toBeNull() // Star-Lord
+  })
+})
+
+describe('manigances annexes : 1 menace de plus par héros, une fois révélées', () => {
+  const bombScare = s => s.cards.find(c => E.definitionOf(c).set === 'bomb_scare' && E.definitionOf(c).type === 'side_scheme')
+
+  it('les manigances annexes dont l\'« Une fois révélée » ajoute 1 menace par héros', () => {
+    const extra = CARD_DEFINITIONS.filter(d => d.extraThreatPerHero)
+    expect(extra.every(d => d.type === 'side_scheme' && d.extraThreatPerHero === 1)).toBe(true)
+    expect(extra.map(d => d.code).sort()).toEqual(['01107', '01109', '01125', '01126', '01161', '01171', '01176', '27', '55'])
+    expect(extra.map(d => d.name)).toEqual(expect.arrayContaining(['Réseau de Défense', 'Casser et Emporter', 'Tueur à Louer', 'Les Ambitions de la Vipère']))
+  })
+
+  it('révélée, reprise de la défausse ou retournée face visible : sa menace de départ plus 1', () => {
+    const s = game() // module Alerte à la Bombe : 2 menaces de départ, plus 1 par héros
+    E.moveCard(s, bombScare(s), 'deck', {}, true)
+    expect(E.revealEncounterCard(s, L)).toMatchObject({ threat: 3 })
+    expect(logTexts(s).at(-1)).toBe(`Carte Rencontre révélée : « ${E.cardName(bombScare(s))} » (Manigance annexe, 3 menaces).`)
+    E.moveCard(s, bombScare(s), 'discard', {}, true)
+    E.takeFromPile(s, L, bombScare(s), 'encounterDiscard')
+    expect(bombScare(s).threat).toBe(3)
+    E.moveCard(s, bombScare(s), 'deck', {}, true)
+    const dealt = E.dealEncounterCardToPlayer(s, L)
+    E.flipCard(s, dealt, L)
+    expect(dealt.threat).toBe(3)
+  })
+})
+
+describe('Klaw « l\'Immortel » : Klaw a +10 PV tant qu\'elle est en jeu', () => {
+  const klawGame = over => game({ scenario: 'klaw', modulars: ['masters_of_evil'], ...over })
+  const villainOn = s => E.cardsInZone(s, 'table').find(c => E.definitionOf(c).type === 'villain')
+  const immortal = s => s.cards.find(c => E.cardName(c) === 'Klaw "l\'Immortel"')
+
+  it('révélée par Klaw II : il a 10 PV de plus, montrés dans la fenêtre du méchant', () => {
+    const s = klawGame()
+    const result = E.defeatVillain(s, villainOn(s), L)
+    expect(immortal(s)).toMatchObject({ zone: 'table', faceUp: true, threat: 3 })
+    expect(s.counters[1]).toMatchObject({ value: 28, label: 'Klaw II' }) // 18 + 10
+    expect(result).toMatchObject({ kind: 'stage', hitPoints: 28 })
+    expect(result.note).toBe('« Klaw » II, une fois révélé : « Klaw "l\'Immortel" » révélée (Manigance annexe, 3 menaces, Klaw gagne 10 PV (28 PV)), paquet Rencontre mélangé.')
+  })
+
+  it('sortie du jeu, Klaw perd ces PV et peut en être vaincu ; revenue, il les regagne', () => {
+    const s = klawGame()
+    E.defeatVillain(s, villainOn(s), L)
+    E.addDamage(s, null, 15, L)
+    expect(E.moveCard(s, immortal(s), 'discard', { layout: L })).toBeUndefined()
+    expect(s.counters[1].value).toBe(3)
+    expect(logTexts(s).at(-1)).toBe('« Klaw "l\'Immortel" » : table → défausse Rencontre. Klaw perd ses 10 PV de plus (3 PV).')
+    E.takeFromPile(s, L, immortal(s), 'encounterDiscard')
+    expect(s.counters[1].value).toBe(13)
+    expect(logTexts(s).at(-1)).toContain('Klaw gagne 10 PV (13 PV).')
+    // 20 dégâts sur 28 PV : sans ses 10 PV de plus, Klaw II est vaincu (la dernière étape en standard)
+    E.addDamage(s, null, 5, L)
+    expect(E.moveCard(s, immortal(s), 'discard', { layout: L })).toMatchObject({ kind: 'victory' })
+    // en expert, Klaw III arrive, sans les 10 PV : la manigance n'est plus en jeu
+    const t = klawGame({ expert: true })
+    E.addDamage(t, null, 20, L)
+    expect(E.moveCard(t, immortal(t), 'discard', { layout: L })).toMatchObject({ kind: 'stage', hitPoints: 22 })
+    expect(E.definitionOf(villainOn(t)).stage).toBe('III')
+  })
+
+  it('une nouvelle étape de Klaw arrive avec ces PV ; retournée face cachée, la manigance les reprend', () => {
+    const s = klawGame({ expert: true }) // Klaw II et III
+    expect(E.defeatVillain(s, villainOn(s), L)).toMatchObject({ kind: 'stage', hitPoints: 32 }) // Klaw III : 22 + 10
+    expect(logTexts(s)).toContain('Nouvelle étape du méchant : Klaw III, 32 PV (+10 : « Klaw "l\'Immortel" »).')
+    E.flipCard(s, immortal(s), L)
+    expect(s.counters[1].value).toBe(22)
+    E.flipCard(s, immortal(s), L)
+    expect(s.counters[1].value).toBe(32)
+    expect(immortal(s).threat).toBe(3) // retournée deux fois, elle garde sa menace
+  })
+
+  it('expert : Klaw II commence avec elle en jeu, et ses 10 PV ; en boost, elle ne donne rien', () => {
+    const s = klawGame({ expert: true })
+    expect(s.counters[1]).toMatchObject({ value: 28, label: 'Klaw II' })
+    expect(logTexts(s)[2]).toBe('« Klaw » II, une fois révélé : « Klaw "l\'Immortel" » révélée (Manigance annexe, 3 menaces, Klaw gagne 10 PV (28 PV)), paquet Rencontre mélangé.')
+    const t = klawGame()
+    E.moveCard(t, immortal(t), 'deck', {}, true)
+    const boost = E.dealBoostCard(t, L)
+    E.flipCard(t, boost, L)
+    E.moveCard(t, boost, 'discard')
+    expect(t.counters[1].value).toBe(12)
+  })
+})
+
+describe('personnages qui portent des jetons (Hawkeye)', () => {
+  it('Hawkeye entre en jeu avec 4 jetons Flèche : il prend dégâts et jetons', () => {
+    const s = game({ hero: 'captain_marvel', deckList: PRECON_DECKS.captain_marvel })
+    const hawkeye = s.cards.find(c => E.definitionOf(c).type === 'ally' && E.cardName(c) === 'Hawkeye')
+    E.moveCard(s, hawkeye, 'hand', {}, true)
+    E.playToTable(s, L, hawkeye)
+    expect(hawkeye.tokens).toBe(4)
+    expect(E.takesTokens(hawkeye)).toBe(true)
+    E.addTokens(s, hawkeye, -1)
+    E.addDamage(s, hawkeye, 2)
+    expect(hawkeye).toMatchObject({ tokens: 3, damage: 2 })
+    // sans jeton, il en prend encore : sa carte entre en jeu avec
+    E.addTokens(s, hawkeye, -3)
+    expect(E.characterTakesTokens(hawkeye)).toBe(true)
+    // un allié qui n'entre pas en jeu avec des jetons n'en prend pas
+    const ally = E.cardsInZone(s, 'playerDeck').find(c => E.definitionOf(c).type === 'ally' && !E.definitionOf(c).entryTokens)
+    E.moveCard(s, ally, 'table', {}, true)
+    expect(E.takesTokens(ally)).toBe(false)
+    E.addTokens(s, ally, 1)
+    expect(ally.tokens).toBe(0)
+  })
+})
+
+describe('L\'Ombre du Passé : mettre en jeu la Némésis', () => {
+  const shadowOf = s => s.cards.find(c => c.definitionId === SHADOW_OF_THE_PAST_ID)
+  const nemesisCards = (s, hero) => s.cards.filter(c => E.definitionOf(c).set === `${hero}_nemesis`)
+
+  it('le sbire engagé avec vous, la manigance annexe avec sa menace, le reste mélangé dans le paquet Rencontre', () => {
+    const s = game()
+    const shadow = shadowOf(s)
+    E.moveCard(s, shadow, 'deck', {}, true)
+    E.revealEncounterCard(s, L)
+    expect(logTexts(s).at(-1)).toBe('Carte Rencontre révélée : « L\'Ombre du Passé » (Traîtrise). Clic droit sur la carte → Mettre en jeu la Némésis.')
+    const deckSize = E.cardsInZone(s, 'encounterDeck').length
+    const { minion, sideScheme } = E.putNemesisIntoPlay(s, L, shadow)
+    expect(minion).toMatchObject({ zone: 'table', faceUp: true })
+    expect(E.cardName(minion)).toBe('Le Vautour')
+    expect(sideScheme).toMatchObject({ zone: 'table', faceUp: true, threat: 3 })
+    expect(E.cardName(sideScheme)).toBe('Cambriolage de Haut Vol')
+    expect(nemesisCards(s, 'spider_man').filter(c => c.zone === 'setAside')).toHaveLength(0)
+    expect(nemesisCards(s, 'spider_man').filter(c => c.zone === 'encounterDeck')).toHaveLength(3)
+    expect(E.cardsInZone(s, 'encounterDeck')).toHaveLength(deckSize + 3)
+    expect(shadow.zone).toBe('encounterDiscard')
+    expect(logTexts(s).at(-1)).toBe('« L\'Ombre du Passé » : « Le Vautour » entre en jeu, engagé avec vous ; « Cambriolage de Haut Vol » en jeu (manigance annexe, 3 menaces) ; les 3 autres cartes du set Némésis sont mélangées dans le paquet Rencontre ; elle est défaussée.')
+    // plus rien de côté : elle gagne Renfort
+    E.takeFromPile(s, L, shadow, 'encounterDiscard')
+    expect(E.putNemesisIntoPlay(s, L, shadow)).toEqual({ minion: null, sideScheme: null })
+    expect(logTexts(s).at(-1)).toBe('« L\'Ombre du Passé » : aucun sbire Némésis de côté, elle gagne Renfort (révélez une autre carte Rencontre, E) ; elle est défaussée.')
+  })
+
+  it('le sbire Némésis est celui en un exemplaire ; la manigance compte son « Une fois révélée »', () => {
+    const widow = game({ hero: 'black_widow', deckList: PRECON_DECKS.black_widow })
+    const { minion, sideScheme } = E.putNemesisIntoPlay(widow, L)
+    expect(E.cardName(minion)).toBe('Taskmaster') // pas un Mercenaire d'Hydra
+    expect(E.cardName(sideScheme)).toBe('Tueur à Louer')
+    expect(sideScheme.threat).toBe(4) // 3, plus 1 par héros
+    expect(nemesisCards(widow, 'black_widow').filter(c => c.zone === 'encounterDeck').map(E.cardName).sort()).toEqual(['Mercenaire d\'Hydra', 'Mercenaire d\'Hydra', 'Tir Mortel'])
+    const kamala = game({ hero: 'ms_marvel', deckList: PRECON_DECKS.ms_marvel })
+    expect(E.cardName(E.putNemesisIntoPlay(kamala, L).minion)).toBe('Thomas Edison') // pas son Robot Géant
   })
 })

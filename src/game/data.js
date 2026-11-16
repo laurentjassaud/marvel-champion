@@ -53,6 +53,7 @@ const SHORT_KEYS = {
   th: 'threshold', // seuil de menace d'une manigance principale
   esc: 'acceleration', // menace d'accélération imprimée sur une manigance principale (nombre ou "X")
   bth: 'startingThreat', // menace de départ (pour un joueur)
+  xth: 'extraThreatPerHero', // « Une fois révélée : placez N menace(s) supplémentaire(s) par héros » (Réseau de Défense)
   bn: 'backName', // nom de la face B (alter ego, Accès de Folie, Le Bouffon Vert…)
   bt: 'backType', // type de la face B
   bhs: 'backHandSize', // taille de main de la face B (alter ego)
@@ -279,31 +280,35 @@ export function addImportedDefinitions(importedDefinitions = []) {
 
 /**
  * Héros de la table, dans l'ordre de l'écran Nouvelle partie : `id` est aussi le set de ses cartes,
- * `aspect` l'affinité de son précon. Leurs règles spéciales sont dans rules.js.
+ * `aspect` l'affinité de son précon, `feminine` pour accorder les phrases (« battue »). Leurs règles
+ * spéciales sont dans rules.js.
  */
 export const HEROES = [
   { id: 'spider_man', name: 'Spider-Man', aspect: 'Justice' },
-  { id: 'captain_marvel', name: 'Captain Marvel', aspect: 'Commandement' },
-  { id: 'she_hulk', name: 'Miss Hulk', aspect: 'Agressivité' },
+  { id: 'captain_marvel', name: 'Captain Marvel', aspect: 'Commandement', feminine: true },
+  { id: 'she_hulk', name: 'Miss Hulk', aspect: 'Agressivité', feminine: true },
   { id: 'iron_man', name: 'Iron Man', aspect: 'Agressivité' },
   { id: 'black_panther', name: 'Black Panther', aspect: 'Protection' },
-  { id: 'black_widow', name: 'Black Widow', aspect: 'Justice' },
+  { id: 'black_widow', name: 'Black Widow', aspect: 'Justice', feminine: true },
   { id: 'doctor_strange', name: 'Docteur Strange', aspect: 'Protection' },
   { id: 'captain_america', name: 'Captain America', aspect: 'Commandement' },
   { id: 'hulk', name: 'Hulk', aspect: 'Agressivité' },
-  { id: 'ms_marvel', name: 'Miss Marvel', aspect: 'Protection' },
+  { id: 'ms_marvel', name: 'Miss Marvel', aspect: 'Protection', feminine: true },
   { id: 'thor', name: 'Thor', aspect: 'Agressivité' },
   { id: 'hawkeye', name: 'Hawkeye', aspect: 'Commandement' },
-  { id: 'spider_woman', name: 'Spider-Woman', aspect: 'Agressivité et Justice' },
+  { id: 'spider_woman', name: 'Spider-Woman', aspect: 'Agressivité et Justice', feminine: true },
   { id: 'quicksilver', name: 'Vif-Argent', aspect: 'Protection' },
-  { id: 'scarlet_witch', name: 'La Sorcière Rouge', aspect: 'Justice' },
-  { id: 'wasp', name: 'La Guêpe', aspect: 'Agressivité' },
+  { id: 'scarlet_witch', name: 'La Sorcière Rouge', aspect: 'Justice', feminine: true },
+  { id: 'wasp', name: 'La Guêpe', aspect: 'Agressivité', feminine: true },
   { id: 'ant_man', name: 'Ant-Man', aspect: 'Commandement' }
 ]
 
 /** Nom d'un héros : celui de la liste ci-dessus, ou celui de sa carte d'identité lue sur MarvelCDB. */
 export const heroName = heroId => HEROES.find(hero => hero.id === heroId)?.name
   ?? CARD_DEFINITIONS.find(definition => definition.type === 'hero' && definition.set === heroId)?.name ?? ''
+
+/** Le héros est une héroïne (accord des phrases) ; un héros lu sur MarvelCDB est pris au masculin. */
+export const isFeminineHero = heroId => !!HEROES.find(hero => hero.id === heroId)?.feminine
 
 /**
  * Scénarios, dans l'ordre de l'écran Nouvelle partie :
@@ -334,9 +339,9 @@ export const SCENARIOS = [
 export const MODULAR_SETS = [
   { id: 'bomb_scare', name: 'Alerte à la Bombe' },
   { id: 'masters_of_evil', name: 'Les Maîtres du Mal' },
-  { id: 'under_attack', name: 'Sous le Feu' },
+  { id: 'under_attack', name: 'Civils Attaqués' },
   { id: 'legions_of_hydra', name: "Légions d'Hydra" },
-  { id: 'the_doomsday_chair', name: 'Le Trône Fatal' },
+  { id: 'the_doomsday_chair', name: "Le Siège de l'Apocalypse" },
   { id: 'goblin_gimmicks', name: 'Gadgets du Bouffon' },
   { id: 'a_mess_of_things', name: 'Un Immense Gâchis' },
   { id: 'power_drain', name: 'Absorption Électrique' },

@@ -35,6 +35,11 @@ const TOKEN_KINDS = [
  *    l'illustration est entre le bandeau du titre et l'encadré du texte (qui commence parfois vers 48 % de
  *    la hauteur, sur une pièce jointe), à droite des caractéristiques ou du titre vertical d'une
  *    amélioration ; le rond des dégâts, qui ne déborde pas en penchant, y a plus de place ;
+ *  - uprightPair : personnage debout qui porte aussi des jetons (Hawkeye : dégâts et jetons Flèche) : deux
+ *    places côte à côte sur l'illustration, gardées même quand l'une est vide. Les dégâts à gauche, juste
+ *    à droite des caractéristiques ; les jetons à droite, au-dessus des PV imprimés, penchés de ±15° au plus
+ *    (PAIR_MAX_TOKEN_ANGLE) : leurs centres sont toujours à 34 % de largeur l'un de l'autre, plus que le
+ *    rayon du rond (15 %) et la demi-largeur du carré penché (18,4 %) réunis, ils ne se touchent jamais ;
  *  - artRight : manigance principale (couchée) : le texte à gauche (jusqu'à 58 % de la largeur),
  *    l'illustration à droite ; la menace en haut, les jetons en bas (une carte qui porte les deux) ;
  *  - artLeft : manigance annexe (couchée) : l'illustration à gauche, entre le titre en haut, les icônes
@@ -45,6 +50,11 @@ const TOKEN_ZONES = {
   upright: {
     damage: { x: [36, 64], y: [25, 34] },
     tokens: { x: [42, 60], y: [28, 31] },
+    threat: { x: [44, 58], y: [29, 30] }
+  },
+  uprightPair: {
+    damage: { x: [37, 40], y: [24, 34] },
+    tokens: { x: [74, 77], y: [27, 32] },
     threat: { x: [44, 58], y: [29, 30] }
   },
   artRight: {
@@ -65,13 +75,15 @@ const TOKEN_ZONES = {
 }
 /** Angle d'un pion : de -30° à +30°. */
 const MAX_TOKEN_ANGLE = 30
+/** Angle d'un pion sur un personnage qui porte dégâts et jetons (uprightPair) : de -15° à +15°. */
+const PAIR_MAX_TOKEN_ANGLE = 15
 </script>
 
 <script setup>
 // Une carte (ou un pion) : sa face ou son dos, ses cartes d'état, ses pions (dégâts, menace, jetons) posés de
 // travers, et, avec les Démolisseurs, le badge « Actif ». Sur la table elle est placée à sa position (positioned).
 import { computed } from 'vue'
-import { definitionOf, cardName } from '../game/engine.js'
+import { definitionOf, cardName, characterTakesTokens } from '../game/engine.js'
 import { STATUS_CARDS } from '../game/data.js'
 import { cardImageUrl, cardBackUrl, statusImageUrl, tokenImageUrl } from '../composables/useAssets.js'
 import { useGameStore } from '../stores/game.js'
@@ -126,9 +138,10 @@ const isActiveVillain = computed(() => {
 const tokenLayout = computed(() => {
   if (!isFaceShown.value) return 'back'
   const definition = definitionOf(props.card)
-  if (!definition.landscape) return 'upright'
+  if (!definition.landscape) return characterTakesTokens(props.card) ? 'uprightPair' : 'upright'
   return definition.type === 'main_scheme' ? 'artRight' : 'artLeft'
 })
+const maxTokenAngle = computed(() => (tokenLayout.value === 'uprightPair' ? PAIR_MAX_TOKEN_ANGLE : MAX_TOKEN_ANGLE))
 const tokens = computed(() => {
   const card = props.card
   const counterThreat = !card.printed && card.id === gameStore.threatSchemeId ? gameStore.game.counters[2].value : 0
@@ -145,7 +158,7 @@ const tokens = computed(() => {
       style: {
         '--x': between(x, 'x'),
         '--y': between(y, 'y'),
-        '--angle': `${Math.round((random('angle') * 2 - 1) * MAX_TOKEN_ANGLE)}deg`
+        '--angle': `${Math.round((random('angle') * 2 - 1) * maxTokenAngle.value)}deg`
       },
       // la grande version sur la carte agrandie (une carte d'affichage), la petite sur la table et dans la main
       faceStyle: { backgroundImage: `url('${tokenImageUrl(kind, props.inert ? 'zoom' : 'table')}')` }

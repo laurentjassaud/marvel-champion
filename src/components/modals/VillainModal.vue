@@ -61,7 +61,7 @@ function restart() {
           <p class="note">Terminez la phase en cours : le changement de stade se fait au passage à la phase suivante.</p>
         </template>
         <template v-else-if="result.kind === 'stage'">
-          <p>{{ nameWithStage(fromCard) }} {{ result.stageLeft ? 'quitte la partie' : 'est vaincu' }}. <strong>{{ nameWithStage(shownCard) }}</strong> entre en jeu avec <strong>{{ definitionOf(shownCard).hitPoints }} PV</strong>.</p>
+          <p>{{ nameWithStage(fromCard) }} {{ result.stageLeft ? 'quitte la partie' : 'est vaincu' }}. <strong>{{ nameWithStage(shownCard) }}</strong> entre en jeu avec <strong>{{ result.hitPoints ?? definitionOf(shownCard).hitPoints }} PV</strong>.</p>
           <!-- Kang : ce qu'a amené le changement de stade (stade 3 tiré, pions Accélération, Empire de Kang) -->
           <p v-if="result.note">{{ result.note }}</p>
           <p v-if="keptStatusLabels.length">Ses cartes d'état restent : {{ keptStatusLabels.join(', ') }}.</p>

@@ -12,20 +12,27 @@ const hudElement = ref(null)
 
 let resizeObserver
 /**
- * Bord droit du bloc, depuis le bord gauche de la table (ils ont le même parent, .play) ; 0 sur téléphone,
- * où le bloc passe au-dessus de la table au lieu de la recouvrir.
+ * Bord droit et bord haut du bloc, depuis le coin haut gauche de la table (ils ont le même parent, .play) :
+ * une carte glissée dessous remonte au-dessus (keepCardOnTable). 0 et null sur téléphone et tablette en
+ * portrait, où le bloc passe au-dessus ou au-dessous de la table au lieu de la recouvrir.
  */
 function measureHud() {
   const hud = hudElement.value
-  ui.setHeroInset(getComputedStyle(hud).position === 'absolute' ? hud.offsetLeft + hud.offsetWidth : 0)
+  const overTable = getComputedStyle(hud).position === 'absolute'
+  ui.setHeroInset(overTable ? hud.offsetLeft + hud.offsetWidth : 0, overTable ? hud.offsetTop : null)
 }
-// mesuré tout de suite (la partie d'exemple se met en place juste après, dans App), puis à chaque changement de taille
+// mesuré tout de suite (la partie d'exemple se met en place juste après, dans App), puis à chaque changement
+// de sa taille, ou de celle de la fenêtre (posé en bas de la table, son bord haut suit la hauteur de la table)
 onMounted(() => {
   measureHud()
   resizeObserver = new ResizeObserver(measureHud)
   resizeObserver.observe(hudElement.value)
+  window.addEventListener('resize', measureHud)
 })
-onBeforeUnmount(() => resizeObserver?.disconnect())
+onBeforeUnmount(() => {
+  resizeObserver?.disconnect()
+  window.removeEventListener('resize', measureHud)
+})
 </script>
 
 <template>

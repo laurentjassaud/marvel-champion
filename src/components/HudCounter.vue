@@ -81,21 +81,22 @@ watch(() => counter.value?.value, (value, previousValue) => {
 /* tailles (en pixels de la maquette, suivant l'écran, jamais sous 20 px) et ombre portée franche, décalée */
 .counter {
   --shade: var(--red); --name-size: max(28px, calc(72 * var(--u))); --value-size: max(44px, calc(96 * var(--u)));
-  --shadow: max(3px, calc(6 * var(--u))) max(3px, calc(5 * var(--u))) 0 var(--shade);
+  --shadow: max(3px, calc(6 * var(--u))) max(3px, calc(5 * var(--u))) 0 var(--shade); --stroke: 6px;
   display: grid; justify-items: start; color: #fff; line-height: 1;
 }
 .counter.hero { --shade: var(--blue); }
 .counter.threat { --shade: var(--threat); }
-.counter.l { --name-size: max(24px, calc(40 * var(--u))); --value-size: max(36px, calc(64 * var(--u))); --shadow: max(3px, calc(4 * var(--u))) 3px 0 var(--shade); }
-.counter.m { --name-size: max(20px, calc(28 * var(--u))); --value-size: max(30px, calc(52 * var(--u))); --shadow: 3px 3px 0 var(--shade); }
+.counter.l { --name-size: max(24px, calc(40 * var(--u))); --value-size: max(36px, calc(64 * var(--u))); --shadow: max(3px, calc(4 * var(--u))) 3px 0 var(--shade); --stroke: 5px; }
+.counter.m { --name-size: max(20px, calc(28 * var(--u))); --value-size: max(30px, calc(52 * var(--u))); --shadow: 3px 3px 0 var(--shade); --stroke: 4px; }
 .name { display: inline-grid; max-width: 100%; }
 .name > * {
   grid-area: 1 / 1; padding: 0 .12em .04em 0; white-space: pre;
   font: italic 900 var(--name-size)/1 var(--font-display); letter-spacing: -.02em; text-transform: uppercase; text-shadow: var(--shadow);
 }
-/* le méchant : ses lettres blanches cernées d'un contour rouge de 3 px — un trait de 6 px peint avant la
-   lettre (paint-order), dont la moitié intérieure passe dessous */
-.counter.villain .name > *, .counter.villain .value { -webkit-text-stroke: 6px var(--red); paint-order: stroke fill; }
+/* les lettres blanches cernées d'un contour de la couleur du compteur (rouge du méchant, bleu du héros, violet
+   de la menace) : un trait peint avant la lettre (paint-order), dont la moitié intérieure passe dessous ;
+   3 px visibles pour le méchant, un peu moins pour les compteurs plus petits */
+.name > *, .value { -webkit-text-stroke: var(--stroke) var(--shade); paint-order: stroke fill; }
 /* un champ coupe ce qui sort de sa zone de texte : la copie cachée, plus large que le nom, lui laisse la
    place du contour à gauche (le texte du champ est décalé d'autant), et à droite de la pente de l'italique,
    de l'ombre portée et du contour */
@@ -128,7 +129,7 @@ input:focus-visible { outline: none; border-bottom-color: var(--yellow); }
 /* téléphones : le compteur reste lisible sans couvrir la table */
 @media (max-width: 700px) {
   .counter { --name-size: 22px; --value-size: 34px; }
-  .counter.l { --name-size: 20px; --value-size: 30px; }
-  .counter.m { --name-size: 20px; --value-size: 26px; }
+  .counter.l { --name-size: 20px; --value-size: 30px; --stroke: 4px; }
+  .counter.m { --name-size: 20px; --value-size: 26px; --stroke: 4px; }
 }
 </style>

@@ -91,7 +91,7 @@ export const useGameStore = defineStore('game', () => {
 
   /**
    * L'état de la partie juste avant le changement présenté par la fenêtre ouverte (étape du méchant,
-   * manigance, victoire, défaite), en texte JSON : le bouton « Annuler » de la fenêtre le remet en place.
+   * manigance, victoire, défaite, héros battu), en texte JSON : le bouton « Annuler » de la fenêtre le remet en place.
    * Gardé hors de l'état réactif : ce n'est pas une partie, et il n'est pas enregistré.
    */
   let stateBeforeChange = null
@@ -105,8 +105,12 @@ export const useGameStore = defineStore('game', () => {
     const result = action()
     if (result && result !== true) {
       stateBeforeChange = before
-      // la manigance principale achevée a sa propre fenêtre ; le reste (étapes, Kang, victoire) celle du méchant
-      ui.openModal(String(result.kind).startsWith('scheme') ? 'scheme' : 'villain', { result })
+      // la manigance principale achevée et le héros battu ont leur propre fenêtre ; le reste (étapes, Kang,
+      // victoire) celle du méchant
+      let modalType = 'villain'
+      if (String(result.kind).startsWith('scheme')) modalType = 'scheme'
+      else if (result.kind === 'heroDefeat') modalType = 'defeat'
+      ui.openModal(modalType, { result })
     }
     return result
   }
@@ -146,6 +150,17 @@ export const useGameStore = defineStore('game', () => {
     prependLog('Partie recommencée avec la même mise en place.')
   }
 
+  /**
+   * Paquet vide au moment de piocher ou de révéler : il ne se reconstitue pas tout seul, la fenêtre
+   * « Remélanger » s'ouvre (avec la pénalité du paquet vide) si la défausse a des cartes et qu'aucune autre
+   * fenêtre n'est ouverte. Après le remélange, elle fait ce qui avait été demandé : `thenDraw` cartes à
+   * piocher, ou `thenEncounter`, l'action Rencontre à refaire (nom d'une action du store).
+   */
+  function offerReshuffle(discardZone, { thenDraw = 0, thenEncounter = null } = {}) {
+    if (!pileOf(discardZone).length || ui.modal) return
+    ui.openModal('reshuffle', { zone: discardZone, thenDraw, thenEncounter })
+  }
+
   /** La partie d'exemple du premier lancement : Spider-Man contre Rhino. */
   function startExampleGame() {
     newGame({ hero: 'spider_man', deckList: PRECON_DECKS.spider_man, scenario: 'rhino', modulars: ['bomb_scare'], expert: false, deckLabel: 'précon Justice' })
@@ -161,8 +176,17 @@ export const useGameStore = defineStore('game', () => {
     isKnownCard: definitionId => !!DEFINITION_BY_ID[definitionId],
 
     /* ---------- pioches et piles ---------- */
-    drawCard: () => run(Engine.drawCard, layout()),
-    drawCards: count => run(Engine.drawCards, layout(), count),
+    // paquet vide : la fenêtre « Remélanger » s'ouvre, puis la pioche se fait
+    drawCard: () => {
+      const drawn = run(Engine.drawCard, layout())
+      if (drawn === false) offerReshuffle('playerDiscard', { thenDraw: 1 })
+      return drawn
+    },
+    drawCards: count => {
+      const drawnCount = run(Engine.drawCards, layout(), count)
+      if (drawnCount < count) offerReshuffle('playerDiscard', { thenDraw: count - drawnCount })
+      return drawnCount
+    },
     discardTopOfDeck: () => run(Engine.discardTopOfDeck),
     /** Mélange une zone et l'écrit au journal ("Paquet Rencontre mélangé."). */
     shuffle: zone => {
@@ -170,6 +194,11 @@ export const useGameStore = defineStore('game', () => {
       run(Engine.shuffleZone, zone)
       run(Engine.logMessage, `${label[0].toUpperCase()}${label.slice(1)} mélangé.`)
     },
+    /**
+     * « Remélanger dans le paquet », confirmé dans sa fenêtre : la défausse du joueur ou Rencontre rejoint son
+     * paquet, mélangé ; un paquet qui était vide applique sa pénalité (carte Rencontre, pion Accélération).
+     */
+    shuffleDiscardIntoDeck: discardZone => run(Engine.shuffleDiscardIntoDeck, discardZone, layout()),
     /** Après avoir cherché dans une pioche : elle est mélangée, comme le demandent les règles. */
     shuffleAfterSearch: zone => {
       run(Engine.shuffleZone, zone)
@@ -180,36 +209,64 @@ export const useGameStore = defineStore('game', () => {
     castInvocation: () => run(Engine.castInvocation),
     castInvocationAndKeep: () => run(Engine.castInvocationAndKeep),
     discardInvocation: () => run(Engine.castInvocation, false),
-    revealEncounterCard: () => run(Engine.revealEncounterCard, layout()),
+    // paquet Rencontre vide : la fenêtre « Remélanger » s'ouvre, puis l'action se fait
+    revealEncounterCard: () => {
+      const card = run(Engine.revealEncounterCard, layout())
+      if (card === null) offerReshuffle('encounterDiscard', { thenEncounter: 'revealEncounterCard' })
+      return card
+    },
     revealScenarioDeckCard: () => run(Engine.revealScenarioDeckCard, layout()),
-    dealBoostCard: () => { if (run(Engine.dealBoostCard, layout())) run(Engine.logMessage, 'Carte Rencontre posée face cachée (boost).') },
+    dealBoostCard: () => {
+      if (run(Engine.dealBoostCard, layout())) run(Engine.logMessage, 'Carte Rencontre posée face cachée (boost).')
+      else offerReshuffle('encounterDiscard', { thenEncounter: 'dealBoostCard' })
+    },
     /** « Attribuez-vous une carte Rencontre » : face cachée devant l'identité, à révéler pendant la phase du méchant. */
     dealEncounterCardToPlayer: () => {
       if (run(Engine.dealEncounterCardToPlayer, layout())) run(Engine.logMessage, 'Vous recevez une carte Rencontre face cachée, posée devant votre identité.')
+      else offerReshuffle('encounterDiscard', { thenEncounter: 'dealEncounterCardToPlayer' })
     },
 
     /* ---------- phases ---------- */
     // rendent true si la phase a changé ; un changement de stade résolu à la fin de la phase (Kang) est présenté
-    startVillainPhase: () => !!runAndPresentChange(() => run(Engine.startVillainPhase, layout())),
+    // la main complétée en fin de phase bute sur un paquet vide : la fenêtre « Remélanger » s'ouvre, puis les
+    // cartes qui manquent se piochent (sauf si un changement de stade de Kang occupe déjà l'écran)
+    startVillainPhase: () => {
+      const changed = !!runAndPresentChange(() => run(Engine.startVillainPhase, layout()))
+      const missing = changed ? Engine.handSize(game.value) - cardsIn('hand').length : 0
+      if (missing > 0 && !cardsIn('playerDeck').length) offerReshuffle('playerDiscard', { thenDraw: missing })
+      return changed
+    },
     startHeroPhase: () => !!runAndPresentChange(() => run(Engine.startHeroPhase, layout())),
     mulligan: cardIds => run(Engine.mulligan, layout(), cardIds),
 
     /* ---------- table ---------- */
     addPawn: () => run(Engine.addPawn, layout()),
     keepCardsOnTable: () => run(Engine.keepCardsOnTable, layout()),
-    moveCard: (cardId, zone, options) => withCard(cardId, card => run(Engine.moveCard, card, zone, options)),
+    // une manigance qui sort du jeu peut reprendre au méchant des PV qui le gardaient en vie (Klaw
+    // « l'Immortel ») : sa défaite est présentée
+    moveCard: (cardId, zone, options) => withCard(cardId, card => runAndPresentChange(() => run(Engine.moveCard, card, zone, { ...options, layout: layout() }))),
     playToTable: (cardId, faceDown) => withCard(cardId, card => run(Engine.playToTable, layout(), card, faceDown)),
     takeFromPile: (cardId, zone) => withCard(cardId, card => run(Engine.takeFromPile, layout(), card, zone)),
     reorderHand: (cardId, beforeCardId) => run(Engine.reorderHand, cardId, beforeCardId),
-    toggleExhausted: cardId => withCard(cardId, card => run(Engine.toggleExhausted, card)),
-    flipCard: cardId => withCard(cardId, card => run(Engine.flipCard, card)),
+    // épuisée, une carte pivote ; retournée, une manigance se couche : elle reste entière sur la table
+    toggleExhausted: cardId => withCard(cardId, card => {
+      run(Engine.toggleExhausted, card)
+      Engine.keepCardOnTable(card, layout())
+    }),
+    flipCard: cardId => withCard(cardId, card => {
+      runAndPresentChange(() => run(Engine.flipCard, card, layout()))
+      Engine.keepCardOnTable(card, layout())
+    }),
+    /** L'Ombre du Passé : le sbire et la manigance Némésis entrent en jeu, le reste du set rejoint le paquet Rencontre. */
+    putNemesisIntoPlay: cardId => withCard(cardId, card => run(Engine.putNemesisIntoPlay, layout(), card)),
     setIdentityForm: (cardId, side) => withCard(cardId, card => run(Engine.setIdentityForm, card, side)),
     toggleStatus: (cardId, statusId) => withCard(cardId, card => run(Engine.toggleStatus, card, statusId)),
     /** Redresse toutes les cartes du joueur sur la table. */
     readyPlayerCards: () => { for (const card of cardsIn('table')) if (!Engine.isEncounterCard(card)) card.exhausted = false },
 
     /* ---------- dégâts, menace, jetons ---------- */
-    // un méchant vaincu (étape suivante, victoire) ou une manigance principale achevée est présenté dans sa fenêtre
+    // un méchant vaincu (étape suivante, victoire), une manigance principale achevée ou le héros tombé à 0 PV
+    // est présenté dans sa fenêtre
     addDamage: (cardId, amount) => runAndPresentChange(() => run(Engine.addDamage, cardById(cardId), amount, layout())),
     addThreat: (cardId, amount) => runAndPresentChange(() => run(Engine.addThreat, cardById(cardId), amount)),
     addTokens: (cardId, amount) => run(Engine.addTokens, cardById(cardId), amount),
@@ -221,11 +278,14 @@ export const useGameStore = defineStore('game', () => {
 
     /* ---------- compteurs du haut de l'écran ---------- */
     /**
-     * Change un compteur de `amount`. Le compteur du méchant (index 1) passe par les dégâts : « − » blesse,
-     * « + » soigne, pour qu'une étape qui tombe à 0 soit remarquée (étape suivante, victoire). Celui de la
-     * menace (index 2) passe par la menace, pour qu'une manigance qui atteint son seuil soit achevée.
+     * Change un compteur de `amount`. Les PV du héros (index 0) et du méchant (index 1) passent par les
+     * dégâts : « − » blesse, « + » soigne, pour qu'un personnage qui tombe à 0 soit remarqué (héros battu,
+     * étape suivante, victoire). Celui de la menace (index 2) passe par la menace, pour qu'une manigance
+     * qui atteint son seuil soit achevée.
      */
     changeCounter(index, amount) {
+      const identity = index === 0 ? run(Engine.identityCard) : null
+      if (identity && Engine.counterKindOf(identity) === 'damage') return runAndPresentChange(() => run(Engine.addDamage, identity, -amount, layout()))
       if (index === 1) return runAndPresentChange(() => run(Engine.addDamage, null, -amount, layout()))
       if (index === 2) return runAndPresentChange(() => run(Engine.addThreat, null, amount))
       const counter = game.value.counters[index]

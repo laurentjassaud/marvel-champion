@@ -39,7 +39,7 @@ export function cardBackUrl(card) {
  * Illustrations des méchants, en décor à gauche de la table, par scénario (setup.scenario). Chaque image fait
  * 694 × 923 px, détourée en biais sur sa droite (maquette) ; les autres méchants n'en ont pas encore.
  */
-const VILLAIN_ART_FILES = { rhino: 'villains/rhino.png' }
+const VILLAIN_ART_FILES = { rhino: 'villains/rhino.png', klaw: 'villains/klaw.png', ultron: 'villains/ultron.png' }
 
 /** Le fond de la table (maquette) : une ville de nuit vue d'en bas, 1672 × 941 px. */
 export const CITY_BACKGROUND_URL = `${BASE_URL}backgrounds/ville-nuit.png`
