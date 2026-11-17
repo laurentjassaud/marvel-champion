@@ -44,6 +44,16 @@ const VILLAIN_ART_FILES = { rhino: 'villains/rhino.png', klaw: 'villains/klaw.pn
 /** Le fond de la table (maquette) : une ville de nuit vue d'en bas, 1672 × 941 px. */
 export const CITY_BACKGROUND_URL = `${BASE_URL}backgrounds/ville-nuit.png`
 
+/**
+ * La page d'accueil (maquette « accueil ») : le ciel étoilé en vidéo, la ville vue d'en bas (1672 × 941 px :
+ * au fond, puis ses immeubles au premier plan, le ciel transparent) et les héros autour du menu.
+ */
+export const INTRO_SKY_URL = `${BASE_URL}intro/ciel-etoile.mp4`
+export const INTRO_CITY_URL = `${BASE_URL}intro/ville.png`
+export const INTRO_FOREGROUND_URL = `${BASE_URL}intro/premier-plan.png`
+/** Un héros de la page d'accueil, par son nom de fichier ('spider-man'). */
+export const introHeroUrl = heroId => `${BASE_URL}intro/${heroId}.png`
+
 /** Illustration du méchant de ce scénario, ou null s'il n'en a pas. */
 export const villainArtUrl = scenarioId => (VILLAIN_ART_FILES[scenarioId] ? `${BASE_URL}${VILLAIN_ART_FILES[scenarioId]}` : null)
 

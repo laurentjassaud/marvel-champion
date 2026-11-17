@@ -240,10 +240,10 @@ async function pickRandomCard() {
   .dock-right { grid-area: right; justify-self: end; }
 }
 
-/* tablette : le nom du héros remonte de 15 px au-dessus de ses PV */
+/* tablette : le nom du héros remonte de 5 px au-dessus de ses PV */
 @media (pointer: coarse) and (min-width: 701px) {
   .hero-hp :deep(.name) {
-    translate: 0 -15px;
+    translate: 0 -5px;
   }
 }
 

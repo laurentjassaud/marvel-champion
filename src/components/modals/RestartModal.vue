@@ -28,10 +28,9 @@ function restart() {
   <BaseModal title="Recommencer la partie">
     <p>Même mise en place : {{ setupDescription }}. La partie repart du tour 1 avec des paquets remélangés et une nouvelle main.</p>
     <p class="err">La partie en cours sera perdue.</p>
-    <div class="row">
-      <button type="button" class="btn primary" @click="restart">Recommencer</button>
-      <span class="sp" />
-      <button type="button" class="btn" @click="ui.closeModal()">Annuler</button>
-    </div>
+    <template #actions>
+      <button type="button" class="slant" @click="ui.closeModal()">Annuler</button>
+      <button type="button" class="slant red" @click="restart">Recommencer</button>
+    </template>
   </BaseModal>
 </template>

@@ -1,8 +1,10 @@
 <script setup>
 // La barre du haut (maquette) : le titre dans son bandeau rouge, l'affiche de la partie (le héros sur un
 // bandeau rouge, le logo VS, le méchant en cours sur un bandeau bleu acier, le badge Expert), puis les
-// onglets en biais : poser un pion, taille des cartes, aide, recommencer, nouvelle partie.
+// onglets en biais : poser un pion, taille des cartes, aide, recommencer, nouvelle partie. Le titre ramène à
+// l'accueil. Sur l'accueil (intro), la barre n'a que ses liens : signaler un bug, aide, à propos.
 import { ref, onMounted, onBeforeUnmount } from 'vue'
+import SoonHint from './SoonHint.vue'
 import brandShapeUrl from '../assets/table/brand-shape.svg'
 import vsLogoUrl from '../assets/table/vs-logo.svg'
 import expertFrameUrl from '../assets/table/expert-frame.svg'
@@ -12,6 +14,10 @@ import expertHookUrl from '../assets/table/expert-hook.svg'
 import { useGameStore } from '../stores/game.js'
 import { useUiStore } from '../stores/ui.js'
 
+defineProps({
+  /** La barre de la page d'accueil (IntroScreen), et non celle de la partie. */
+  intro: { type: Boolean, default: false }
+})
 const gameStore = useGameStore()
 const ui = useUiStore()
 
@@ -41,13 +47,17 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <header class="bar">
-    <!-- le bandeau rouge de la maquette déborde sous la barre -->
-    <div class="brand">
+  <header class="bar" :class="{ intro }">
+    <!-- le bandeau rouge de la maquette déborde sous la barre ; pendant la partie, il ramène à l'accueil -->
+    <div v-if="intro" class="brand">
       <img class="brand-shape" :src="brandShapeUrl" alt="" width="335.384" height="70" draggable="false">
       <span class="brand-title">Marvel Champions</span>
     </div>
-    <p v-if="gameStore.matchup" class="matchup" :title="gameStore.subtitle">
+    <button v-else type="button" class="brand" title="Retour à l'accueil" @click="ui.openIntro()">
+      <img class="brand-shape" :src="brandShapeUrl" alt="" width="335.384" height="70" draggable="false">
+      <span class="brand-title">Marvel Champions</span>
+    </button>
+    <p v-if="gameStore.matchup && !intro" class="matchup" :title="gameStore.subtitle">
       <span class="plate hero">{{ gameStore.matchup.hero }}</span>
       <img class="vs" :src="vsLogoUrl" alt="contre" width="31.0062" height="25.987" draggable="false">
       <span class="plate villain">{{ gameStore.matchup.villain }}</span>
@@ -61,7 +71,17 @@ onBeforeUnmount(() => {
       </span>
     </p>
     <div class="sp" />
-    <nav class="tabs" aria-label="Partie">
+    <!-- l'accueil : les liens de la maquette ; seule l'aide est déjà prête -->
+    <nav v-if="intro" class="tabs" aria-label="Liens">
+      <SoonHint v-slot="{ attrs }" placement="below">
+        <button type="button" class="slant tab wide" v-bind="attrs">Signaler un bug</button>
+      </SoonHint>
+      <button type="button" class="slant tab" title="Aide de la table (?)" aria-label="Aide de la table" @click="ui.openModal('help')">?</button>
+      <SoonHint v-slot="{ attrs }" placement="below">
+        <button type="button" class="slant tab red wide" v-bind="attrs">À propos</button>
+      </SoonHint>
+    </nav>
+    <nav v-else class="tabs" aria-label="Partie">
       <button type="button" class="slant tab" title="Poser un pion sur la table" @click="gameStore.addPawn()">Pions</button>
       <div ref="sizeElement" class="size">
         <button
@@ -93,8 +113,13 @@ onBeforeUnmount(() => {
   display: flex; align-items: flex-start; height: 48px; min-width: 0;
   background: linear-gradient(90deg, rgb(19 21 39 / .6), rgb(69 76 141 / .6));
 }
+/* l'accueil : la même barre, opaque (maquette « accueil ») */
+.bar.intro { background: linear-gradient(90deg, var(--bg-deep), #454c8d); }
 /* le bandeau rouge : 329 × 68 px, à cheval sur le bord gauche (maquette) */
 .brand { position: relative; flex: none; width: 302px; height: 68px; }
+/* pendant la partie, c'est un bouton : il s'enfonce d'un rien sous le doigt, comme les onglets */
+button.brand { display: block; padding: 0; border: 0; background: none; transition: transform 140ms var(--ease-out); }
+button.brand:active { transform: translateY(2px); }
 .brand-shape { position: absolute; left: -27.38px; top: -1px; width: 335.384px; height: 70px; max-width: none; pointer-events: none; }
 .brand-title {
   position: absolute; left: 0; top: 0; width: 272px; height: 68px; display: grid; place-items: center;
@@ -137,6 +162,8 @@ onBeforeUnmount(() => {
 .tab { --h: 55px; --lip-h: 7px; --cut: 24.25px; padding-inline: 37px; font-size: 24px; }
 .tabs > * + * { margin-left: -23px; }
 .tab.on { --fill: #6a82ad; }
+/* les deux longs onglets de l'accueil font 194 px, comme sur la maquette */
+.tab.wide { width: 194px; padding-inline: 0; }
 .size { position: relative; display: flex; }
 /* le réglage de la taille, sous son onglet ; il s'ouvre depuis lui */
 .size-panel {
@@ -165,15 +192,18 @@ onBeforeUnmount(() => {
   .tabs > * + * { margin-left: -21px; }
 }
 /* tablette (écran tactile assez large) : toute la barre aux trois quarts de sa taille, titre, affiche et
-   onglets compris ; la rangée de la page qui la porte fait 36 px (main.css) */
+   onglets compris ; la rangée de la page qui la porte fait 36 px (main.css). Le titre, encore trop grand,
+   est réduit une fois de plus aux trois quarts (le bandeau rouge avec lui) */
 @media (pointer: coarse) and (min-width: 701px) {
   .bar { zoom: .75; }
+  .brand { zoom: .75; }
 }
 /* téléphones : les onglets passent sous le titre, sur deux rangées s'il le faut */
 @media (max-width: 700px) {
   .bar { flex-wrap: wrap; height: auto; row-gap: 4px; }
   .tabs { width: 100%; flex-wrap: wrap; justify-content: center; row-gap: 6px; margin: 0 0 6px; }
   .tab { --h: 44px; --lip-h: 5px; --cut: 19px; padding-inline: 26px; font-size: 20px; }
+  .tab.wide { width: auto; padding-inline: 26px; }
   .tabs > * + * { margin-left: -17px; }
 }
 @media (prefers-reduced-motion: reduce) {

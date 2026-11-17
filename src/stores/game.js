@@ -135,6 +135,7 @@ export const useGameStore = defineStore('game', () => {
     ui.selectCard(null)
     ui.preview = null
     ui.randomlyPickedCardId = null
+    ui.setupCount++ // les cartes sont distribuées depuis leur paquet (useDealAnimation)
   }
 
   /**

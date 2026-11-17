@@ -32,14 +32,14 @@ function restart() {
         <p>Ses points de vie sont tombés à 0 au tour {{ gameStore.turn }} : la partie est perdue.</p>
       </div>
     </div>
-    <div class="row">
-      <button type="button" class="btn primary" @click="ui.openModal('setup')">Nouvelle partie</button>
-      <button type="button" class="btn" @click="restart">Recommencer la partie</button>
-      <span class="sp" />
-      <button type="button" class="btn" @click="ui.closeModal()">Fermer</button>
+    <template #actions>
       <!-- un clic de trop sur les PV : la partie revient à l'état d'avant ce dégât -->
-      <button type="button" class="btn" title="Revenir à l'état d'avant ce dernier dégât" @click="gameStore.cancelPresentedChange()">Annuler</button>
-    </div>
+      <button type="button" class="slant" title="Revenir à l'état d'avant ce dernier dégât" @click="gameStore.cancelPresentedChange()">Annuler</button>
+      <span class="sp" />
+      <button type="button" class="slant" @click="ui.closeModal()">Fermer</button>
+      <button type="button" class="slant" @click="restart">Recommencer la partie</button>
+      <button type="button" class="slant red" @click="ui.openModal('setup')">Nouvelle partie</button>
+    </template>
   </BaseModal>
 </template>
 

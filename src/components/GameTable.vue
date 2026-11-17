@@ -37,6 +37,7 @@ function onPointerDown(event) {
   <section
     ref="tableElement"
     class="table"
+    :class="{ dealing: ui.isDealing }"
     data-zone="table"
     aria-label="Table de jeu (glisser les cartes, double-clic pour épuiser, clic droit ou appui long pour le menu, ? pour les raccourcis)"
     :style="{ '--cw': `${ui.cardWidth}px` }"
@@ -49,6 +50,8 @@ function onPointerDown(event) {
 <style scoped>
 /* isolation : les cartes empilées (z-index de plus en plus grands) restent sous les PV du méchant (VillainHud) */
 .table { position: relative; isolation: isolate; overflow: hidden; touch-action: none; min-height: 0; }
+/* mise en place : les cartes arrivent de leur paquet, hors de la table (useDealAnimation) */
+.table.dealing { overflow: visible; }
 /* épuiser une carte la fait pivoter sur place */
 .table > .card { position: absolute; transition: transform 200ms var(--ease-in-out); }
 .table > .card.tapped { transform: rotate(90deg); }

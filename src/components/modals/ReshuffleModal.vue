@@ -84,11 +84,10 @@ function cancel() {
     <p>{{ summary }}</p>
     <p :class="deckIsEmpty ? 'penalty' : 'note'">{{ penalty }}</p>
     <p v-if="followUp && discardCount">{{ followUp }}</p>
-    <div class="row">
-      <button type="button" class="btn primary" :disabled="!discardCount" @click="confirm">{{ confirmLabel }}</button>
-      <span class="sp" />
-      <button type="button" class="btn" @click="cancel">Annuler</button>
-    </div>
+    <template #actions>
+      <button type="button" class="slant" @click="cancel">Annuler</button>
+      <button type="button" class="slant red" :disabled="!discardCount" @click="confirm">{{ confirmLabel }}</button>
+    </template>
   </BaseModal>
 </template>
 

@@ -80,17 +80,17 @@ function restart() {
         </template>
       </div>
     </div>
-    <div class="row">
-      <template v-if="result.kind === 'victory'">
-        <button type="button" class="btn primary" @click="ui.openModal('setup')">Nouvelle partie</button>
-        <button type="button" class="btn" @click="restart">Recommencer la partie</button>
-        <span class="sp" />
-        <button type="button" class="btn" @click="ui.closeModal()">Fermer</button>
-      </template>
-      <button v-else type="button" class="btn primary" @click="ui.closeModal()">Continuer</button>
+    <template #actions>
       <!-- un clic de trop sur les dégâts ou la phase : la partie revient à l'état d'avant -->
-      <button type="button" class="btn" title="Revenir à l'état d'avant ce changement (dégâts, phase…)" @click="gameStore.cancelPresentedChange()">Annuler</button>
-    </div>
+      <button type="button" class="slant" title="Revenir à l'état d'avant ce changement (dégâts, phase…)" @click="gameStore.cancelPresentedChange()">Annuler</button>
+      <template v-if="result.kind === 'victory'">
+        <span class="sp" />
+        <button type="button" class="slant" @click="ui.closeModal()">Fermer</button>
+        <button type="button" class="slant" @click="restart">Recommencer la partie</button>
+        <button type="button" class="slant red" @click="ui.openModal('setup')">Nouvelle partie</button>
+      </template>
+      <button v-else type="button" class="slant red" @click="ui.closeModal()">Continuer</button>
+    </template>
   </BaseModal>
 </template>
 

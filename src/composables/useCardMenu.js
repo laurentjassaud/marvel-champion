@@ -35,17 +35,21 @@ export function useCardMenu() {
   const gameStore = useGameStore()
   const ui = useUiStore()
 
-  /** Ouvre le menu d'une carte à la position (x, y) ; une carte du dessus d'une pioche ouvre le menu de la pile. */
-  function openCardMenu(card, x, y) {
-    if (DECK_PILES.includes(card.zone)) {
+  /**
+   * Ouvre le menu d'une carte à la position (x, y). La carte du dessus d'une pioche, sur le plateau, ouvre le
+   * menu de la pile ; dans la fenêtre d'une pile (inPileWindow), chaque carte a son propre menu.
+   */
+  function openCardMenu(card, x, y, { inPileWindow = false } = {}) {
+    if (DECK_PILES.includes(card.zone) && !inPileWindow) {
       openPileMenu(card.zone, x, y)
       return
     }
     ui.selectCard(card.id)
     const items = card.isPawn
       ? [menuItem('Supprimer le pion', () => gameStore.moveCard(card.id, 'discard'), 'Suppr')]
-      : [...tableItems(card), ...handItems(card), ...discardItems(card), ...moveItems(card)]
-    const isKnown = !card.isPawn && (card.faceUp || card.zone === 'hand')
+      : [...tableItems(card), ...handItems(card), ...pileItems(card), ...moveItems(card)]
+    // une carte d'une pioche est face cachée, mais sa fenêtre la montre : son menu la nomme et la montre
+    const isKnown = !card.isPawn && (card.faceUp || card.zone === 'hand' || inPileWindow)
     let title = 'Carte face cachée'
     if (card.isPawn) title = 'Pion'
     else if (isKnown) title = cardName(card)
@@ -118,26 +122,37 @@ export function useCardMenu() {
   }
 
   /**
-   * Lignes d'une carte d'une défausse (un clic, dans la fenêtre de la défausse, ne fait que l'agrandir) : la
-   * remettre en jeu (Rencontre) ou la poser sur la table (Invocation) ; « Prendre en main » suit.
+   * Lignes d'une carte d'une pile, montrée dans sa fenêtre (un clic ne fait que l'agrandir) : la mettre en
+   * jeu (paquet Rencontre, deck du scénario, « De côté » : une étape du méchant y fait son « Une fois
+   * révélée »), la remettre en jeu (défausse Rencontre), la poser sur la table (Invocation) ; « Prendre en
+   * main » suit, la seule action d'une carte du paquet ou de la défausse du joueur.
    */
-  function discardItems(card) {
-    if (card.zone === 'encounterDiscard') return [menuItem('Remettre en jeu', () => gameStore.takeFromPile(card.id, 'encounterDiscard')), null]
-    if (card.zone === 'invocationDiscard') return [menuItem('Poser sur la table', () => gameStore.takeFromPile(card.id, 'invocationDiscard')), null]
-    return []
+  function pileItems(card) {
+    const takeLabels = {
+      encounterDeck: 'Mettre en jeu', scenarioDeck: 'Mettre en jeu', setAside: 'Mettre en jeu', encounterDiscard: 'Remettre en jeu',
+      invocationDeck: 'Poser sur la table', invocationDiscard: 'Poser sur la table'
+    }
+    const label = takeLabels[card.zone]
+    return label ? [menuItem(label, () => gameStore.takeFromPile(card.id, card.zone)), null] : []
   }
 
-  /** Lignes pour ranger une carte ailleurs (pas l'identité) : main, défausse, de côté, sur ou sous sa pioche. */
+  /**
+   * Lignes pour ranger une carte ailleurs (pas l'identité) : main, défausse, de côté, sur ou sous sa pioche.
+   * Une carte d'une pioche qu'on fouille n'a pas « Sur / Sous le paquet » : la pioche est mélangée à la
+   * fermeture de sa fenêtre.
+   */
   function moveItems(card) {
     if (card.isIdentity) return []
     const items = []
     if (card.zone !== 'hand') items.push(menuItem('Prendre en main', () => gameStore.moveCard(card.id, 'hand'), 'H'))
     if (card.zone !== discardZoneOf(card)) items.push(menuItem('Défausser', () => gameStore.moveCard(card.id, 'discard'), 'Suppr'))
     if (card.zone !== 'setAside') items.push(menuItem('Mettre de côté', () => gameStore.moveCard(card.id, 'setAside'), 'X'))
-    items.push(
-      menuItem('Sur le paquet', () => gameStore.moveCard(card.id, 'deck')),
-      menuItem('Sous le paquet', () => gameStore.moveCard(card.id, 'deck', { bottom: true }))
-    )
+    if (!DECK_PILES.includes(card.zone)) {
+      items.push(
+        menuItem('Sur le paquet', () => gameStore.moveCard(card.id, 'deck')),
+        menuItem('Sous le paquet', () => gameStore.moveCard(card.id, 'deck', { bottom: true }))
+      )
+    }
     return items
   }
 

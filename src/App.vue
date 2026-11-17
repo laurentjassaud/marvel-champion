@@ -2,8 +2,10 @@
 // L'application (maquette Figma « Table de jeu ») : la barre du haut ; la table, avec à gauche le décor et
 // les PV du méchant, et à droite les piles Rencontre au-dessus des onglets Carte / Journal ; en bas, de bord
 // à bord, le bandeau du joueur (piles, main en éventail, tour et PV). Puis les fenêtres (une seule ouverte à
-// la fois) et le menu contextuel.
+// la fois) et le menu contextuel. Au lancement, la page d'accueil couvre le tout : la table est déjà montée et
+// mesurée dessous, mais inerte (ni clavier, ni lecteur d'écran) tant que l'accueil est là.
 import { onMounted } from 'vue'
+import IntroScreen from './components/IntroScreen.vue'
 import TopBar from './components/TopBar.vue'
 import VillainBackdrop from './components/VillainBackdrop.vue'
 import VillainHud from './components/VillainHud.vue'
@@ -27,6 +29,7 @@ import { useUiStore } from './stores/ui.js'
 import { usePointer } from './composables/usePointer.js'
 import { useKeyboard } from './composables/useKeyboard.js'
 import { usePreload } from './composables/usePreload.js'
+import { useDealAnimation } from './composables/useDealAnimation.js'
 
 const gameStore = useGameStore()
 const ui = useUiStore()
@@ -34,6 +37,8 @@ usePointer()
 useKeyboard()
 // les images des cartes de la partie, chargées en tâche de fond et gardées (aussi hors ligne)
 usePreload()
+// à chaque mise en place, les cartes partent de leur paquet et se posent à leur place
+useDealAnimation()
 
 // les composants enfants sont montés d'abord : la table est déjà mesurée ici
 onMounted(() => { if (!gameStore.isReady) gameStore.startExampleGame() })
@@ -43,9 +48,9 @@ onMounted(() => { if (!gameStore.isReady) gameStore.startExampleGame() })
   <div class="app">
     <!-- derrière tout le reste, sans rien capter -->
     <VillainBackdrop />
-    <TopBar />
+    <TopBar :inert="ui.introOpen" />
     <!-- --side : la largeur de la colonne de droite, une fois son bord gauche glissé -->
-    <main class="mid" :style="ui.sideColumnWidth ? { '--side': `${ui.sideColumnWidth}px` } : null">
+    <main class="mid" :inert="ui.introOpen" :style="ui.sideColumnWidth ? { '--side': `${ui.sideColumnWidth}px` } : null">
       <!-- la table, et par-dessus, en bas à gauche, le méchant en grand -->
       <div class="play">
         <GameTable />
@@ -66,8 +71,12 @@ onMounted(() => { if (!gameStore.isReady) gameStore.startExampleGame() })
         <SideTabs />
       </aside>
     </main>
-    <PlayerDock />
+    <PlayerDock :inert="ui.introOpen" />
 
+    <!-- la page d'accueil, par-dessus la table et sous les fenêtres (« Scénarios » ouvre « Nouvelle partie ») -->
+    <Transition name="fade-intro">
+      <IntroScreen v-if="ui.introOpen" />
+    </Transition>
     <ContextMenu />
     <SetupModal v-if="ui.modal?.type === 'setup'" />
     <PileModal v-else-if="ui.modal?.type === 'pile'" :key="ui.modal.zone" :zone="ui.modal.zone" />

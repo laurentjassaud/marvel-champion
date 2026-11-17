@@ -308,22 +308,79 @@ input, textarea { -webkit-user-select: text; user-select: text; } /* sinon iOS n
 .menu hr { border: 0; border-top: 1px solid var(--line); margin: 4px 0; }
 
 /* ---------- fenêtres ---------- */
+/* le fond : la page reste nette derrière la fenêtre, à peine assombrie (maquette « fenêtre ») ; une seule case
+   à la taille de l'écran, où la fenêtre se centre (et contre laquelle sa hauteur en % se calcule) */
 .modal {
-  position: fixed; inset: 0; z-index: 1500; display: grid; place-items: center; padding: 16px;
-  background: rgb(10 11 28 / .7); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
+  position: fixed; inset: 0; z-index: 1500; display: grid; grid-template: minmax(0, 1fr) / minmax(0, 1fr); place-items: center; padding: 16px;
+  background: rgb(10 11 28 / .35);
   transition: opacity 200ms var(--ease-out);
 }
-/* les zones qui défilent verticalement ne défilent que verticalement : pas de balayage de côté que le navigateur changerait en « page précédente » */
+/* le panneau (maquette « fenêtre ») : un parallélogramme penché comme les onglets (« / »), en dégradé indigo à
+   97,5 % (un peu plus opaque que la maquette, à 90 %), bordé d'un filet violet, avec en bas la bande sombre où se posent les boutons. ::before le dessine,
+   incliné (skewX) : l'angle reste celui de la maquette quelle que soit la hauteur de la fenêtre. Le contenu
+   défile dans .box-body, en retrait du biais (--pad) ; les boutons (.box-actions) restent au pied */
 .modal .box {
-  background: var(--panel); border: 1px solid var(--line); border-radius: 6px; width: min(820px, 100%); max-height: 100%;
-  overflow: auto; overscroll-behavior: contain; touch-action: pan-y pinch-zoom; padding: 18px 20px; display: grid; gap: 14px;
-  box-shadow: 0 30px 80px -20px rgb(4 5 18 / .8), inset 0 1px 0 rgb(255 255 255 / .06);
+  --slant: 5.13deg; --pad: 52px; --band: 29px;
+  position: relative; isolation: isolate; width: min(820px, 100%); max-height: 100%;
+  display: grid; grid-template-rows: minmax(0, 1fr) auto;
   transition: opacity 240ms var(--ease-out), transform 240ms var(--ease-out);
 }
+.modal .box::before {
+  content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  transform: skewX(calc(-1 * var(--slant)));
+  border: 1px solid rgb(101 103 198 / .975);
+  background:
+    linear-gradient(#252951, #252951) bottom / 100% var(--band) no-repeat,
+    radial-gradient(103% 102.5% at 50% 50%, rgb(41 46 109 / .975), rgb(26 29 67 / .975) 99.5%);
+  box-shadow: 0 30px 80px -20px rgb(4 5 18 / .8);
+}
+/* grande fenêtre (Nouvelle partie) : la taille de la maquette, 1281 × 667 px sur 1920 × 1080 (1341 px de large
+   avec le biais), jamais moins de 820 × 560 */
+.modal .box.wide { width: min(100%, max(820px, calc(1281 * var(--u)))); height: min(100%, max(560px, calc(667 * var(--u)))); }
+/* les zones qui défilent verticalement ne défilent que verticalement : pas de balayage de côté que le navigateur
+   changerait en « page précédente » ; 4 px de marge intérieure gardent entiers les contours de focus */
+.modal .box-body {
+  min-height: 0; overflow: auto; overscroll-behavior: contain; touch-action: pan-y pinch-zoom;
+  margin: 0 calc(var(--pad) - 4px); padding: 22px 4px 20px; display: grid; gap: 14px; align-content: start;
+}
+/* son ascenseur : fin, sans flèches, couleur du filet, en retrait du haut du panneau et de la bande du pied ;
+   la zone de prise fait 10 px, le trait visible 4 px (il s'épaissit et s'éclaire au survol) */
+.modal .box-body::-webkit-scrollbar { width: 10px; }
+.modal .box-body::-webkit-scrollbar-track { background: transparent; margin-block: 18px; }
+.modal .box-body::-webkit-scrollbar-thumb {
+  border: 3px solid transparent; border-radius: 5px; background: rgb(101 103 198 / .45) padding-box;
+}
+.modal .box-body::-webkit-scrollbar-thumb:hover { border-width: 2px; background-color: rgb(101 103 198 / .8); }
+.modal .box-body::-webkit-scrollbar-button { display: none; }
+/* Firefox, sans ces réglages : l'ascenseur fin du système, aux mêmes couleurs */
+@supports not selector(::-webkit-scrollbar) {
+  .modal .box-body { scrollbar-width: thin; scrollbar-color: rgb(101 103 198 / .55) transparent; }
+}
+/* les boutons, à droite sur la bande du pied, bord à bord : les autres choix à gauche (.sp entre les deux) */
+.modal .box-actions {
+  display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: flex-end; row-gap: 6px;
+  padding: 0 max(var(--pad), 9%) 0 var(--pad);
+}
+.modal .box-actions > * + * { margin-left: -14px; }
+/* boutons du pied : des onglets en biais de 34 px, le liseré en haut, le texte en 14 px, centré dans la partie
+   colorée sous le liseré : les lettres centrées à 20 px du haut du bouton, comme sur la maquette (le navigateur
+   dessine cette police un peu plus haut que Figma, d'où 4 px de marge en plus) ; l'action principale en rouge plein */
+.modal .box-actions .slant {
+  --h: 34px; --lip-h: 4px;
+  min-width: 99px; padding: calc(var(--lip-h) + 4px) calc(var(--cut) + 14px) 0; font-size: 14px;
+  background: linear-gradient(var(--lip), var(--lip)) top / 100% var(--lip-h) no-repeat, var(--fill-paint, var(--fill));
+}
+.modal .box-actions .slant.red { --fill-paint: #a21212; --lip: #990000; }
+.modal .box-actions .slant:focus-visible { --lip: var(--yellow); }
 /* la carte agrandie de la colonne de droite reste visible, nette, à sa place, par-dessus le fond (BaseModal) :
    la boîte se centre dans la place qui reste à sa gauche ; le panneau a le même filet de 1 px que celui de
    SideTabs, pour que la carte ne bouge pas d'un pixel quand la fenêtre s'ouvre */
 .modal.beside-zoom { padding-right: calc(var(--zoom-room) + 16px); }
+/* sur l'accueil, « Nouvelle partie » laisse voir le grand titre « Marvel Champions » : elle se pose juste
+   dessous (BaseModal mesure --title-room) ; si la place manque, elle rétrécit et son contenu défile. Les
+   autres fenêtres restent centrées */
+.modal.below-title { padding-top: var(--title-room); }
+.modal.below-title .box.wide { align-self: start; }
 .modal-zoom { position: absolute; display: grid; grid-template-rows: minmax(0, 1fr); padding: 1px; pointer-events: none; }
 .modal h2 { font: italic 900 30px/1.1 var(--font-display); letter-spacing: -.02em; text-transform: uppercase; margin: 0; text-wrap: balance; }
 .modal p { margin: 0; color: var(--muted); line-height: 1.5; max-width: 68ch; }
@@ -356,6 +413,7 @@ input, textarea { -webkit-user-select: text; user-select: text; } /* sinon iOS n
 @media (pointer: coarse) {
   .btn { min-height: 36px; padding: 8px 12px; }
   .slant { --h: 44px; }
+  .modal .box-actions .slant { --h: 40px; }
   .menu button { padding: 10px 12px; }
   .btn kbd, .menu kbd, .slant kbd { display: none; }
 }
@@ -378,6 +436,8 @@ input, textarea { -webkit-user-select: text; user-select: text; } /* sinon iOS n
   .side { grid-template-rows: none; padding-top: 4px; }
   .hand-row { overflow-x: auto; overscroll-behavior: contain; justify-content: flex-start; gap: 6px; padding: 8px 2px 4px; min-height: calc(var(--hw) * 1.4 + 12px); }
   .hand-row .card { margin-left: 0; transform: none; }
+  /* fenêtres : un biais plus léger, qui laisse sa largeur au contenu */
+  .modal .box { --slant: 2deg; --pad: 20px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .hand-row .card, .btn, .slant, .pile .slot, .menu, .modal, .modal .box, .card .chip { transition: none; }

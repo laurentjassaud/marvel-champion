@@ -30,7 +30,7 @@ export function useKeyboard() {
       return
     }
     if (event.ctrlKey || event.metaKey || event.altKey) return
-    if (event.target.closest?.('input, textarea, select') || ui.modal || !gameStore.isReady) return
+    if (event.target.closest?.('input, textarea, select') || ui.modal || ui.introOpen || !gameStore.isReady) return
     const card = targetCard()
     const cardId = card?.id ?? null
     const key = event.key.toLowerCase()

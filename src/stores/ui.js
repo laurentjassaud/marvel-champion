@@ -62,6 +62,12 @@ export const useUiStore = defineStore('ui', () => {
    * | 'reshuffle', zone?, result?, fromPile?}.
    */
   const modal = ref(null)
+  /** La page d'accueil est affichée, par-dessus la table : au lancement, puis par le titre de la barre. */
+  const introOpen = ref(true)
+  /** Nombre de mises en place depuis le lancement : chacune fait distribuer les cartes (useDealAnimation). */
+  const setupCount = ref(0)
+  /** Les cartes de la mise en place sont en route depuis leur paquet : la table les laisse déborder. */
+  const isDealing = ref(false)
 
   watch(cardWidth, width => writeSetting(CARD_WIDTH_KEY, width))
   watch(sideTab, tab => writeSetting(SIDE_TAB_KEY, tab))
@@ -105,9 +111,14 @@ export const useUiStore = defineStore('ui', () => {
   /** Ouvre une fenêtre (et ferme le menu contextuel) ; `extra` : ses paramètres (zone de la pile, résultat…). */
   const openModal = (type, extra = {}) => { contextMenu.value = null; modal.value = { type, ...extra } }
   const closeModal = () => { modal.value = null }
+  /** Revient à la page d'accueil (le menu ou la fenêtre ouverts se ferment) ; la partie reste où elle en est. */
+  const openIntro = () => { contextMenu.value = null; modal.value = null; introOpen.value = true }
+  /** Quitte la page d'accueil : la table apparaît. */
+  const closeIntro = () => { introOpen.value = false }
 
   return {
     cardWidth, sideTab, sideColumnWidth, tableWidth, tableHeight, heroInset, selectedCardId, randomlyPickedCardId, hoveredCardId,
-    preview, contextMenu, modal, layout, setTableSize, setHeroInset, selectCard, showPreview, openContextMenu, closeContextMenu, openModal, closeModal
+    preview, contextMenu, modal, introOpen, setupCount, isDealing, layout, setTableSize, setHeroInset, selectCard, showPreview, openContextMenu, closeContextMenu,
+    openModal, closeModal, openIntro, closeIntro
   }
 })

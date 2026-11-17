@@ -135,6 +135,7 @@ function startGame() {
     deckLabel: usesImportedDeck.value ? importedDeck.value.label : `précon ${heroOf(chosenHero.value).aspect}`
   })
   ui.closeModal()
+  ui.closeIntro() // ouverte depuis l'accueil (« Scénarios ») : la nouvelle partie apparaît
 }
 
 // chaque écran s'ouvre en haut, le focus sur son choix coché
@@ -143,13 +144,13 @@ const focusCheckedChoice = () => screenElement.value?.querySelector('input:check
 onMounted(focusCheckedChoice)
 watch(step, async () => {
   await nextTick()
-  screenElement.value?.closest('.box')?.scrollTo({ top: 0 })
+  screenElement.value?.closest('.box-body')?.scrollTo({ top: 0 })
   focusCheckedChoice()
 })
 </script>
 
 <template>
-  <BaseModal title="Nouvelle partie">
+  <BaseModal title="Nouvelle partie" wide>
     <ol class="steps">
       <li><button type="button" :aria-current="step === 1 ? 'step' : undefined" @click="step = 1">1 · Héros</button>
       </li>
@@ -235,13 +236,13 @@ watch(step, async () => {
         Rencontre mélangé avec l'obligation du héros, set Némésis mis de côté.</p>
     </div>
 
-    <div class="row foot">
-      <button v-if="step === 2" type="button" class="btn" @click="step = 1">← Héros</button>
-      <button v-if="step === 1" type="button" class="btn primary" @click="step = 2">Suivant : scénario →</button>
-      <button v-else type="button" class="btn primary" :disabled="!modularsReady" @click="startGame">Mettre en place</button>
+    <template #actions>
+      <button v-if="step === 2" type="button" class="slant" @click="step = 1">← Héros</button>
       <span class="sp" />
-      <button type="button" class="btn" @click="ui.closeModal()">Annuler</button>
-    </div>
+      <button type="button" class="slant" @click="ui.closeModal()">Annuler</button>
+      <button v-if="step === 1" type="button" class="slant red" @click="step = 2">Suivant</button>
+      <button v-else type="button" class="slant red" :disabled="!modularsReady" @click="startGame">Mettre en place</button>
+    </template>
   </BaseModal>
 </template>
 
@@ -407,15 +408,5 @@ watch(step, async () => {
   margin-left: 8px;
   color: var(--brass);
   font-size: 14px;
-}
-
-/* les boutons restent visibles pendant que les choix défilent */
-.foot {
-  position: sticky;
-  bottom: 0;
-  z-index: 1;
-  padding: 12px 0 0;
-  background: var(--panel);
-  border-top: 1px solid var(--line);
 }
 </style>
