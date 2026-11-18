@@ -38,7 +38,7 @@ export default defineConfig(({ mode }) => {
           ]
         },
         workbox: {
-          globPatterns: ['**/*.{js,css,html,png}', 'backs/*.jpg'],
+          globPatterns: ['**/*.{js,css,html,png,webp}', 'backs/*.jpg'],
           runtimeCaching: [
             {
               // les images des cartes sont gardées dès leur premier affichage (841 images, ≈64 Mo en tout)

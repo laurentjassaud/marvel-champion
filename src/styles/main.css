@@ -99,7 +99,7 @@ input, textarea { -webkit-user-select: text; user-select: text; } /* sinon iOS n
 }
 /* la table, avec par-dessus, en bas à gauche, les PV du méchant (VillainHud) */
 .play { position: relative; min-height: 0; min-width: 0; display: grid; }
-/* tablette (écran tactile assez large) : la barre du haut aux trois quarts de sa taille (zoom dans TopBar) */
+/* tablette (écran tactile assez large) : la barre du haut aux trois quarts de sa taille (scale dans TopBar) */
 @media (pointer: coarse) and (min-width: 701px) {
   .app { grid-template-rows: 36px minmax(0, 1fr) auto; }
 }
