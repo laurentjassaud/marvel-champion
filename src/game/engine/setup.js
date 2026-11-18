@@ -1,7 +1,7 @@
 // Mise en place d'une partie : le héros et son deck, le scénario (méchant, manigances, paquet Rencontre,
 // mise en place de la manigance 1A), la main de départ, puis le mulligan.
 
-import { CARD_DEFINITIONS, DEFINITION_BY_ID, addImportedDefinitions, SCENARIOS, MODULAR_SETS } from '../data.js'
+import { CARD_DEFINITIONS, DEFINITION_BY_ID, addImportedDefinitions, SCENARIOS, MODULAR_SETS, AVAILABLE_MODULAR_SETS } from '../data.js'
 import { heroRules, scenarioRules } from '../rules.js'
 import { SAVED_GAME_VERSION } from '../savedGame.js'
 import {
@@ -36,13 +36,14 @@ export function setupSummary(setup) {
 }
 
 /**
- * Sets modulaires tirés au hasard : autant que le scénario en prend (un, ou plusieurs pour Crossbones et
- * Crâne Rouge), tous différents, jamais un set que le scénario utilise déjà (Patrouille d'Hydra de Taskmaster).
+ * Sets modulaires tirés au hasard, parmi ceux des boîtes proposées (AVAILABLE_PACKS) : autant que le scénario
+ * en prend (un, ou plusieurs pour Crossbones et Crâne Rouge), tous différents, jamais un set que le scénario
+ * utilise déjà (Patrouille d'Hydra de Taskmaster).
  */
 function drawRandomModulars(scenario) {
   const wanted = Math.max(1, scenario.advisedModulars.length)
   const alreadyUsed = scenarioRules(scenario.id).extraSets ?? []
-  const pool = MODULAR_SETS.filter(modular => !alreadyUsed.includes(modular.id))
+  const pool = AVAILABLE_MODULAR_SETS.filter(modular => !alreadyUsed.includes(modular.id))
   const picked = []
   while (picked.length < wanted && pool.length) picked.push(pool.splice(randomIndex(pool.length), 1)[0].id)
   return picked

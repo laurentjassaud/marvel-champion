@@ -315,33 +315,32 @@ input, textarea { -webkit-user-select: text; user-select: text; } /* sinon iOS n
   background: rgb(10 11 28 / .35);
   transition: opacity 200ms var(--ease-out);
 }
-/* le panneau (maquette « fenêtre ») : un parallélogramme penché comme les onglets (« / »), en dégradé indigo à
-   97,5 % (un peu plus opaque que la maquette, à 90 %), bordé d'un filet violet, avec en bas la bande sombre où se posent les boutons. ::before le dessine,
-   incliné (skewX) : l'angle reste celui de la maquette quelle que soit la hauteur de la fenêtre. Le contenu
-   défile dans .box-body, en retrait du biais (--pad) ; les boutons (.box-actions) restent au pied */
+/* le panneau (maquette Figma « Préparation de la partie ») : un rectangle droit, du bleu nuit presque opaque en
+   haut à l'indigo à 88 % en bas, bordé d'un filet bleu discret et cerné d'un anneau sombre de 20 px (une ombre
+   sans flou). --su : un pixel de la maquette (1920 × 1080), jamais moins de 0,7 px, pour les tailles qui suivent
+   l'écran. Le contenu défile dans .box-body, en retrait de --pad ; les boutons (.box-actions) restent au pied */
 .modal .box {
-  --slant: 5.13deg; --pad: 52px; --band: 29px;
-  position: relative; isolation: isolate; width: min(820px, 100%); max-height: 100%;
+  --su: max(var(--u), .7px); --pad: clamp(20px, 6%, 48px);
+  position: relative; width: min(820px, 100%); max-height: 100%;
   display: grid; grid-template-rows: minmax(0, 1fr) auto;
+  border: 2px solid rgb(34 60 94 / .25); border-radius: 4px;
+  background: linear-gradient(rgb(17 23 50 / .98), rgb(34 38 88 / .88));
+  box-shadow: 0 4px 0 20px rgb(0 0 0 / .15);
+  /* ce qui transparaît derrière (le menu de l'accueil, les cartes de la table) est flouté : il ne se lit plus */
+  -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
   transition: opacity 240ms var(--ease-out), transform 240ms var(--ease-out);
 }
-.modal .box::before {
-  content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none;
-  transform: skewX(calc(-1 * var(--slant)));
-  border: 1px solid rgb(101 103 198 / .975);
-  background:
-    linear-gradient(#252951, #252951) bottom / 100% var(--band) no-repeat,
-    radial-gradient(103% 102.5% at 50% 50%, rgb(41 46 109 / .975), rgb(26 29 67 / .975) 99.5%);
-  box-shadow: 0 30px 80px -20px rgb(4 5 18 / .8);
+/* grande fenêtre (Nouvelle partie) : la taille de la maquette, 1168 × 701 px sur 1920 × 1080, jamais moins de
+   820 × 560 ; le contenu à 10 % des bords, comme les vignettes de la maquette */
+.modal .box.wide {
+  --pad: 10%;
+  width: min(100%, max(820px, calc(1168 * var(--u)))); height: min(100%, max(560px, calc(701 * var(--u))));
 }
-/* grande fenêtre (Nouvelle partie) : la taille de la maquette, 1281 × 667 px sur 1920 × 1080 (1341 px de large
-   avec le biais), jamais moins de 820 × 560 */
-.modal .box.wide { width: min(100%, max(820px, calc(1281 * var(--u)))); height: min(100%, max(560px, calc(667 * var(--u)))); }
 /* les zones qui défilent verticalement ne défilent que verticalement : pas de balayage de côté que le navigateur
    changerait en « page précédente » ; 4 px de marge intérieure gardent entiers les contours de focus */
 .modal .box-body {
   min-height: 0; overflow: auto; overscroll-behavior: contain; touch-action: pan-y pinch-zoom;
-  margin: 0 calc(var(--pad) - 4px); padding: 22px 4px 20px; display: grid; gap: 14px; align-content: start;
+  margin: 0 calc(var(--pad) - 4px); padding: calc(40 * var(--su)) 4px calc(28 * var(--su)); display: grid; gap: 14px; align-content: start;
 }
 /* son ascenseur : fin, sans flèches, couleur du filet, en retrait du haut du panneau et de la bande du pied ;
    la zone de prise fait 10 px, le trait visible 4 px (il s'épaissit et s'éclaire au survol) */
@@ -356,21 +355,20 @@ input, textarea { -webkit-user-select: text; user-select: text; } /* sinon iOS n
 @supports not selector(::-webkit-scrollbar) {
   .modal .box-body { scrollbar-width: thin; scrollbar-color: rgb(101 103 198 / .55) transparent; }
 }
-/* les boutons, à droite sur la bande du pied, bord à bord : les autres choix à gauche (.sp entre les deux) */
+/* les boutons, en bas à droite, posés sur le bord du panneau (à 50 px du bord droit) et bord à bord : les autres
+   choix à gauche (.sp entre les deux) */
 .modal .box-actions {
   display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: flex-end; row-gap: 6px;
-  padding: 0 max(var(--pad), 9%) 0 var(--pad);
+  padding: 0 calc(50 * var(--su)) 0 var(--pad);
 }
-.modal .box-actions > * + * { margin-left: -14px; }
-/* boutons du pied : des onglets en biais de 34 px, le liseré en haut, le texte en 14 px, centré dans la partie
-   colorée sous le liseré : les lettres centrées à 20 px du haut du bouton, comme sur la maquette (le navigateur
-   dessine cette police un peu plus haut que Figma, d'où 4 px de marge en plus) ; l'action principale en rouge plein */
+.modal .box-actions > .slant + .slant { margin-left: calc(2px - var(--cut)); }
+/* boutons du pied : les onglets de la barre du haut (55 px, liseré de 7 px, texte en 24 px), le liseré en haut,
+   le texte centré dans la partie colorée dessous ; Annuler en acier, l'action principale en rouge dégradé */
 .modal .box-actions .slant {
-  --h: 34px; --lip-h: 4px;
-  min-width: 99px; padding: calc(var(--lip-h) + 4px) calc(var(--cut) + 14px) 0; font-size: 14px;
+  --h: calc(55 * var(--su)); --lip-h: calc(7 * var(--su));
+  min-width: calc(166 * var(--su)); padding: calc(var(--lip-h) + 3px) calc(var(--cut) + 14px) 0; font-size: calc(24 * var(--su));
   background: linear-gradient(var(--lip), var(--lip)) top / 100% var(--lip-h) no-repeat, var(--fill-paint, var(--fill));
 }
-.modal .box-actions .slant.red { --fill-paint: #a21212; --lip: #990000; }
 .modal .box-actions .slant:focus-visible { --lip: var(--yellow); }
 /* la carte agrandie de la colonne de droite reste visible, nette, à sa place, par-dessus le fond (BaseModal) :
    la boîte se centre dans la place qui reste à sa gauche ; le panneau a le même filet de 1 px que celui de
@@ -382,7 +380,11 @@ input, textarea { -webkit-user-select: text; user-select: text; } /* sinon iOS n
 .modal.below-title { padding-top: var(--title-room); }
 .modal.below-title .box.wide { align-self: start; }
 .modal-zoom { position: absolute; display: grid; grid-template-rows: minmax(0, 1fr); padding: 1px; pointer-events: none; }
-.modal h2 { font: italic 900 30px/1.1 var(--font-display); letter-spacing: -.02em; text-transform: uppercase; margin: 0; text-wrap: balance; }
+/* le titre, centré, en acier (« Préparation de la partie ») */
+.modal h2 {
+  font: italic 700 max(24px, calc(36 * var(--su)))/1.1 var(--font-display); letter-spacing: -.02em; text-transform: uppercase;
+  color: var(--steel); text-align: center; margin: 0; text-wrap: balance;
+}
 .modal p { margin: 0; color: var(--muted); line-height: 1.5; max-width: 68ch; }
 .modal .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .grid-cards { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -413,7 +415,7 @@ input, textarea { -webkit-user-select: text; user-select: text; } /* sinon iOS n
 @media (pointer: coarse) {
   .btn { min-height: 36px; padding: 8px 12px; }
   .slant { --h: 44px; }
-  .modal .box-actions .slant { --h: 40px; }
+  .modal .box-actions .slant { --h: max(44px, calc(55 * var(--su))); }
   .menu button { padding: 10px 12px; }
   .btn kbd, .menu kbd, .slant kbd { display: none; }
 }
@@ -436,8 +438,9 @@ input, textarea { -webkit-user-select: text; user-select: text; } /* sinon iOS n
   .side { grid-template-rows: none; padding-top: 4px; }
   .hand-row { overflow-x: auto; overscroll-behavior: contain; justify-content: flex-start; gap: 6px; padding: 8px 2px 4px; min-height: calc(var(--hw) * 1.4 + 12px); }
   .hand-row .card { margin-left: 0; transform: none; }
-  /* fenêtres : un biais plus léger, qui laisse sa largeur au contenu */
-  .modal .box { --slant: 2deg; --pad: 20px; }
+  /* fenêtres : le contenu près des bords, les boutons à 16 px du bord droit */
+  .modal .box, .modal .box.wide { --pad: 20px; }
+  .modal .box-actions { padding-right: 16px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .hand-row .card, .btn, .slant, .pile .slot, .menu, .modal, .modal .box, .card .chip { transition: none; }

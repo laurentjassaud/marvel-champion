@@ -354,6 +354,18 @@ export const MODULAR_SETS = [
   { id: 'master_of_time', name: 'Le Maître du Temps' }
 ]
 
+/**
+ * Boîtes proposées à la mise en place (écran Nouvelle partie, sets modulaires tirés au hasard) : pour
+ * l'instant la boîte de base seule, soit 5 héros, 3 scénarios et 5 sets modulaires. Les cartes des autres
+ * boîtes restent connues de la table (parties sauvegardées, decks importés).
+ */
+export const AVAILABLE_PACKS = ['core']
+/** Le set (héros, scénario, set modulaire) a des cartes dans une des boîtes proposées. */
+const isAvailableSet = setId => CARD_DEFINITIONS.some(definition => definition.set === setId && AVAILABLE_PACKS.includes(definition.pack))
+export const AVAILABLE_HEROES = HEROES.filter(hero => isAvailableSet(hero.id))
+export const AVAILABLE_SCENARIOS = SCENARIOS.filter(scenario => isAvailableSet(scenario.id))
+export const AVAILABLE_MODULAR_SETS = MODULAR_SETS.filter(modular => isAvailableSet(modular.id))
+
 /* ---------------------------------------------------------------------------------------------------- */
 /* Libellés et constantes                                                                                */
 /* ---------------------------------------------------------------------------------------------------- */

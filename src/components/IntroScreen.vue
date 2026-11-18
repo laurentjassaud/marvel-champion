@@ -10,7 +10,8 @@ let hasPlayedSky = false
 // d'en bas et ses immeubles au premier plan, six héros autour du titre et du menu, la barre du haut. Elle
 // s'affiche au lancement par-dessus la table, déjà prête et mesurée (une nouvelle partie s'y pose donc
 // normalement), et revient par le titre de la barre. « Scénarios » ouvre la fenêtre « Nouvelle partie »,
-// « Reprendre une partie » découvre la table ; les autres liens ne sont pas encore prêts (SoonHint).
+// « Reprendre une partie » découvre la table, « Guide de référence 1.8 » ouvre le guide des règles dans une
+// nouvelle fenêtre ; les autres liens ne sont pas encore prêts (SoonHint).
 //
 // L'entrée, au lancement : le titre, puis les héros un à un, puis la barre et le menu, en 2 s. Ce sont des
 // animations CSS : elles restent fluides pendant que la table se monte derrière. Elle attend les polices et
@@ -36,6 +37,8 @@ const HEROES = [
   { id: 'hulk', width: 735, height: 1117 }
 ]
 const SOON_LINKS = ['Campagnes', 'Fanmades', 'Marathon']
+/** Le guide de référence des règles (version 1.8, site externe), ouvert dans une nouvelle fenêtre. */
+const REFERENCE_GUIDE_URL = 'https://deejimy.github.io/mc-reference/'
 
 const plays = !hasPlayed
 hasPlayed = true
@@ -121,7 +124,14 @@ watch(() => ui.modal, modal => {
           </li>
         </ul>
         <hr class="rule">
-        <button type="button" class="link resume" @click="ui.closeIntro()">Reprendre une partie</button>
+        <div class="after-rule">
+          <button type="button" class="link resume" @click="ui.closeIntro()">Reprendre une partie</button>
+          <a class="link guide" :href="REFERENCE_GUIDE_URL" target="_blank" rel="noopener noreferrer"
+            aria-label="Guide de référence 1.8 (s'ouvre dans une nouvelle fenêtre)">
+            Guide de référence 1.8
+            <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M4 2h6v6M10 2 2 10" fill="none" stroke="currentColor" stroke-width="1.6" /></svg>
+          </a>
+        </div>
       </nav>
     </div>
   </section>
@@ -182,7 +192,8 @@ watch(() => ui.modal, modal => {
   margin-top: calc(-16 * var(--tu));
   font: italic 700 calc(120 * var(--tu))/1 var(--font-display); letter-spacing: -.02em; text-transform: uppercase;
 }
-/* le menu, au milieu de l'écran : les liens à 72 px d'écart, un filet, puis « Reprendre une partie » */
+/* le menu, au milieu de l'écran : les liens à 72 px d'écart, un filet, puis « Reprendre une partie » et,
+   juste dessous, plus petit, le lien du guide de référence */
 .main-menu {
   position: absolute; z-index: 3; left: 50%; top: calc(50% - 8 * var(--u)); translate: -50% -50%;
   display: grid; justify-items: center; gap: calc(48 * var(--mu));
@@ -201,7 +212,13 @@ watch(() => ui.modal, modal => {
   .link:not([aria-disabled]):hover { text-shadow: 0 0 calc(22 * var(--mu)) rgb(101 103 198 / .95); }
 }
 .rule { width: calc(450 * var(--mu)); height: 1px; margin: 0; border: 0; background: #3a45c3; }
+.after-rule { display: grid; justify-items: center; }
 .resume { height: calc(48 * var(--mu)); font-size: calc(32 * var(--mu)); }
+.guide {
+  gap: calc(8 * var(--mu)); height: calc(40 * var(--mu)); font-size: calc(24 * var(--mu));
+  color: #c3c5f5; text-decoration: none;
+}
+.guide svg { width: .6em; height: .6em; }
 
 /* ---------- l'entrée (2 s, au lancement) ----------
    0 ms le titre, 250 ms son étiquette ; de 450 ms à 1,7 s les héros, un toutes les 110 ms, chacun depuis son
@@ -217,13 +234,14 @@ watch(() => ui.modal, modal => {
   .plays .wolverine { --from-x: calc(-40 * var(--u)); --from-y: calc(50 * var(--u)); animation-delay: 890ms; }
   .plays .tornade { --from-x: 0px; --from-y: calc(60 * var(--u)); animation-delay: 1000ms; }
   .plays .top { animation: intro-top 450ms var(--ease-out) 1350ms both; }
-  .plays .links li, .plays .resume { animation: intro-rise 360ms var(--ease-out) both; }
+  .plays .links li, .plays .resume, .plays .guide { animation: intro-rise 360ms var(--ease-out) both; }
   .plays .links li:nth-child(1) { animation-delay: 1400ms; }
   .plays .links li:nth-child(2) { animation-delay: 1460ms; }
   .plays .links li:nth-child(3) { animation-delay: 1520ms; }
   .plays .links li:nth-child(4) { animation-delay: 1580ms; }
   .plays .rule { animation: intro-rule 360ms var(--ease-out) 1640ms both; }
   .plays .resume { animation-delay: 1640ms; }
+  .plays .guide { animation-delay: 1700ms; }
 }
 /* en attendant les polices et les images, tout reste à sa première image */
 .plays:not(.ready) * { animation-play-state: paused; }
@@ -271,7 +289,7 @@ watch(() => ui.modal, modal => {
 
 /* mouvement réduit : pas d'entrée chorégraphiée ; tout apparaît ensemble, en fondu, sans rien déplacer */
 @media (prefers-reduced-motion: reduce) {
-  .plays :is(.name, .tag, .hero, .top, .links li, .rule, .resume) { animation: intro-fade 400ms ease both; }
+  .plays :is(.name, .tag, .hero, .top, .links li, .rule, .resume, .guide) { animation: intro-fade 400ms ease both; }
   .sky { transition-duration: 400ms; }
   .fade-intro-leave-to { transform: none; }
 }

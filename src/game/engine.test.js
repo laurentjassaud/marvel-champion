@@ -1,7 +1,10 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { existsSync } from 'node:fs'
 import * as E from './engine.js'
-import { CARD_DEFINITIONS, PRECON_DECKS, HEROES, SCENARIOS, DEFINITION_BY_ID, DEFINITION_BY_CODE, MODULAR_SETS, VICTORY_TEXTS } from './data.js'
+import {
+  CARD_DEFINITIONS, PRECON_DECKS, HEROES, SCENARIOS, DEFINITION_BY_ID, DEFINITION_BY_CODE, MODULAR_SETS, VICTORY_TEXTS,
+  AVAILABLE_HEROES, AVAILABLE_SCENARIOS, AVAILABLE_MODULAR_SETS
+} from './data.js'
 import { HERO_RULES, SCENARIO_RULES, SHADOW_OF_THE_PAST_ID } from './rules.js'
 import { migrateSavedGame, SAVED_GAME_VERSION } from './savedGame.js'
 
@@ -33,6 +36,17 @@ describe('données', () => {
   it("noms français des sets modulaires : Civils Attaqués, Le Siège de l'Apocalypse", () => {
     expect(MODULAR_SETS.find(m => m.id === 'under_attack').name).toBe('Civils Attaqués')
     expect(MODULAR_SETS.find(m => m.id === 'the_doomsday_chair').name).toBe("Le Siège de l'Apocalypse")
+  })
+
+  it('mise en place : seuls les 5 héros, 3 scénarios et 5 sets modulaires de la boîte de base sont proposés', () => {
+    expect(AVAILABLE_HEROES.map(h => h.id)).toEqual(['spider_man', 'captain_marvel', 'she_hulk', 'iron_man', 'black_panther'])
+    expect(AVAILABLE_SCENARIOS.map(v => v.id)).toEqual(['rhino', 'klaw', 'ultron'])
+    expect(AVAILABLE_MODULAR_SETS.map(m => m.id)).toEqual(['bomb_scare', 'masters_of_evil', 'under_attack', 'legions_of_hydra', 'the_doomsday_chair'])
+    // the random draw stays in the core set, even for a scenario of another box
+    for (let i = 0; i < 20; i++) {
+      const s = game({ scenario: 'crossbones', modulars: 'random' })
+      for (const id of s.setup.modulars) expect(AVAILABLE_MODULAR_SETS.map(m => m.id)).toContain(id)
+    }
   })
 
   it('chaque précon fait 40 cartes hors identité et obligation', () => {

@@ -1,8 +1,8 @@
 <script setup>
-// Le cadre commun des fenêtres (maquette « fenêtre ») : le fond sombre (un appui dessus ferme la fenêtre), le
-// panneau en biais, son titre et son contenu, qui défile, et en bas, sur la bande du pied, les boutons
-// d'action (slot actions : les autres choix à gauche, puis Annuler ou Fermer, puis l'action principale en
-// rouge, à droite).
+// Le cadre commun des fenêtres (maquette Figma « Préparation de la partie ») : le fond sombre (un appui dessus
+// ferme la fenêtre), le panneau droit cerné d'un anneau sombre, son titre centré et son contenu, qui défile, et
+// en bas à droite, posés sur le bord, les boutons d'action (slot actions : les autres choix à gauche, puis
+// Annuler ou Fermer, puis l'action principale en rouge, à droite).
 // La carte agrandie de la colonne de droite reste visible au-dessus du fond, à sa place : le fond assombrit
 // et floute toute la page, alors la fenêtre montre la sienne exactement par-dessus le panneau de l'onglet
 // Carte (ou Journal), et se centre à sa gauche pour ne jamais la cacher. Sur téléphone, la colonne de droite
