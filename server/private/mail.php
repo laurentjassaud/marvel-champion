@@ -2,7 +2,7 @@
 /**
  * Envoi d'e-mails Gamebox Hero : templates à variables, version texte, connexion SMTP, en-têtes de
  * désinscription. Partagé par bin/mailing.php (la mailing list) et public/api/signup.php (le mail de
- * confirmation envoyé à chaque nouvelle inscription). Demande PHPMailer (vendor/).
+ * confirmation envoyé à chaque nouvelle inscription, et l'avis au propriétaire du site). Demande PHPMailer (vendor/).
  */
 declare(strict_types=1);
 
@@ -231,4 +231,45 @@ function send_confirmation(PDO $pdo, string $email, string $templatePath): void
         throw new RuntimeException("confirmation non envoyée à {$subscriber['email']} : $error", 0, $e);
     }
     record_send($pdo, $mailingId, $subscriber['email'], 'sent', null);
+}
+
+/**
+ * Prévient le propriétaire du site d'une nouvelle inscription (réglage « notify » de config.php) : un court
+ * message texte avec le nom, l'adresse, la source, l'heure, le sort du mail de confirmation et le nombre
+ * d'inscrits. « Répondre » écrit directement à la personne inscrite.
+ * @param string[] $to
+ */
+function send_notification(PDO $pdo, string $email, array $to, string $confirmation): void
+{
+    $st = $pdo->prepare('SELECT email, name, source, created_at FROM signups WHERE email = ?');
+    $st->execute([$email]);
+    $s = $st->fetch() ?: throw new RuntimeException("Inscrit introuvable : $email");
+    $st->closeCursor();
+    $total = (int) $pdo->query('SELECT COUNT(*) FROM signups')->fetchColumn();
+    $when = (new \DateTimeImmutable($s['created_at']))->setTimezone(new \DateTimeZone('Europe/Paris'))->format('d/m/Y à H:i');
+
+    $mail = make_mailer(config()['mail'], false, 10);
+    $mail->clearReplyTos();
+    $mail->addReplyTo($s['email'], $s['name']);
+    foreach ($to as $address) {
+        $mail->addAddress($address);
+    }
+    $mail->addCustomHeader('Auto-Submitted', 'auto-generated'); // pas de réponse automatique (absence, etc.)
+    $mail->isHTML(false);
+    $mail->Subject = "Nouvelle inscription : {$s['name']} ({$s['email']})";
+    $mail->Body = implode("\n", [
+        'Nouvelle inscription aux nouvelles de Gamebox Hero.',
+        '',
+        "Nom     : {$s['name']}",
+        "E-mail  : {$s['email']}",
+        "Source  : {$s['source']}",
+        "Date    : $when (heure de Paris)",
+        '',
+        "Mail de confirmation : $confirmation",
+        "Inscrits en tout : $total",
+        '',
+        'Répondre à ce message écrit directement à la personne inscrite.',
+        "Pour la retirer de la liste : php bin/signups.php supprimer {$s['email']}",
+    ]);
+    $mail->send();
 }

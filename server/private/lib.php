@@ -250,16 +250,37 @@ function save(PDO $pdo, array $data, string $now): bool
 function confirmation_template(array $config): ?string
 {
     $template = $config['confirmation'] ?? __DIR__ . '/templates/confirmation.html';
-    if (!is_string($template) || !is_file($template)) {
-        return null;
-    }
-    $mc = $config['mail'] ?? [];
-    $smtp = ($mc['transport'] ?? 'smtp') === 'smtp';
-    if (empty($mc['from_email']) || ($smtp && (empty($mc['host']) || $mc['host'] === 'smtp.exemple.fr'))) {
+    if (!is_string($template) || !is_file($template) || !mail_configured($config)) {
         return null;
     }
     if (($config['unsubscribe_secret'] ?? '') === '' || $config['unsubscribe_secret'] === 'A-REMPLACER' || empty($config['site_url'])) {
         return null;
     }
     return $template;
+}
+
+/** Le bloc « mail » de config.php est-il rempli : adresse d'expéditeur, et serveur SMTP autre que celui de l'exemple ? */
+function mail_configured(array $config): bool
+{
+    $mc = $config['mail'] ?? null;
+    if (!is_array($mc) || empty($mc['from_email'])) {
+        return false;
+    }
+    return ($mc['transport'] ?? 'smtp') !== 'smtp' || (!empty($mc['host']) && $mc['host'] !== 'smtp.exemple.fr');
+}
+
+/**
+ * Les adresses prévenues de chaque nouvelle inscription (réglage « notify » de config.php : une adresse ou une
+ * liste). Vide si le réglage est absent ou vide, ou si le bloc « mail » n'est pas rempli.
+ * @return string[]
+ */
+function notify_recipients(array $config): array
+{
+    $list = $config['notify'] ?? [];
+    $list = is_string($list) ? [$list] : (is_array($list) ? $list : []);
+    $valid = array_values(array_filter(
+        array_map(fn ($address) => trim((string) $address), $list),
+        fn ($address) => filter_var($address, FILTER_VALIDATE_EMAIL) !== false
+    ));
+    return $valid && mail_configured($config) ? $valid : [];
 }

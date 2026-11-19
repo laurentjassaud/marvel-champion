@@ -12,7 +12,7 @@
  */
 declare(strict_types=1);
 
-use function GameboxHero\Signup\{check_rate, config, confirmation_template, db, ip_hash, save, send_confirmation, validate};
+use function GameboxHero\Signup\{check_rate, config, confirmation_template, db, ip_hash, notify_recipients, save, send_confirmation, send_notification, validate};
 use const GameboxHero\Signup\BODY_MAX;
 
 // Dossier privé (lib.php, config.php, base) : à côté de la racine web sur le VPS. Réglable par
@@ -119,16 +119,36 @@ try {
     // Mail de confirmation, avec le lien de désinscription : seulement pour une nouvelle adresse (une adresse
     // réinscrite n'en reçoit pas d'autre, le formulaire ne peut pas servir à inonder une boîte), et après la
     // réponse. Un échec est noté (bin/signups.php echecs confirmation-inscription) sans toucher à l'inscription.
+    // Ensuite, avis de nouvelle inscription aux adresses du réglage « notify » (le propriétaire du site), avec
+    // le sort du mail de confirmation.
     $template = $isNew ? confirmation_template($config) : null;
-    if ($template === null) {
+    $notify = $isNew ? notify_recipients($config) : [];
+    if ($template === null && !$notify) {
         respond(200, ['ok' => true]);
     }
     respond_and_continue(200, ['ok' => true]);
     try {
         require_once $privateDir . '/mail.php';
-        send_confirmation($pdo, $data['email'], $template);
     } catch (Throwable $e) {
         error_log('[gamebox-signup] ' . $e->getMessage());
+        exit;
+    }
+    $confirmation = 'pas envoyé (désactivé, ou réglages incomplets dans config.php)';
+    if ($template !== null) {
+        try {
+            send_confirmation($pdo, $data['email'], $template);
+            $confirmation = 'envoyé';
+        } catch (Throwable $e) {
+            error_log('[gamebox-signup] ' . $e->getMessage());
+            $confirmation = 'ÉCHEC, ' . $e->getMessage();
+        }
+    }
+    if ($notify) {
+        try {
+            send_notification($pdo, $data['email'], $notify, $confirmation);
+        } catch (Throwable $e) {
+            error_log("[gamebox-signup] avis d'inscription non envoyé : " . $e->getMessage());
+        }
     }
     exit;
 } catch (Throwable $e) {

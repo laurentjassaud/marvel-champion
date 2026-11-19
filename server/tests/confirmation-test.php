@@ -283,5 +283,70 @@ $toMiles = array_filter(inbox(), fn ($m) => header_of($m, 'x-sink-rcpt') === 'mi
 check('6 envois simultanés : un seul mail de confirmation', count($toMiles) === 1, (string) count($toMiles));
 check('6 envois simultanés : une seule inscription', substr_count(admin('liste'), 'miles@example.com') === 1, admin('liste'));
 
+// ── Avis de nouvelle inscription (réglage « notify ») ───────────────────────
+
+echo "Avis au propriétaire du site\n";
+
+/** Les messages arrivés pour ce destinataire. */
+function mails_to(string $rcpt): array
+{
+    return array_values(array_filter(inbox(), fn ($m) => header_of($m, 'x-sink-rcpt') === $rcpt));
+}
+
+write_config(['notify' => 'contact@gameboxheroes.fr']);
+$before = count(inbox());
+[$status] = signup('natasha@example.com', 'Natasha Romanoff');
+wait_inbox($before + 2);
+$notices = mails_to('contact@gameboxheroes.fr');
+check('nouvelle inscription : confirmation à l\'inscrite et avis au propriétaire', $status === 200 && count(mails_to('natasha@example.com')) === 1 && count($notices) === 1, count(inbox()) - $before . ' mail(s)');
+$n = $notices[0] ?? ['headers' => [], 'body' => ''];
+$nText = part_of($n, 'text/plain');
+check('avis : sujet avec le nom et l\'adresse', mb_decode_mimeheader(header_of($n, 'subject')) === 'Nouvelle inscription : Natasha Romanoff (natasha@example.com)', mb_decode_mimeheader(header_of($n, 'subject')));
+check('avis : « Répondre » écrit à l\'inscrite', str_contains(header_of($n, 'reply-to'), 'natasha@example.com'), header_of($n, 'reply-to'));
+check('avis : pas de réponse automatique', header_of($n, 'auto-submitted') === 'auto-generated');
+check('avis : nom, adresse, source, heure de Paris', str_contains($nText, 'Natasha Romanoff') && str_contains($nText, 'E-mail  : natasha@example.com')
+    && str_contains($nText, 'Source  : marvel-champions') && str_contains($nText, '(heure de Paris)'), $nText);
+check('avis : confirmation envoyée', str_contains($nText, 'Mail de confirmation : envoyé'), $nText);
+check('avis : nombre d\'inscrits', (bool) preg_match('/Inscrits en tout : \d+/', $nText), $nText);
+check('avis : pas de lien de désinscription (il n\'est pas pour un inscrit)', header_of($n, 'list-unsubscribe') === '' && !str_contains($nText, 'unsubscribe.php'));
+
+$before = count(inbox());
+signup('natasha@example.com', 'Natasha A. Romanoff');
+usleep(800_000);
+check('réinscription : ni confirmation ni avis', count(inbox()) === $before, (string) (count(inbox()) - $before));
+
+write_config(['notify' => 'contact@gameboxheroes.fr', 'confirmation' => false]);
+$before = count(inbox());
+signup('bruce@example.com', 'Bruce Banner');
+wait_inbox($before + 1);
+usleep(500_000);
+$bruce = array_values(array_filter(mails_to('contact@gameboxheroes.fr'), fn ($m) => str_contains(part_of($m, 'text/plain'), 'bruce@example.com')));
+check('confirmation désactivée : avis quand même, qui le dit', count(inbox()) === $before + 1 && count($bruce) === 1
+    && str_contains(part_of($bruce[0], 'text/plain'), 'Mail de confirmation : pas envoyé'), (string) (count(inbox()) - $before));
+
+write_config(['notify' => 'contact@gameboxheroes.fr']);
+$before = count(inbox());
+signup('refuse-thor@example.com', 'Thor Odinson');
+wait_inbox($before + 1);
+usleep(500_000);
+$thor = array_values(array_filter(mails_to('contact@gameboxheroes.fr'), fn ($m) => str_contains(part_of($m, 'text/plain'), 'refuse-thor@example.com')));
+check('confirmation refusée : l\'avis signale l\'échec', count($thor) === 1 && str_contains(part_of($thor[0], 'text/plain'), 'Mail de confirmation : ÉCHEC'), $thor ? part_of($thor[0], 'text/plain') : 'aucun avis');
+
+write_config(['notify' => ['contact@gameboxheroes.fr', 'pas-une-adresse', 'laurent@gameboxheroes.fr']]);
+$before = count(inbox());
+signup('wade@example.com', 'Wade Wilson');
+wait_inbox($before + 2);
+usleep(500_000);
+$wade = array_values(array_filter(inbox(), fn ($m) => str_contains(mb_decode_mimeheader(header_of($m, 'subject')), 'wade@example.com')));
+check('liste d\'adresses : un avis à chacune, adresse invalide ignorée', count($wade) === 1
+    && header_of($wade[0], 'x-sink-rcpt') === 'contact@gameboxheroes.fr,laurent@gameboxheroes.fr', $wade ? header_of($wade[0], 'x-sink-rcpt') : 'aucun avis');
+
+write_config(['notify' => '']);
+$before = count(inbox());
+signup('logan@example.com', 'Logan Howlett');
+wait_inbox($before + 1);
+usleep(500_000);
+check("'notify' => '' : confirmation seule", count(inbox()) === $before + 1 && count(mails_to('logan@example.com')) === 1, (string) (count(inbox()) - $before));
+
 echo PHP_EOL . "$passed réussi(s), $failed échec(s)" . PHP_EOL;
 exit($failed ? 1 : 0);

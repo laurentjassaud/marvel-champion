@@ -49,6 +49,11 @@ return [
     // (et unsubscribe_secret). Suivi : php bin/signups.php echecs confirmation-inscription
     'confirmation' => __DIR__ . '/templates/confirmation.html',
 
+    // Avis de nouvelle inscription : à chaque nouvelle adresse, un court mail (nom, adresse, source, heure, sort
+    // du mail de confirmation) part à cette adresse, ou à chacune d'une liste : ['a@…', 'b@…']. '' : aucun avis.
+    // « Répondre » à cet avis écrit directement à la personne inscrite. Demande aussi le bloc « mail » rempli.
+    'notify' => 'contact@gameboxheroes.fr',
+
     'mail' => [
         // 'smtp' : passe par un serveur SMTP authentifié (hébergeur, Brevo, Mailjet, Google Workspace…).
         //          C'est le choix conseillé pour la délivrabilité.

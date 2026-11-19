@@ -4,6 +4,8 @@ Rubrique « Restez informé » pour l'appli Marvel Champions de Gamebox Hero.
 Le visiteur laisse son nom et son e-mail, un script PHP les enregistre dans une base SQLite sur le VPS.
 Un second script envoie ensuite la mailing list à partir d'un template HTML (voir la partie 4).
 
+Version courte, pour l'usage courant (réglages, newsletter, commandes, dépannage) : [MEMO.md](MEMO.md).
+
 ```
 server/
   public/api/
@@ -22,7 +24,7 @@ server/
   tests/
     api-test.php             test de l'inscription (39 vérifications)
     mailing-test.php         test de la mailing list (77 vérifications)
-    confirmation-test.php    test du mail de confirmation (29 vérifications)
+    confirmation-test.php    test du mail de confirmation et de l’avis (42 vérifications)
     smtp-sink.php            faux serveur SMTP utilisé par le test
 ```
 
@@ -38,22 +40,22 @@ Prérequis : PHP 8.1 ou plus, avec `pdo_sqlite` et `mbstring`. L'extension `intl
 sudo apt install php-sqlite3 php-mbstring        # si besoin, puis redémarrer Apache ou PHP-FPM
 
 # Dossier privé, hors de la racine web
-sudo cp -r server/private /var/www/gamebox-private
-cd /var/www/gamebox-private
+sudo cp -r server/private /home/prod/gamebox-private
+cd /home/prod/gamebox-private
 sudo cp config.sample.php config.php
 php -r "echo bin2hex(random_bytes(32)), PHP_EOL;"   # à lancer deux fois : ip_salt et unsubscribe_secret
 sudo nano config.php                                # ip_salt, allowed_origins, puis le bloc mailing (partie 4)
-sudo chown root:www-data config.php && sudo chmod 640 config.php   # il contiendra le mot de passe SMTP
+sudo chown prod:www-data config.php && sudo chmod 640 config.php   # il contiendra le mot de passe SMTP
 
 # Dossier de la base : Apache doit pouvoir y écrire
 sudo mkdir data && sudo chown www-data:www-data data && sudo chmod 770 data
 
 # Points d'entrée publics
-sudo mkdir -p /var/www/gameboxheroes.fr/api
-sudo cp server/public/api/signup.php server/public/api/unsubscribe.php /var/www/gameboxheroes.fr/api/
+sudo mkdir -p /home/prod/WWW/base/api
+sudo cp server/public/api/signup.php server/public/api/unsubscribe.php /home/prod/WWW/base/api/
 ```
 
-Adapte `/var/www/gameboxheroes.fr` à ton DocumentRoot. Si le dossier privé n'est pas `/var/www/gamebox-private`, indique-le dans le vhost :
+Adapte `/home/prod/WWW/base` à ton DocumentRoot. Si le dossier privé n'est pas `/home/prod/gamebox-private`, indique-le dans le vhost :
 
 ```apache
 SetEnv GAMEBOX_PRIVATE_DIR /chemin/vers/gamebox-private
@@ -116,7 +118,7 @@ Si l'API est ailleurs que `/api/signup.php` à la racine du site, règle `VITE_S
 
 ## 3. Consulter et gérer les inscriptions
 
-En SSH, depuis `/var/www/gamebox-private` :
+En SSH, depuis `/home/prod/gamebox-private` :
 
 ```bash
 sudo -u www-data php bin/signups.php liste                       # les plus récentes d'abord
@@ -159,7 +161,7 @@ Pour un e-mail, garde une mise en page en tableaux, des styles en ligne et 600 p
 ### Envoyer
 
 ```bash
-cd /var/www/gamebox-private
+cd /home/prod/gamebox-private
 
 # 1. Simulation : vérifie le SMTP, compte les destinataires, écrit un aperçu à côté du template
 sudo -u www-data php bin/mailing.php templates/ma-campagne.html --simulation
@@ -176,8 +178,9 @@ Options utiles : `--source=marvel-champions` (seulement les inscrits de l'appli 
 Pour une longue liste, lance l'envoi détaché de la session SSH :
 
 ```bash
+sudo -v                                   # le mot de passe d'abord : une commande en arrière-plan ne peut pas le demander
 sudo -u www-data nohup php bin/mailing.php templates/ma-campagne.html --oui > envoi.log 2>&1 &
-tail -f envoi.log
+tail -f envoi.log                         # Ctrl+C arrête l'affichage, pas l'envoi
 ```
 
 **Reprise** : chaque envoi est enregistré dès qu'il part. Si l'envoi est coupé (Ctrl+C, SSH perdu, quota atteint), relance la même commande : le script saute les destinataires déjà servis et retente les échecs. La campagne est identifiée par le nom du fichier template. Pour renvoyer le même template à tout le monde, donne-lui un autre nom avec `--campagne=autre-nom`.
@@ -212,6 +215,12 @@ sudo -u www-data php bin/signups.php echecs confirmation-inscription   # adresse
 
   Les autres erreurs (template illisible, PHPMailer absent) vont dans le journal d'erreurs du site (`/var/log/apache2/base-error.log`), préfixées `[gamebox-signup]`.
 
+### Avis de nouvelle inscription
+
+À chaque **nouvelle** inscription, un court mail part aussi vers l'adresse du réglage `notify` de `config.php` (par exemple `'notify' => 'contact@gameboxheroes.fr'`, ou une liste `['a@…', 'b@…']`, ou `''` pour ne rien recevoir). Il contient le nom, l'adresse, la source, l'heure (heure de Paris), le sort du mail de confirmation (envoyé, pas envoyé, ou échec avec la raison) et le nombre d'inscrits. « Répondre » écrit directement à la personne inscrite.
+
+Comme la confirmation : rien pour une réinscription, envoi après la réponse au visiteur, et un échec ne touche pas à l'inscription (il est noté dans le journal d'erreurs, préfixé `[gamebox-signup]`). Chaque nouvelle inscription compte alors pour deux mails dans le quota horaire du fournisseur SMTP.
+
 ## Ce que fait le script d'inscription
 
 - **Validation** : nom de 1 à 80 caractères, sans lien ni balise ; e-mail valide, mis en minuscules ; domaine qui reçoit du courrier (`check_mx`) ; case de consentement cochée.
@@ -236,7 +245,7 @@ Si le site passe derrière Cloudflare ou un reverse proxy, active `mod_remoteip`
 ```bash
 php server/tests/api-test.php            # inscription
 php server/tests/mailing-test.php        # mailing list et désinscription
-php server/tests/confirmation-test.php   # mail de confirmation
+php server/tests/confirmation-test.php   # mail de confirmation et avis de nouvelle inscription
 ```
 
 Sans PHP sur le poste : `docker run --rm -v "$PWD/server:/srv:ro" -w /srv php:8.3-cli php tests/confirmation-test.php` (idem pour les deux autres).
