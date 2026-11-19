@@ -1,10 +1,9 @@
 <script setup>
 // La barre du haut (maquette) : le titre dans son bandeau rouge, l'affiche de la partie (le héros sur un
 // bandeau rouge, le logo VS, le méchant en cours sur un bandeau bleu acier, le badge Expert), puis les
-// onglets en biais : poser un pion, taille des cartes, recommencer, nouvelle partie, puis plein écran et aide.
-// Le titre ramène à l'accueil. Sur l'accueil (intro), la barre n'a que ses liens : signaler un bug, plein
-// écran, aide, à propos.
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+// onglets en biais : poser un pion, recommencer, nouvelle partie, puis signaler un bug, plein écran et aide
+// (la taille des cartes se règle à la tirette du bas de l'écran, CardSizeSlider). Le titre ramène à
+// l'accueil. Sur l'accueil (intro), la barre n'a que ses liens : rester informé, buy me a coffee, à propos.
 import SoonHint from './SoonHint.vue'
 import FullscreenButton from './FullscreenButton.vue'
 import brandShapeUrl from '../assets/table/brand-shape.svg'
@@ -22,30 +21,8 @@ defineProps({
 })
 const gameStore = useGameStore()
 const ui = useUiStore()
-
-/** Le petit panneau « Taille des cartes » est ouvert, sous son onglet. */
-const isSizePanelOpen = ref(false)
-/** L'onglet « Taille » et son panneau : un appui ailleurs le ferme. */
-const sizeElement = ref(null)
-const sizeTabElement = ref(null)
-
-function closeSizePanelFromOutside(event) {
-  if (isSizePanelOpen.value && !sizeElement.value?.contains(event.target)) isSizePanelOpen.value = false
-}
-// Échap ferme le panneau et rend le focus à son onglet (useKeyboard ferme, lui, les menus et les fenêtres)
-function closeSizePanelOnEscape(event) {
-  if (event.key !== 'Escape' || !isSizePanelOpen.value) return
-  isSizePanelOpen.value = false
-  sizeTabElement.value?.focus()
-}
-onMounted(() => {
-  document.addEventListener('pointerdown', closeSizePanelFromOutside, true)
-  document.addEventListener('keydown', closeSizePanelOnEscape)
-})
-onBeforeUnmount(() => {
-  document.removeEventListener('pointerdown', closeSizePanelFromOutside, true)
-  document.removeEventListener('keydown', closeSizePanelOnEscape)
-})
+/** L'inscription aux nouvelles demande le script serveur du site : absente de la version artefact. */
+const canSignUp = import.meta.env.MODE !== 'artifact'
 </script>
 
 <template>
@@ -75,40 +52,35 @@ onBeforeUnmount(() => {
         </span>
       </p>
       <div class="sp" />
-      <!-- l'accueil : les liens de la maquette ; seule l'aide est déjà prête -->
+      <!-- l'accueil : rester informé (l'inscription aux nouvelles ; pas dans la version artefact, d'où le script
+           serveur n'est pas joignable), buy me a coffee et à propos (pas encore prêts) ; signaler un bug, plein
+           écran et aide sont dans la barre de la partie -->
       <nav v-if="intro" class="tabs" aria-label="Liens">
-        <SoonHint v-slot="{ attrs }" placement="below">
-          <button type="button" class="slant tab wide" v-bind="attrs">Signaler un bug</button>
+        <button v-if="canSignUp" type="button" class="slant tab wide" @click="ui.openModal('signup')">Rester informé</button>
+        <SoonHint v-else v-slot="{ attrs }" placement="below">
+          <button type="button" class="slant tab wide" v-bind="attrs">Rester informé</button>
         </SoonHint>
-        <FullscreenButton class="slant tab" />
-        <button type="button" class="slant tab" title="Aide de la table (?)" aria-label="Aide de la table" @click="ui.openModal('help')">?</button>
+        <SoonHint v-slot="{ attrs }" placement="below">
+          <button type="button" class="slant tab wide" v-bind="attrs">Buy me a coffee</button>
+        </SoonHint>
         <SoonHint v-slot="{ attrs }" placement="below">
           <button type="button" class="slant tab red wide" v-bind="attrs">À propos</button>
         </SoonHint>
       </nav>
       <nav v-else class="tabs" aria-label="Partie">
         <button type="button" class="slant tab" title="Poser un pion sur la table" @click="gameStore.addPawn()">Pions</button>
-        <div ref="sizeElement" class="size">
-          <button
-            ref="sizeTabElement"
-            type="button"
-            class="slant tab"
-            :class="{ on: isSizePanelOpen }"
-            :aria-expanded="isSizePanelOpen"
-            aria-controls="size-panel"
-            title="Taille des cartes sur la table"
-            @click="isSizePanelOpen = !isSizePanelOpen"
-          >
-            Taille
-          </button>
-          <div v-if="isSizePanelOpen" id="size-panel" class="size-panel">
-            <label for="card-size">Taille des cartes</label>
-            <input id="card-size" v-model.number="ui.cardWidth" type="range" min="56" max="130">
-          </div>
-        </div>
         <button type="button" class="slant tab" :disabled="!gameStore.isReady" title="Même héros, même deck, même scénario, depuis le début" @click="ui.openModal('restart')">Recommencer</button>
         <button type="button" class="slant tab red" @click="ui.openModal('setup')">Nouvelle partie</button>
-        <!-- plein écran et aide, au bout de la barre -->
+        <!-- au bout de la barre : signaler un bug (pas encore prêt), plein écran et aide -->
+        <SoonHint v-slot="{ attrs }" placement="below">
+          <button type="button" class="slant tab bug" aria-label="Signaler un bug" v-bind="attrs">
+            <!-- un insecte, au trait du bouton plein écran : la barre étroite n'a pas la place du mot -->
+            <svg class="bug-icon" viewBox="0 0 24 24" width="25" height="25" aria-hidden="true">
+              <path d="M8 10h8v5a4 4 0 0 1-8 0zM10 10V8a2 2 0 0 1 4 0v2M3.5 12.5H8M16 12.5h4.5M4.5 19l3.5-2.5M19.5 19 16 16.5" />
+            </svg>
+            <span class="bug-label" aria-hidden="true">Signaler un bug</span>
+          </button>
+        </SoonHint>
         <FullscreenButton class="slant tab" />
         <button type="button" class="slant tab" title="Raccourcis clavier (?)" aria-label="Raccourcis clavier" @click="ui.openModal('help')">?</button>
       </nav>
@@ -170,33 +142,32 @@ button.brand:active { transform: translateY(2px); }
 .tabs { display: flex; flex: none; margin-right: 20px; }
 .tab { --h: 55px; --lip-h: 7px; --cut: 24.25px; padding-inline: 37px; font-size: 24px; }
 .tabs > * + * { margin-left: -23px; }
-.tab.on { --fill: #6a82ad; }
-/* les deux longs onglets de l'accueil font 194 px, comme sur la maquette */
-.tab.wide { width: 194px; padding-inline: 0; }
-.size { position: relative; display: flex; }
-/* le réglage de la taille, sous son onglet ; il s'ouvre depuis lui */
-.size-panel {
-  position: absolute; top: 62px; right: 18px; z-index: 10; width: 250px; display: grid; gap: 8px; padding: 12px 14px;
-  background: var(--panel); border: 1px solid var(--line); border-radius: 4px; box-shadow: 0 18px 40px -8px rgb(6 7 20 / .7);
-  transform-origin: top right; transition: opacity 150ms var(--ease-out), transform 150ms var(--ease-out);
-}
-@starting-style {
-  .size-panel { opacity: 0; transform: translateY(-4px) scale(.97); }
-}
-.size-panel label { color: var(--muted); }
-.size-panel input { width: 100%; accent-color: var(--yellow); }
-/* écran moins large : le badge Expert s'efface, puis l'affiche, puis le titre et les onglets se resserrent */
-@media (max-width: 1580px) {
+/* les longs onglets (« À propos », « Signaler un bug ») font 194 px, comme sur la maquette */
+.tab.wide, .tab.bug { width: 194px; padding-inline: 0; }
+/* « Signaler un bug » : son mot quand la barre a la place, sinon une icône (barre plus étroite, plus bas) */
+.bug-icon { display: none; flex: none; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: square; transform: skewX(-10deg); }
+/* écran moins large : « Signaler un bug » passe en icône, le badge Expert s'efface, les onglets se resserrent,
+   puis l'affiche s'efface, puis le titre et les onglets rapetissent */
+@media (max-width: 1579px) {
   .expert { display: none; }
+}
+@media (max-width: 1539px) {
+  .tab, .tab.bug { padding-inline: 28px; }
+  .tab.bug { width: auto; }
+  .bug-icon { display: block; }
+  .bug-label { display: none; }
 }
 @media (max-width: 1420px) {
   .matchup { display: none; }
+}
+@media (max-width: 1100px) {
+  .tab, .tab.bug { padding-inline: 22px; }
 }
 @media (max-width: 900px) {
   .brand { --brand-w: 238px; }
   .brand-shape { transform: scale(.79); transform-origin: 0 0; }
   .brand-title { width: 215px; height: 54px; font-size: 28px; }
-  .tab { --h: 50px; --lip-h: 6px; --cut: 22px; padding-inline: 30px; font-size: 20px; }
+  .tab, .tab.bug { --h: 50px; --lip-h: 6px; --cut: 22px; padding-inline: 18px; font-size: 20px; }
   .tabs { margin-right: 8px; }
   .tabs > * + * { margin-left: -21px; }
 }
@@ -219,8 +190,5 @@ button.brand:active { transform: translateY(2px); }
   .tab { --h: 44px; --lip-h: 5px; --cut: 19px; padding-inline: 26px; font-size: 20px; }
   .tab.wide { width: auto; padding-inline: 26px; }
   .tabs > * + * { margin-left: -17px; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .size-panel { transition: opacity 150ms ease; }
 }
 </style>

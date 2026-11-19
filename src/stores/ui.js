@@ -21,7 +21,7 @@ const writeSetting = (key, value) => {
 
 /** Échelle de la maquette (1920 × 1080 px) à l'écran : la même que --u dans main.css. */
 const screenScale = () => Math.min((globalThis.innerWidth ?? 1920) / 1920, (globalThis.innerHeight ?? 1080) / 1080)
-/** Largeur des cartes de la table à la première visite : 110 px sur la maquette, entre les bornes du réglage « Taille » (56 à 130 px). */
+/** Largeur des cartes de la table à la première visite : 110 px sur la maquette, entre les bornes de la tirette « Taille » (56 à 130 px). */
 const defaultCardWidth = () => Math.round(Math.min(130, Math.max(56, 110 * screenScale())))
 /**
  * Largeur occupée en haut de la table par l'illustration du méchant de ce scénario (VillainBackdrop :
@@ -34,7 +34,7 @@ function villainArtInset(scenarioId) {
 }
 
 export const useUiStore = defineStore('ui', () => {
-  /** Largeur d'une carte sur la table, en pixels (curseur « Taille »). */
+  /** Largeur d'une carte sur la table, en pixels (tirette « Taille », en bas à droite). */
   const cardWidth = ref(Number(readSetting(CARD_WIDTH_KEY)) || defaultCardWidth())
   /** Onglet de la colonne de droite : 'card' (la carte agrandie) ou 'log' (le journal). */
   const sideTab = ref(readSetting(SIDE_TAB_KEY) === 'log' ? 'log' : 'card')
@@ -98,6 +98,8 @@ export const useUiStore = defineStore('ui', () => {
       villainHud: heroInset.value && villainHudTop.value != null ? { right: heroInset.value, top: villainHudTop.value } : null
     }
   }
+  /** La tirette « Taille » revient à la largeur de la première visite (double-clic sur son libellé). */
+  const resetCardWidth = () => { cardWidth.value = defaultCardWidth() }
   const setTableSize = (width, height) => { tableWidth.value = width; tableHeight.value = height }
   /** Place prise sur la table par les PV du méchant affichés en grand (mesurée par VillainHud) : son bord droit et son bord haut (null : pas sur la table). */
   const setHeroInset = (width, top = null) => {
@@ -117,7 +119,7 @@ export const useUiStore = defineStore('ui', () => {
   const closeIntro = () => { introOpen.value = false }
 
   return {
-    cardWidth, sideTab, sideColumnWidth, tableWidth, tableHeight, heroInset, selectedCardId, randomlyPickedCardId, hoveredCardId,
+    cardWidth, resetCardWidth, sideTab, sideColumnWidth, tableWidth, tableHeight, heroInset, selectedCardId, randomlyPickedCardId, hoveredCardId,
     preview, contextMenu, modal, introOpen, setupCount, isDealing, layout, setTableSize, setHeroInset, selectCard, showPreview, openContextMenu, closeContextMenu,
     openModal, closeModal, openIntro, closeIntro
   }

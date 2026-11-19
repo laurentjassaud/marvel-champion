@@ -1,9 +1,11 @@
 <script setup>
 // Le bandeau du joueur, en bas de l'écran (maquette) : à gauche ses piles ; au milieu sa main en éventail ;
 // à droite le tour, les deux phases et ses PV en grand, et dessous ce qu'on fait de sa main (carte au hasard,
-// mulligan, piocher) en onglets posés sur la bande rouge du bas de l'écran.
+// mulligan, piocher) en onglets posés sur la bande rouge du bas de l'écran. Tout au bout, en bas à droite de
+// l'écran, la tirette « Taille » des cartes de la table.
 import { computed, nextTick } from 'vue'
 import CardPile from './CardPile.vue'
+import CardSizeSlider from './CardSizeSlider.vue'
 import HandStrip from './HandStrip.vue'
 import HudCounter from './HudCounter.vue'
 import { useGameStore } from '../stores/game.js'
@@ -72,6 +74,8 @@ async function pickRandomCard() {
         <button type="button" class="slant foot draw" @click="gameStore.drawCard()">Piocher<kbd>D</kbd></button>
       </div>
     </div>
+
+    <CardSizeSlider class="card-size" />
   </footer>
 </template>
 
@@ -229,6 +233,30 @@ async function pickRandomCard() {
 @media (max-width: 1100px) {
   .dock {
     column-gap: 14px;
+  }
+}
+
+/* la tirette « Taille » : en bas à droite de l'écran, au-dessus de la bande rouge, alignée sur le bord droit
+   de la colonne de droite. Sous 1340 px, les onglets de la main iraient dessous : elle monte juste au-dessus
+   du bandeau, au pied de la colonne de droite (qui lui garde la place, main.css). Sur téléphone, elle se
+   range, centrée, sous la main */
+.card-size {
+  position: absolute;
+  right: max(12px, calc(20 * var(--u)));
+  bottom: calc(9px + max(8px, calc(14 * var(--u))));
+}
+
+@media (min-width: 701px) and (max-width: 1339px) {
+  .card-size {
+    bottom: calc(100% + 12px);
+  }
+}
+
+@media (max-width: 700px) {
+  .card-size {
+    position: static;
+    order: -1;
+    justify-self: center;
   }
 }
 

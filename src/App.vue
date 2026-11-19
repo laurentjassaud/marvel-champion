@@ -19,6 +19,7 @@ import SetupModal from './components/modals/SetupModal.vue'
 import PileModal from './components/modals/PileModal.vue'
 import MulliganModal from './components/modals/MulliganModal.vue'
 import HelpModal from './components/modals/HelpModal.vue'
+import SignupModal from './components/modals/SignupModal.vue'
 import RestartModal from './components/modals/RestartModal.vue'
 import VillainModal from './components/modals/VillainModal.vue'
 import SchemeModal from './components/modals/SchemeModal.vue'
@@ -82,6 +83,7 @@ onMounted(() => { if (!gameStore.isReady) gameStore.startExampleGame() })
     <PileModal v-else-if="ui.modal?.type === 'pile'" :key="ui.modal.zone" :zone="ui.modal.zone" />
     <MulliganModal v-else-if="ui.modal?.type === 'mulligan' && gameStore.isReady" />
     <HelpModal v-else-if="ui.modal?.type === 'help'" />
+    <SignupModal v-else-if="ui.modal?.type === 'signup'" />
     <RestartModal v-else-if="ui.modal?.type === 'restart' && gameStore.isReady" />
     <!-- une clé par changement présenté (la fenêtre repart de zéro pour le suivant), préfixée : deux branches
          d'un même v-if ne peuvent pas avoir la même clé -->

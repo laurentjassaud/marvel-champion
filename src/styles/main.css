@@ -113,6 +113,11 @@ input, textarea { -webkit-user-select: text; user-select: text; } /* sinon iOS n
   display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 12px;
   padding: max(14px, calc(40 * var(--u))) 0 12px;
 }
+/* écran moyen : la tirette « Taille » se pose au pied de la colonne, juste au-dessus du bandeau du joueur
+   (PlayerDock) ; la colonne lui garde sa place */
+@media (min-width: 701px) and (max-width: 1339px) {
+  .side { padding-bottom: 52px; }
+}
 .encrow { display: grid; grid-template-columns: repeat(3, minmax(0, 100px)); gap: 8px; 
     justify-items: stretch;
     justify-content: center;

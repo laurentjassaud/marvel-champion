@@ -15,7 +15,7 @@ const SHORTCUT_GROUPS = [
 <template>
   <BaseModal title="Raccourcis clavier">
     <!--
-    <p>À la souris : survolez une carte pour l'agrandir, glissez-la pour la déplacer, double-clic pour l'épuiser ou la jouer depuis la main, clic droit pour toutes ses options. <br> L'onglet « Taille » de la barre du haut règle la taille des cartes de la table ; son titre « Marvel Champions » ramène à la page d'accueil.</p>
+    <p>À la souris : survolez une carte pour l'agrandir, glissez-la pour la déplacer, double-clic pour l'épuiser ou la jouer depuis la main, clic droit pour toutes ses options. <br> La tirette « Taille », en bas à droite, règle la taille des cartes de la table ; le titre « Marvel Champions » ramène à la page d'accueil.</p>
     <p>Sur tablette : touchez une carte pour l'agrandir, glissez-la pour la déplacer, double tap pour l'épuiser ou la jouer depuis la main, appui long pour toutes ses options. Clic droit ou appui long sur un paquet ou une défausse : chercher dedans, piocher, mélanger, reprendre la carte du dessus, remélanger la défausse dans son paquet (un paquet vide ne se reconstitue pas tout seul : piocher dedans propose de le faire). Dans un paquet ou une défausse ouverts, touchez une carte pour l'agrandir, appui long pour ses options.</p>
     <p>Les raccourcis de carte visent la carte sous la souris, sinon la carte sélectionnée.</p>
     <p>Colonne de droite : onglets Carte (la carte agrandie, qui reste visible par-dessus les fenêtres) et Journal, qui compte les entrées arrivées pendant que vous regardiez la carte. Faites glisser le bord gauche de la colonne pour l'élargir, et la carte avec ; double-clic sur ce bord : largeur d'origine.</p>

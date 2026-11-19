@@ -1,11 +1,13 @@
 // Préchargement des images : celles des cartes de la partie sont chargées en tâche de fond une fois la
-// partie mise en place. Le service worker les garde (caches mc-cards et mc-marvelcdb, vite.config.js) :
-// une carte révélée plus tard s'affiche aussitôt, même hors ligne. Sans lui (serveur de développement,
-// version artefact), elles vont dans le cache HTTP du navigateur.
+// partie mise en place. Les cartes de la boîte de base sont déjà toutes dans le cache du service worker
+// depuis son installation (vite.config.js) : elles reviennent aussitôt. Les autres (decks importés, cartes
+// lues sur MarvelCDB) sont gardées par le service worker à ce moment-là (caches mc-cards et mc-marvelcdb) :
+// une carte révélée plus tard s'affiche aussitôt, même hors ligne. Sans service worker (serveur de
+// développement, version artefact), elles vont dans le cache HTTP du navigateur.
 
 import { watch } from 'vue'
 import { isEncounterCard } from '../game/engine.js'
-import { cardImageUrl } from './useAssets.js'
+import { cardImageUrl, INTRO_SKY_URL } from './useAssets.js'
 import { useGameStore } from '../stores/game.js'
 
 /** Nombre d'images demandées en même temps. */
@@ -78,14 +80,31 @@ export function preloadImages(urls) {
   serviceWorkerReady().then(() => whenIdle(loadNextBatch))
 }
 
+/** Délai avant de télécharger la vidéo de l'accueil : elle ne dispute pas le réseau à l'ouverture de l'appli. */
+const INTRO_VIDEO_DELAY = 20000
+
+/**
+ * La vidéo du ciel de l'accueil, gardée pour les prochaines ouvertures, même hors ligne : la balise <video>
+ * ne la demande que par morceaux, que le service worker ne garde pas ; on la télécharge donc une fois en
+ * entier (11 Mo), en tâche de fond, et le service worker la range dans son cache mc-intro (vite.config.js).
+ * Rien sans service worker (serveur de développement, version artefact) ni si elle y est déjà.
+ */
+async function keepIntroVideo() {
+  if (!navigator.serviceWorker?.controller || typeof caches === 'undefined') return
+  if (await caches.match(INTRO_SKY_URL)) return
+  const response = await fetch(INTRO_SKY_URL, { priority: 'low' })
+  await response.blob()
+}
+
 /**
  * Précharge les images de chaque nouvelle partie (mise en place, « Recommencer ») et de la partie trouvée à
- * l'ouverture de la page. Rien sur une connexion en mode économie de données : les images viennent alors
- * une à une, quand elles s'affichent.
+ * l'ouverture de la page, et, une fois, la vidéo de l'accueil. Rien sur une connexion en mode économie de
+ * données : les images viennent alors une à une, quand elles s'affichent, et l'accueil n'a pas de vidéo.
  */
 export function usePreload() {
   const gameStore = useGameStore()
   if (navigator.connection?.saveData) return
+  serviceWorkerReady().then(() => setTimeout(() => whenIdle(() => keepIntroVideo().catch(() => {})), INTRO_VIDEO_DELAY))
   // une nouvelle partie remplace l'objet d'état ; un déplacement dans la partie ne déclenche rien
   watch(() => gameStore.game, game => { if (game?.cards) preloadImages(imagesOfGame(game)) }, { immediate: true })
 }
