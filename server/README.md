@@ -4,7 +4,7 @@ Rubrique « Restez informé » pour l'appli Marvel Champions de Gamebox Hero.
 Le visiteur laisse son nom et son e-mail, un script PHP les enregistre dans une base SQLite sur le VPS.
 Un second script envoie ensuite la mailing list à partir d'un template HTML (voir la partie 4).
 
-Version courte, pour l'usage courant (réglages, newsletter, commandes, dépannage) : [MEMO.md](MEMO.md).
+Version courte, pour l'usage courant (réglages, newsletter, commandes, dépannage) : [MEMO NEWSLETTER.md](<MEMO NEWSLETTER.md>).
 
 ```
 server/
