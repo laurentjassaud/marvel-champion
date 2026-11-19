@@ -1,0 +1,13 @@
+{
+    "name": "gamebox-hero/signup",
+    "description": "Inscriptions et mailing list Gamebox Hero",
+    "type": "project",
+    "license": "proprietary",
+    "require": {
+        "php": ">=8.1",
+        "phpmailer/phpmailer": "^7.2"
+    },
+    "config": {
+        "optimize-autoloader": true
+    }
+}

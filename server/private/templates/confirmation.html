@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="fr" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="x-apple-disable-message-reformatting">
+<meta name="color-scheme" content="light">
+<!-- Mail de confirmation, envoyé par api/signup.php à chaque nouvelle inscription. Le titre devient le sujet.
+     Variables (entre doubles accolades) : nom, prenom, email, desinscription (le lien personnel). -->
+<title>Votre inscription aux nouvelles de Gamebox Hero</title>
+<style>
+  @media (max-width: 620px) {
+    .container { width: 100% !important; }
+    .px { padding-left: 20px !important; padding-right: 20px !important; }
+  }
+</style>
+</head>
+<body style="margin:0;padding:0;background:#eceef2;">
+  <!-- Texte d'aperçu affiché par la messagerie à côté du sujet -->
+  <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">
+    Votre adresse est bien enregistrée. Un lien de désinscription figure dans chaque message.&#8199;&#65279;&#847;&#8199;&#65279;&#847;
+  </div>
+
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#eceef2;">
+    <tr>
+      <td align="center" style="padding:24px 12px;">
+        <table role="presentation" class="container" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:600px;background:#ffffff;border-radius:8px;overflow:hidden;">
+
+          <!-- En-tête -->
+          <tr>
+            <td class="px" style="padding:24px 40px;background:#14161d;font:800 14px/1 Arial,Helvetica,sans-serif;letter-spacing:3px;text-transform:uppercase;color:#ff6b6b;">
+              Gamebox Hero
+            </td>
+          </tr>
+          <tr>
+            <td style="height:4px;line-height:4px;font-size:0;background:#c8102e;">&nbsp;</td>
+          </tr>
+
+          <!-- Contenu -->
+          <tr>
+            <td class="px" style="padding:36px 40px 8px;font:16px/1.6 Arial,Helvetica,sans-serif;color:#1d2129;">
+              <h1 style="margin:0 0 16px;font:700 26px/1.25 Arial,Helvetica,sans-serif;color:#14161d;">Bienvenue {{prenom}} !</h1>
+              <p style="margin:0 0 16px;">Votre adresse <strong>{{email}}</strong> est bien inscrite aux nouvelles de Gamebox Hero.</p>
+              <p style="margin:0 0 16px;">Nous vous préviendrons des nouveaux héros, scénarios et modules de la table Marvel Champions. Seulement quand il y a du nouveau, et chaque message contiendra un lien pour vous désinscrire.</p>
+              <p style="margin:0 0 28px;">En attendant, votre table vous attend.</p>
+            </td>
+          </tr>
+
+          <!-- Bouton -->
+          <tr>
+            <td class="px" style="padding:0 40px 32px;">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="border-radius:6px;background:#c8102e;">
+                    <a href="https://gameboxheroes.fr/" style="display:inline-block;padding:14px 28px;font:700 16px/1 Arial,Helvetica,sans-serif;color:#ffffff;text-decoration:none;border-radius:6px;">Lancer une partie</a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Ce n'est pas vous ? -->
+          <tr>
+            <td class="px" style="padding:0 40px 32px;font:14px/1.6 Arial,Helvetica,sans-serif;color:#5b6170;">
+              <p style="margin:0;">Ce n’est pas vous qui avez donné cette adresse, ou vous changez d’avis ? <a href="{{desinscription}}" style="color:#c8102e;text-decoration:underline;">Se désinscrire</a> : votre nom et votre adresse seront effacés.</p>
+            </td>
+          </tr>
+
+          <!-- Pied de page -->
+          <tr>
+            <td class="px" style="padding:24px 40px;background:#f5f6f8;border-top:1px solid #e1e4ea;font:13px/1.6 Arial,Helvetica,sans-serif;color:#5b6170;">
+              <p style="margin:0 0 8px;">Vous recevez ce message car votre adresse ({{email}}) a été inscrite sur gameboxheroes.fr.</p>
+              <p style="margin:0;"><a href="{{desinscription}}" style="color:#5b6170;text-decoration:underline;">Se désinscrire</a></p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

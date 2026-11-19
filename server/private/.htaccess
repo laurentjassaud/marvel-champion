@@ -1,0 +1,3 @@
+# Filet de sécurité : ce dossier ne doit jamais être servi par Apache,
+# même s'il se retrouve par erreur sous la racine web.
+Require all denied

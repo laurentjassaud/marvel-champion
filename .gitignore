@@ -3,3 +3,7 @@ dist/
 dist-artifact/
 *.log
 .DS_Store
+# script serveur (server/) : la configuration (secrets), la base et les aperçus de campagne restent sur le VPS
+server/private/config.php
+server/private/data/
+server/private/templates/*.apercu.*
