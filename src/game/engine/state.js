@@ -42,7 +42,8 @@
 //   x, y, zIndex       position sur la table, en pixels, et ordre d'empilement
 //   damage, threat, tokens  dégâts, menace et jetons génériques posés dessus
 //   isIdentity?        la carte d'identité du joueur (héros / alter ego)
-//   isPawn?            un pion libre (bouton « + Pion »), avec sa couleur `color`
+//   isPawn?            un pion libre (bouton « Pions » de la barre) : `pawn`, sa sorte (PAWN_KINDS de data.js) ;
+//                      les pions des anciennes parties n'ont que leur couleur, `color`
 //   stunned?, confused?, tough?  cartes d'état Sonné, Désorienté, Tenace
 //   underSchemeId?     posée face cachée sous cette manigance (allié Captif, allié de Prison d'Hydra)
 //   dealtToPlayer?     carte Rencontre reçue face cachée, posée devant l'identité
@@ -53,7 +54,7 @@
 // {width, height, cardWidth} : taille de la table et largeur d'une carte, en pixels, pour placer les cartes ;
 // et, mesurés à l'écran, la place du décor du méchant : villainInset, heroInset, villainHud (layout.js).
 
-import { DEFINITION_BY_ID, ZONE_LABELS, CHARACTER_TYPES, SCHEME_TYPES } from '../data.js'
+import { DEFINITION_BY_ID, ZONE_LABELS, CHARACTER_TYPES, SCHEME_TYPES, PAWN_KIND_BY_ID } from '../data.js'
 import { scenarioRules, SHADOW_OF_THE_PAST_ID } from '../rules.js'
 
 /* ---------------------------------------------------------------------------------------------------- */
@@ -111,9 +112,9 @@ export const definitionOf = card => DEFINITION_BY_ID[card.definitionId] ?? {}
 /** Carte Rencontre (et non carte du joueur). */
 export const isEncounterCard = card => card.owner === 'encounter'
 
-/** Nom de la face en jeu : face C (deuxième face héros), face B (alter ego, verso), sinon face A ; « Pion » pour un pion. */
+/** Nom de la face en jeu : face C (deuxième face héros), face B (alter ego, verso), sinon face A ; pour un pion, celui de sa sorte. */
 export function cardName(card) {
-  if (card.isPawn) return 'Pion'
+  if (card.isPawn) return PAWN_KIND_BY_ID[card.pawn]?.label ?? 'Pion'
   const definition = definitionOf(card)
   if (card.side === 2 && definition.thirdName) return definition.thirdName
   if (card.side === 1 && definition.backName) return definition.backName

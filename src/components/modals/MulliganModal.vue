@@ -49,8 +49,8 @@ function confirm() {
       <p v-if="!handCards.length">Main vide.</p>
     </div>
     <template #actions>
-      <button type="button" class="slant" @click="ui.closeModal()">Annuler</button>
-      <button type="button" class="slant red" @click="confirm">{{ confirmLabel }}</button>
+      <button type="button" class="modal-btn" @click="ui.closeModal()">Annuler</button>
+      <button type="button" class="modal-btn primary" @click="confirm">{{ confirmLabel }}</button>
     </template>
   </BaseModal>
 </template>

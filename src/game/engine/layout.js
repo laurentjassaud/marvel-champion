@@ -9,17 +9,21 @@
 // Le bord gauche de la table est occupé par le décor du méchant : son illustration en haut
 // (`layout.villainInset`, en pixels depuis le bord gauche) et ses PV en grand en bas (`layout.heroInset` ;
 // `layout.villainHud` : {right, top}, le bloc mesuré, posé par-dessus la table). La rangée du méchant
-// commence après l'illustration ; l'identité est en bas à droite, au-dessus de vos PV, et la rangée du
-// héros va vers la gauche jusqu'aux PV du méchant. Sans ces mesures (tests), au bord de la table.
+// commence après l'illustration ; l'identité est en bas, au milieu de la table, et la rangée du héros va
+// d'abord vers la gauche jusqu'aux PV du méchant, puis à droite de l'identité. Sans ces mesures (tests), au
+// bord de la table.
 
 import { cardsInZone, definitionOf, isEncounterCard, identityCard } from './state.js'
+import { pawnSize } from '../data.js'
 
 /** Hauteur d'une carte debout, en largeurs de carte. */
 const CARD_RATIO = 1.4
 /** Marge à gauche de la table. */
 const LEFT_MARGIN = 16
-/** Marge à droite de la table (l'identité y est posée). */
+/** Marge à droite de la table. */
 const RIGHT_MARGIN = 16
+/** Écart entre l'identité et les cartes du héros posées à côté d'elle. */
+const IDENTITY_GAP = 24
 /** Marge en haut de la table (sous la barre du haut, dont le titre déborde un peu). */
 const TOP_MARGIN = 34
 /** Marge en bas de la table (au-dessus de la main en éventail). */
@@ -48,8 +52,8 @@ export const SPOTS = {
   mainScheme: layout => ({ x: villainRowLeft(layout) + layout.cardWidth + 20, y: TOP_MARGIN }),
   /** Kang : Le Maître du Temps attend sous la manigance principale pendant le stade 3. */
   masterOfTime: layout => ({ x: villainRowLeft(layout) + layout.cardWidth + 20, y: TOP_MARGIN + layout.cardWidth + 14 }),
-  /** L'identité du joueur, en bas à droite, au-dessus de vos PV (jamais sur les PV du méchant). */
-  identity: layout => ({ x: Math.max(heroRowLeft(layout), layout.width - layout.cardWidth - RIGHT_MARGIN), y: heroRowY(layout) }),
+  /** L'identité du joueur, en bas, au milieu de la table (jamais sur les PV du méchant). */
+  identity: layout => ({ x: Math.max(heroRowLeft(layout), Math.round((layout.width - layout.cardWidth) / 2)), y: heroRowY(layout) }),
   /** Les Démolisseurs : le méchant n° index en haut de sa colonne… */
   crewVillain: (layout, index) => ({ x: crewColumnX(layout, index), y: TOP_MARGIN }),
   /** … sa manigance annexe (couchée) dessous… */
@@ -60,7 +64,10 @@ export const SPOTS = {
 
 /** Taille d'une carte sur la table, avant toute rotation d'épuisement : {width, height}. */
 export function cardSize(card, cardWidth) {
-  if (card.isPawn) return { width: cardWidth * 0.4, height: cardWidth * 0.4 }
+  if (card.isPawn) {
+    const [width, height] = pawnSize(card)
+    return { width: cardWidth * width, height: cardWidth * height }
+  }
   const lyingDown = definitionOf(card).landscape && card.faceUp
   return lyingDown
     ? { width: cardWidth * CARD_RATIO, height: cardWidth }
@@ -97,18 +104,26 @@ export function nextEncounterSpot(game, layout) {
 }
 
 /**
- * Prochaine place libre de la rangée du héros : à gauche de l'identité (posée en bas à droite), de droite
- * à gauche jusqu'aux PV du méchant, puis en remontant d'une rangée quand elle est pleine. Ne comptent pas
- * l'identité, les pions et les cartes glissées sous une manigance.
+ * Prochaine place libre de la rangée du héros, de part et d'autre de l'identité (posée en bas, au milieu) :
+ * d'abord à sa gauche, de droite à gauche jusqu'aux PV du méchant, puis à sa droite, de gauche à droite
+ * jusqu'au bord de la table ; puis on remonte d'une rangée, dans le même ordre. Ne comptent pas l'identité,
+ * les pions et les cartes glissées sous une manigance.
  */
 export function nextHeroSpot(game, layout) {
   const placedCount = cardsInZone(game, 'table')
     .filter(card => !isEncounterCard(card) && !card.isIdentity && !card.isPawn && !card.underSchemeId).length
-  const rowStartX = SPOTS.identity(layout).x - 24 - layout.cardWidth
+  const identityX = SPOTS.identity(layout).x
   const step = layout.cardWidth + CARD_GAP
-  const cardsPerRow = Math.max(1, Math.floor((rowStartX - heroRowLeft(layout)) / step) + 1)
+  const leftStartX = identityX - IDENTITY_GAP - layout.cardWidth
+  const rightStartX = identityX + layout.cardWidth + IDENTITY_GAP
+  const leftCount = Math.max(0, Math.floor((leftStartX - heroRowLeft(layout)) / step) + 1)
+  const rightCount = Math.max(0, Math.floor((layout.width - RIGHT_MARGIN - layout.cardWidth - rightStartX) / step) + 1)
+  // une table trop étroite pour l'une et l'autre : une carte à gauche de l'identité quand même
+  const cardsPerRow = Math.max(1, leftCount + rightCount)
+  const index = placedCount % cardsPerRow
+  const x = index < leftCount || !rightCount ? leftStartX - index * step : rightStartX + (index - leftCount) * step
   return {
-    x: Math.max(0, rowStartX - (placedCount % cardsPerRow) * step),
+    x: Math.max(0, x),
     y: heroRowY(layout) - Math.floor(placedCount / cardsPerRow) * (layout.cardWidth * CARD_RATIO + 16)
   }
 }
@@ -116,7 +131,7 @@ export function nextHeroSpot(game, layout) {
 /**
  * Place d'une carte Rencontre qu'on vous attribue : devant votre identité (juste au-dessus, côté méchant),
  * où qu'elle ait été déplacée ; les suivantes, reçues avant d'avoir révélé les premières, en éventail vers
- * la gauche (l'identité est au bord droit de la table).
+ * la gauche.
  */
 export function nextDealtSpot(game, layout) {
   const identity = identityCard(game)

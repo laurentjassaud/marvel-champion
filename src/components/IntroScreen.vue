@@ -7,19 +7,36 @@ let hasPlayedSky = false
 
 <script setup>
 // La page d'accueil (maquette Figma « accueil », 1920 × 1080) : un ciel étoilé en vidéo entre la ville vue
-// d'en bas et ses immeubles au premier plan, six héros autour du titre et du menu, la barre du haut. Elle
+// d'en bas et ses immeubles au premier plan, six héros autour du grand logo « Marvel Champions Table » et du
+// menu, la barre du haut. Elle
 // s'affiche au lancement par-dessus la table, déjà prête et mesurée (une nouvelle partie s'y pose donc
 // normalement), et revient par le titre de la barre. « Scénarios » ouvre la fenêtre « Nouvelle partie »,
-// « Reprendre une partie » découvre la table, « Guide de référence 1.8 » ouvre le guide des règles dans une
-// nouvelle fenêtre ; les autres liens ne sont pas encore prêts (SoonHint).
+// « Reprendre une partie » découvre la table, « Guide de référence 1.8 » ouvre le guide des règles et
+// « Apprendre le jeu » une vidéo d'explication des règles, chacun dans une nouvelle fenêtre ; les autres liens
+// ne sont pas encore prêts (SoonHint). Tout en bas, discrets, « Mentions légales » (qui ouvre la fenêtre du même
+// nom) et la version de l'appli.
 //
-// L'entrée, au lancement : le titre, puis les héros un à un, puis la barre et le menu, en 2 s. Ce sont des
-// animations CSS : elles restent fluides pendant que la table se monte derrière. Elle attend les polices et
-// les images (1,2 s au plus), pour ne pas jouer sur des héros encore invisibles.
-import { ref, onMounted, watch } from 'vue'
+// L'entrée, au lancement : le logo (« TABLE » frappe, « MARVEL CHAMPIONS » se dévoile, un reflet passe sur
+// l'or), puis les héros un à un, puis la barre et le menu, en 2 s. Ce sont des animations CSS : elles restent
+// fluides pendant que la table se monte derrière. Elle attend les polices et les images (1,2 s au plus), pour
+// ne pas jouer sur des héros encore invisibles.
+//
+// Sur téléphone (700 px de large au plus, comme main.css ; maquette « iPhone 17 - 1 ») : seulement le fond de
+// comics et le logo, l'appli ne s'y joue pas pour l'instant ; tout en bas, les mentions légales et la version.
+// Ni décor, ni vidéo, ni héros, ni barre, ni menu : ils ne sont pas créés, donc pas téléchargés.
+import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import TopBar from './TopBar.vue'
 import SoonHint from './SoonHint.vue'
 import { INTRO_SKY_URL, INTRO_CITY_URL, INTRO_FOREGROUND_URL, introHeroUrl } from '../composables/useAssets.js'
+// seul le numéro de version est gardé de package.json (import nommé : le reste n'entre pas dans l'appli)
+import { version as packageVersion } from '../../package.json'
+// le grand logo (maquette Figma, calque « Calque 4 ») : « MARVEL CHAMPIONS » et « TABLE », chacun avec son halo
+import logoTopUrl from '../assets/intro/logo-top.svg'
+import logoTopHaloUrl from '../assets/intro/logo-top-halo.svg'
+import logoTableUrl from '../assets/intro/logo-table.svg'
+import logoTableHaloUrl from '../assets/intro/logo-table-halo.svg'
+/** Le masque du reflet : le dessin des lettres de « TABLE » (entre guillemets : une image intégrée, data:, en contient). */
+const LETTERS_MASK = `url("${logoTableUrl}")`
 import { useUiStore } from '../stores/ui.js'
 
 const ui = useUiStore()
@@ -36,9 +53,20 @@ const HEROES = [
   { id: 'wolverine', width: 447, height: 445, mirrored: true },
   { id: 'hulk', width: 735, height: 1117 }
 ]
-const SOON_LINKS = ['Campagnes', 'Fanmades', 'Marathon']
+const SOON_LINKS = ['Campagnes', 'Marathon', 'Challenge', 'Fanmades']
 /** Le guide de référence des règles (version 1.8, site externe), ouvert dans une nouvelle fenêtre. */
 const REFERENCE_GUIDE_URL = 'https://deejimy.github.io/mc-reference/'
+/** La vidéo qui explique les règles (YouTube, à partir de 25 min 34 s), ouverte dans une nouvelle fenêtre. */
+const LEARN_VIDEO_URL = 'https://www.youtube.com/watch?v=lTCTixyOQd0&t=1534s'
+/** Les mentions légales sont celles de gameboxheroes.fr : pas dans l'artefact Claude, hébergé ailleurs et sans inscription. */
+const hasLegalNotice = import.meta.env.MODE !== 'artifact'
+/** La version de l'appli (celle de package.json), sans un « .0 » final : 0.1.0 s'affiche « 0.1 ». */
+const APP_VERSION = packageVersion.replace(/\.0$/, '')
+
+/** Téléphone : l'accueil n'y montre que le fond de comics et le logo ; suit la largeur de l'écran (rotation, fenêtre). */
+const PHONE_QUERY = window.matchMedia('(max-width: 700px)')
+const isPhone = ref(PHONE_QUERY.matches)
+const onPhoneChange = event => { isPhone.value = event.matches }
 
 const plays = !hasPlayed
 hasPlayed = true
@@ -47,9 +75,10 @@ const isReady = ref(!plays)
 const rootElement = ref(null)
 
 // le ciel : la vidéo se lit une fois, au lancement, puis s'arrête sur sa dernière image ; un retour depuis la
-// table, ou « réduire les animations », la montre directement sur cette image ; économie de données : pas de vidéo
+// table, ou « réduire les animations », la montre directement sur cette image ; économie de données, ou
+// téléphone à l'ouverture (pas de décor) : pas de vidéo
 const reducesMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-const withVideo = navigator.connection?.saveData !== true
+const withVideo = navigator.connection?.saveData !== true && !PHONE_QUERY.matches
 const playsSky = withVideo && !reducesMotion && !hasPlayedSky
 if (playsSky) hasPlayedSky = true
 const videoElement = ref(null)
@@ -64,6 +93,7 @@ function onFrameReady(event) {
 }
 
 onMounted(() => {
+  PHONE_QUERY.addEventListener('change', onPhoneChange)
   const video = videoElement.value
   if (playsSky && video.readyState >= 2) isVideoVisible.value = true
   if (playsSky) video.play().catch(() => {}) // iOS : lecture muette relancée à la main si besoin
@@ -75,6 +105,7 @@ onMounted(() => {
   const loaded = Promise.allSettled([...fonts, ...images])
   Promise.race([loaded, new Promise(resolve => setTimeout(resolve, 1200))]).then(() => { isReady.value = true })
 })
+onBeforeUnmount(() => PHONE_QUERY.removeEventListener('change', onPhoneChange))
 
 // une fenêtre ouverte par-dessus (Nouvelle partie, aide) floute l'accueil : la vidéo s'arrête derrière, et
 // reprend à sa fermeture si elle n'était pas finie (sinon elle repartirait du début)
@@ -87,9 +118,10 @@ watch(() => ui.modal, modal => {
 </script>
 
 <template>
-  <section ref="rootElement" class="intro-screen" :class="{ plays, ready: isReady }" aria-labelledby="intro-title">
-    <!-- le décor : fond indigo, ville vue d'en bas (produit, 57 %), ciel étoilé, immeubles au premier plan -->
-    <div class="scenery" aria-hidden="true">
+  <section ref="rootElement" class="intro-screen" :class="{ plays, ready: isReady, leaving: ui.scene === 'out' }" aria-labelledby="intro-title">
+    <!-- le décor : fond indigo, ville vue d'en bas (produit, 57 %), ciel étoilé, immeubles au premier plan ; sur
+         téléphone, le fond de comics de la feuille de style à la place -->
+    <div v-if="!isPhone" class="scenery" aria-hidden="true">
       <img class="city" :src="INTRO_CITY_URL" alt="" width="1672" height="941" draggable="false">
       <video v-if="withVideo" ref="videoElement" class="sky" :class="{ visible: isVideoVisible }" :src="INTRO_SKY_URL"
         muted playsinline :autoplay="playsSky" :preload="playsSky ? 'auto' : 'metadata'"
@@ -98,23 +130,33 @@ watch(() => ui.modal, modal => {
       <img class="foreground" :src="INTRO_FOREGROUND_URL" alt="" width="1672" height="941" draggable="false">
     </div>
 
-    <div class="heroes" aria-hidden="true">
+    <div v-if="!isPhone" class="heroes" aria-hidden="true">
       <div v-for="hero in HEROES" :key="hero.id" class="hero" :class="hero.id">
         <img :class="{ mirrored: hero.mirrored }" :src="introHeroUrl(hero.id)" alt="" :width="hero.width" :height="hero.height" draggable="false">
       </div>
     </div>
 
-    <div class="top">
+    <div v-if="!isPhone" class="top">
       <TopBar intro />
     </div>
 
-    <!-- sous la barre : le titre, sous les héros, et le menu, par-dessus -->
+    <!-- sous la barre : le logo, sous les héros, et le menu, par-dessus -->
     <div class="stage">
       <h1 id="intro-title" class="title">
-        <span class="tag">Marvel</span>
-        <span class="name">Champions</span>
+        <span class="sr">Marvel Champions Table</span>
+        <!-- les calques de la maquette, chacun à sa taille d'origine : halo puis lettres ; sur « TABLE », le
+             reflet de l'entrée, découpé à la forme des lettres -->
+        <span class="logo-part logo-top" aria-hidden="true">
+          <img class="halo" :src="logoTopHaloUrl" alt="" width="389.238" height="45.5885" draggable="false">
+          <img class="letters" :src="logoTopUrl" alt="" width="381.238" height="37.5885" draggable="false">
+        </span>
+        <span class="logo-part logo-table" aria-hidden="true">
+          <img class="halo" :src="logoTableHaloUrl" alt="" width="592.987" height="135.767" draggable="false">
+          <img class="letters" :src="logoTableUrl" alt="" width="576.989" height="119.767" draggable="false">
+          <span class="sheen" :style="{ '--letters-mask': LETTERS_MASK }" />
+        </span>
       </h1>
-      <nav class="main-menu" aria-label="Menu principal">
+      <nav v-if="!isPhone" class="main-menu" aria-label="Menu principal">
         <ul class="links">
           <li><button type="button" class="link" @click="ui.openModal('setup')">Scénarios</button></li>
           <li v-for="label in SOON_LINKS" :key="label">
@@ -131,9 +173,23 @@ watch(() => ui.modal, modal => {
             Guide de référence 1.8
             <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M4 2h6v6M10 2 2 10" fill="none" stroke="currentColor" stroke-width="1.6" /></svg>
           </a>
+          <a class="link guide learn" :href="LEARN_VIDEO_URL" target="_blank" rel="noopener noreferrer"
+            aria-label="Apprendre le jeu, vidéo YouTube (s'ouvre dans une nouvelle fenêtre)">
+            Apprendre le jeu
+            <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M4 2h6v6M10 2 2 10" fill="none" stroke="currentColor" stroke-width="1.6" /></svg>
+          </a>
         </div>
       </nav>
     </div>
+
+    <!-- tout en bas, aussi sur téléphone : les mentions légales et la version de l'appli -->
+    <footer class="legal">
+      <template v-if="hasLegalNotice">
+        <button type="button" class="legal-link" @click="ui.openModal('legal')">Mentions légales</button>
+        <span class="legal-sep" aria-hidden="true">·</span>
+      </template>
+      <span class="version">Version {{ APP_VERSION }}</span>
+    </footer>
   </section>
 </template>
 
@@ -179,23 +235,41 @@ watch(() => ui.modal, modal => {
 
 /* ---------- le titre et le menu ---------- */
 .stage { position: relative; min-height: 0; }
-/* le titre : « Marvel » dans son étiquette rouge, posé sur « Champions » ; 37 px sous la barre (maquette : 85 px du haut) */
+/* le logo : 577 × 170 px, centré, 46 px sous la barre (maquette : 94 px du haut). Ses calques débordent de
+   ce cadre (les halos) ; positions et tailles de la maquette, en pixels de maquette (--tu) */
 .title {
-  position: absolute; z-index: 1; left: 50%; top: calc(37 * var(--tu)); translate: -50% 0;
-  margin: 0; display: grid; justify-items: center; pointer-events: none; white-space: nowrap;
+  position: absolute; z-index: 1; left: 50%; top: calc(46 * var(--tu)); translate: -50% 0;
+  width: calc(576.989 * var(--tu)); height: calc(170 * var(--tu)); margin: 0; pointer-events: none;
 }
-.tag {
-  display: flex; align-items: center; height: calc(29 * var(--tu)); padding: 0 calc(2 * var(--tu)) calc(3 * var(--tu));
-  background: var(--red); font: normal 700 calc(36 * var(--tu))/1 var(--font-display); letter-spacing: -.02em; text-transform: uppercase;
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.logo-part { position: absolute; }
+.logo-part img { position: absolute; display: block; max-width: none; }
+/* « MARVEL CHAMPIONS » : 381 × 38 px, à 87 px du bord gauche ; son halo, 4 px tout autour */
+.logo-top { left: calc(82.894 * var(--tu)); top: calc(-4 * var(--tu)); width: calc(389.238 * var(--tu)); height: calc(45.5885 * var(--tu)); }
+.logo-top .halo { inset: 0; width: 100%; height: 100%; }
+.logo-top .letters { left: calc(4 * var(--tu)); top: calc(4 * var(--tu)); width: calc(381.238 * var(--tu)); height: calc(37.5885 * var(--tu)); }
+/* « TABLE » : 577 × 120 px, 50 px sous le haut du logo ; son halo, 8 px tout autour */
+.logo-table { left: calc(-8 * var(--tu)); top: calc(42.233 * var(--tu)); width: calc(592.987 * var(--tu)); height: calc(135.767 * var(--tu)); }
+.logo-table .halo { inset: 0; width: 100%; height: 100%; }
+.logo-table .letters, .sheen {
+  left: calc(8 * var(--tu)); top: calc(8 * var(--tu)); width: calc(576.989 * var(--tu)); height: calc(119.767 * var(--tu));
 }
-.name {
-  margin-top: calc(-16 * var(--tu));
-  font: italic 700 calc(120 * var(--tu))/1 var(--font-display); letter-spacing: -.02em; text-transform: uppercase;
+/* le reflet : une bande de lumière, cachée à gauche du mot au repos, que l'entrée fait traverser ; elle ne
+   se voit que sur les lettres (masque : le dessin des lettres) */
+.sheen {
+  position: absolute; overflow: hidden;
+  -webkit-mask: var(--letters-mask) 0 0 / 100% 100% no-repeat; mask: var(--letters-mask) 0 0 / 100% 100% no-repeat;
 }
-/* le menu, au milieu de l'écran : les liens à 72 px d'écart, un filet, puis « Reprendre une partie » et,
-   juste dessous, plus petit, le lien du guide de référence */
+.sheen::before {
+  content: ''; position: absolute; top: 0; bottom: 0; left: 0; width: 35%;
+  background: linear-gradient(105deg, rgb(255 255 255 / 0) 15%, rgb(255 255 255 / .8) 50%, rgb(255 255 255 / 0) 85%);
+  transform: translateX(-100%);
+}
+/* le menu, au milieu de l'écran : les cinq liens à 72 px d'écart, un filet, puis « Reprendre une partie » et,
+   juste dessous, plus petits, les liens du guide de référence et de la vidéo « Apprendre le jeu ». Il descend
+   d'une demi-ligne (36 px) depuis le cinquième lien (« Challenge ») : le premier reste à sa place, sous le logo */
 .main-menu {
-  position: absolute; z-index: 3; left: 50%; top: calc(50% - 8 * var(--u)); translate: -50% -50%;
+  position: absolute; z-index: 3; left: 50%; top: calc(50% - 8 * var(--u) + 36 * var(--mu)); translate: -50% -50%;
   display: grid; justify-items: center; gap: calc(48 * var(--mu));
 }
 .links { list-style: none; margin: calc(-18 * var(--mu)) 0; padding: 0; display: grid; justify-items: center; }
@@ -220,12 +294,38 @@ watch(() => ui.modal, modal => {
 }
 .guide svg { width: .6em; height: .6em; }
 
+/* ---------- tout en bas, au milieu (entre Wolverine et Tornade) : les mentions légales et la version, petites et
+   discrètes, sur une ligne ---------- */
+.legal {
+  position: absolute; z-index: 4; left: 50%; bottom: 0; translate: -50% 0;
+  display: flex; align-items: center; white-space: nowrap;
+  padding-bottom: max(6px, env(safe-area-inset-bottom, 0px));
+  font: 400 14px/1 var(--font-text); color: #c3c5f5;
+}
+.legal-link, .legal-sep, .version { opacity: .75; text-shadow: 0 1px 6px rgb(19 21 39 / .9); }
+.legal-link {
+  min-height: 32px; padding: 0 12px; border: 0; background: none; cursor: pointer;
+  font: inherit; color: inherit;
+  text-decoration: underline; text-decoration-color: rgb(195 197 245 / .4); text-underline-offset: 3px;
+  transition: opacity 150ms ease, text-decoration-color 150ms ease;
+}
+.version { padding: 0 12px; }
+.legal-link:focus-visible { opacity: 1; outline: 2px solid var(--yellow); outline-offset: 2px; }
+@media (hover: hover) and (pointer: fine) {
+  .legal-link:hover { opacity: 1; text-decoration-color: currentColor; }
+}
+@media (pointer: coarse) {
+  .legal-link { min-height: 44px; }
+}
+
 /* ---------- l'entrée (2 s, au lancement) ----------
-   0 ms le titre, 250 ms son étiquette ; de 450 ms à 1,7 s les héros, un toutes les 110 ms, chacun depuis son
-   bord ; 1,35 s la barre ; de 1,4 s à 2 s le menu, ligne après ligne */
+   0 ms « TABLE » frappe (un peu trop grand, il se pose), 250 ms « MARVEL CHAMPIONS » se dévoile de gauche à
+   droite, 750 ms un reflet traverse l'or de « TABLE » ; de 450 ms à 1,7 s les héros, un toutes les 110 ms,
+   chacun depuis son bord ; 1,35 s la barre ; de 1,4 s à 2,2 s le menu, ligne après ligne */
 @media (prefers-reduced-motion: no-preference) {
-  .plays .name { animation: intro-title 700ms var(--ease-out) both; }
-  .plays .tag { animation: intro-tag 450ms var(--ease-out) 250ms both; }
+  .plays .logo-table { animation: intro-slam 550ms var(--ease-out) both; }
+  .plays .logo-top { animation: intro-wipe 450ms var(--ease-out) 250ms both; }
+  .plays .sheen::before { animation: intro-sheen 800ms var(--ease-in-out) 750ms both; }
   .plays .hero { animation: intro-hero 700ms var(--ease-drawer) both; }
   .plays .captain-america { --from-x: calc(-60 * var(--u)); --from-y: calc(-40 * var(--u)); animation-delay: 450ms; }
   .plays .spider-man { --from-x: calc(60 * var(--u)); --from-y: calc(-40 * var(--u)); animation-delay: 560ms; }
@@ -239,19 +339,27 @@ watch(() => ui.modal, modal => {
   .plays .links li:nth-child(2) { animation-delay: 1460ms; }
   .plays .links li:nth-child(3) { animation-delay: 1520ms; }
   .plays .links li:nth-child(4) { animation-delay: 1580ms; }
-  .plays .rule { animation: intro-rule 360ms var(--ease-out) 1640ms both; }
-  .plays .resume { animation-delay: 1640ms; }
-  .plays .guide { animation-delay: 1700ms; }
+  .plays .links li:nth-child(5) { animation-delay: 1640ms; }
+  .plays .rule { animation: intro-rule 360ms var(--ease-out) 1700ms both; }
+  .plays .resume { animation-delay: 1700ms; }
+  .plays .guide { animation-delay: 1760ms; }
+  .plays .learn { animation-delay: 1820ms; }
+  .plays .legal { animation: intro-fade 400ms ease 1860ms both; }
 }
-/* en attendant les polices et les images, tout reste à sa première image */
-.plays:not(.ready) * { animation-play-state: paused; }
+/* en attendant les polices et les images, tout reste à sa première image (le reflet aussi : un pseudo-élément) */
+.plays:not(.ready) *, .plays:not(.ready) .sheen::before { animation-play-state: paused; }
 
-@keyframes intro-title {
-  from { opacity: 0; transform: translateY(calc(24 * var(--tu))) scale(.96); filter: blur(6px); }
+/* « TABLE » arrive comme un coup de poing : de 115 % à sa taille, en apparaissant */
+@keyframes intro-slam {
+  from { opacity: 0; transform: scale(1.15); }
 }
-/* l'étiquette se dévoile de gauche à droite */
-@keyframes intro-tag {
+/* « MARVEL CHAMPIONS » se dévoile de gauche à droite */
+@keyframes intro-wipe {
   from { clip-path: inset(0 100% 0 0); }
+}
+/* la bande de lumière part de la gauche du mot et sort à droite (elle fait 35 % de sa largeur) */
+@keyframes intro-sheen {
+  to { transform: translateX(290%); }
 }
 @keyframes intro-hero {
   from { opacity: 0; transform: translate(var(--from-x), var(--from-y)) scale(.97); }
@@ -270,27 +378,67 @@ watch(() => ui.modal, modal => {
   from { opacity: 0; }
 }
 
-/* quitter l'accueil : il s'efface en s'approchant, la table apparaît dessous ; y revenir : un fondu court */
+/* ---------- la sortie (« Lancer la partie », 800 ms : SCENE_TIMES dans ui.js ; main.css s'occupe de la
+   fenêtre et cache la table dessous) ----------
+   l'entrée à l'envers, en accéléré : 0 ms la barre remonte, le menu et le pied s'effacent ; de 80 à 780 ms les
+   héros repartent vers leur bord, un toutes les 60 ms ; de 250 à 650 ms le logo s'efface en s'approchant ; le
+   décor s'approche tout du long, et de 400 à 800 ms tout l'accueil s'efface : l'écran est vide */
+.intro-screen.leaving { pointer-events: none; animation: leave-fade 400ms var(--ease-out) 400ms forwards; }
+.leaving .top { animation: leave-top 300ms var(--ease-out) forwards; }
+.leaving :is(.main-menu, .legal) { animation: leave-fade 300ms var(--ease-out) forwards; }
+.leaving .scenery { animation: leave-scenery 800ms var(--ease-out) forwards; }
+.leaving .title { animation: leave-title 400ms var(--ease-out) 250ms forwards; }
+.leaving .hero { animation: leave-hero 400ms var(--ease-out) forwards; }
+.leaving .captain-america { --to-x: calc(-120 * var(--u)); --to-y: calc(-80 * var(--u)); animation-delay: 80ms; }
+.leaving .spider-man { --to-x: calc(120 * var(--u)); --to-y: calc(-80 * var(--u)); animation-delay: 140ms; }
+.leaving .hulk { --to-x: calc(-120 * var(--u)); --to-y: calc(100 * var(--u)); animation-delay: 200ms; }
+.leaving .miss-marvel { --to-x: calc(140 * var(--u)); --to-y: calc(80 * var(--u)); animation-delay: 260ms; }
+.leaving .wolverine { --to-x: calc(-80 * var(--u)); --to-y: calc(100 * var(--u)); animation-delay: 320ms; }
+.leaving .tornade { --to-x: 0px; --to-y: calc(120 * var(--u)); animation-delay: 380ms; }
+@keyframes leave-fade {
+  to { opacity: 0; }
+}
+@keyframes leave-top {
+  to { opacity: 0; translate: 0 -100%; }
+}
+/* le décor s'approche, le logo plus vite que lui (il passe devant) */
+@keyframes leave-scenery {
+  to { scale: 1.04; }
+}
+@keyframes leave-title {
+  to { opacity: 0; scale: 1.08; }
+}
+/* chaque héros repart par où il est arrivé (intro-hero), deux fois plus loin */
+@keyframes leave-hero {
+  to { opacity: 0; translate: var(--to-x) var(--to-y); scale: .97; }
+}
+
+/* quitter l'accueil par « Reprendre une partie » : il s'efface en s'approchant, la table apparaît dessous ;
+   y revenir : un fondu court */
 .fade-intro-enter-active { transition: opacity 250ms var(--ease-out); }
 .fade-intro-leave-active { transition: opacity 300ms var(--ease-out), transform 300ms var(--ease-out); pointer-events: none; }
 .fade-intro-enter-from, .fade-intro-leave-to { opacity: 0; }
 .fade-intro-leave-to { transform: scale(1.04); }
 
-/* téléphones : les héros un peu plus grands que l'échelle de la maquette, qui les rendrait minuscules, et
-   sous la barre, plus haute (ses onglets passent sous le titre) : leur cadre est la rangée de la scène ; le
-   titre passe devant Captain America, le menu remonte un peu et se détache des héros du bas */
+/* téléphones (maquette « iPhone 17 - 1 », 402 px de large) : le bleu nuit des mails, et en haut leur fond de
+   comics recadré (402 × 416, il s'y fond de 271 à 416 px), à la largeur de l'écran ; le logo à 56 px du haut
+   (plus bas que la maquette, qui le met à 28 px ; sous l'encoche de l'iPhone dans l'appli installée), à 32 px
+   des bords (ses lettres font toute la largeur moins 64 px) */
 @media (max-width: 700px) {
-  .intro-screen { --u: max(min(100vw / 1920, 100dvh / 1080), 100vw / 1300); }
-  .heroes { grid-row: 2; grid-column: 1; }
-  .title { z-index: 3; }
-  .main-menu { top: 46%; }
-  .link { text-shadow: 0 2px 14px rgb(19 21 39 / .85); }
+  .intro-screen {
+    grid-template-rows: minmax(0, 1fr);
+    background: url('../assets/intro/fond-comics-mobile.webp') center top / 100% auto no-repeat, #02153a;
+  }
+  .title { top: calc(56px + env(safe-area-inset-top, 0px)); --tu: calc((100vw - 64px) / 576.989); }
 }
 
 /* mouvement réduit : pas d'entrée chorégraphiée ; tout apparaît ensemble, en fondu, sans rien déplacer */
 @media (prefers-reduced-motion: reduce) {
-  .plays :is(.name, .tag, .hero, .top, .links li, .rule, .resume, .guide) { animation: intro-fade 400ms ease both; }
+  .plays :is(.logo-part, .hero, .top, .links li, .rule, .resume, .guide, .legal) { animation: intro-fade 400ms ease both; }
   .sky { transition-duration: 400ms; }
   .fade-intro-leave-to { transform: none; }
+  /* la sortie de « Lancer la partie » : un fondu de tout l'accueil (300 ms, SCENE_TIMES_REDUCED) */
+  .intro-screen.leaving { animation: leave-fade 300ms ease forwards; }
+  .leaving :is(.top, .main-menu, .legal, .scenery, .title, .hero) { animation: none; }
 }
 </style>

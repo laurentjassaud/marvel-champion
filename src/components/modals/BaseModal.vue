@@ -1,14 +1,20 @@
 <script setup>
-// Le cadre commun des fenêtres (maquette Figma « Préparation de la partie ») : le fond sombre (un appui dessus
-// ferme la fenêtre), le panneau droit cerné d'un anneau sombre, son titre centré et son contenu, qui défile, et
-// en bas à droite, posés sur le bord, les boutons d'action (slot actions : les autres choix à gauche, puis
-// Annuler ou Fermer, puis l'action principale en rouge, à droite).
+// Le cadre commun des fenêtres (maquette Figma « Préparation de la partie », 2e version) : le fond sombre (un
+// appui dessus ferme la fenêtre), puis le panneau, en trois bandes. En haut, l'en-tête, sur les couvertures de
+// comics : le titre entre ses petits traits, puis ce que la fenêtre y ajoute (slot header : les hexagones et la
+// difficulté de « Nouvelle partie »). Au milieu, le contenu, plus sombre, qui défile. En bas, le pied et ses
+// boutons (slot actions : les autres choix à gauche, puis Annuler ou Fermer, puis l'action principale, en jaune,
+// à droite). Le milieu de l'en-tête descend un peu dans le contenu, celui du pied y remonte ; une barre rouge
+// coiffe le panneau. Le décor et ses mesures sont dans main.css (« fenêtres »).
 // La carte agrandie de la colonne de droite reste visible au-dessus du fond, à sa place : le fond assombrit
 // et floute toute la page, alors la fenêtre montre la sienne exactement par-dessus le panneau de l'onglet
 // Carte (ou Journal), et se centre à sa gauche pour ne jamais la cacher. Sur téléphone, la colonne de droite
 // est sous la table, hors de l'écran : rien de tel.
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import CardPreview from '../CardPreview.vue'
+import topDipUrl from '../../assets/modal/top-dip.svg'
+import redBarUrl from '../../assets/modal/red-bar.svg'
+import edgeNotchUrl from '../../assets/modal/edge-notch.svg'
 import { useGameStore } from '../../stores/game.js'
 import { useUiStore } from '../../stores/ui.js'
 import { swallowNextClick } from '../../composables/usePointer.js'
@@ -30,9 +36,9 @@ const dialogElement = ref(null)
  */
 const zoomPlace = ref(null)
 /**
- * La grande fenêtre (Nouvelle partie) ouverte sur l'accueil : le haut de la place laissée sous le grand titre
- * « Marvel Champions » (le bas du titre et 12 px d'écart, en pixels du haut de l'écran), pour qu'elle ne le
- * cache pas ; null ailleurs (les autres fenêtres restent centrées).
+ * La grande fenêtre (Nouvelle partie) ouverte sur l'accueil : le haut de la place laissée sous le grand logo
+ * « Marvel Champions Table » (le bas du logo et 12 px d'écart, en pixels du haut de l'écran), pour qu'elle ne
+ * le cache pas ; null ailleurs (les autres fenêtres restent centrées).
  */
 const titleRoom = ref(null)
 function measurePlaces() {
@@ -57,7 +63,7 @@ onMounted(() => {
   // focus sans défilement : le choix coché ou le premier champ, sinon l'action principale, sinon le premier
   // bouton actif (un bouton désactivé ne prend pas le focus)
   const dialog = dialogElement.value
-  const first = dialog?.querySelector('.box-body input:checked, .box-body input') ?? dialog?.querySelector('.box-actions .red:not(:disabled)')
+  const first = dialog?.querySelector('.box-body input:checked, .box-body input') ?? dialog?.querySelector('.box-actions .primary:not(:disabled)')
     ?? dialog?.querySelector('button:not(:disabled)')
   first?.focus({ preventScroll: true })
 })
@@ -74,11 +80,25 @@ function closeFromBackdrop() {
   <div class="modal" :class="{ 'beside-zoom': zoomPlace, 'below-title': titleRoom }" :style="modalStyle"
     @pointerdown.self="closeFromBackdrop">
     <div ref="dialogElement" class="box" :class="{ wide }" role="dialog" aria-modal="true" :aria-label="title">
-      <div class="box-body">
+      <!-- le décor du haut : le filet qui plonge sous la barre rouge -->
+      <span class="box-topline" aria-hidden="true">
+        <img :src="topDipUrl" width="423" height="12" alt="" draggable="false">
+      </span>
+      <img class="box-redbar" :src="redBarUrl" width="395" height="16" alt="" aria-hidden="true" draggable="false">
+      <div class="box-head">
         <h2>{{ title }}</h2>
+        <slot name="header" />
+        <span class="box-edge" aria-hidden="true">
+          <img :src="edgeNotchUrl" width="449.395" height="16" alt="" draggable="false">
+        </span>
+      </div>
+      <div class="box-body">
         <slot />
       </div>
       <div v-if="$slots.actions" class="box-actions">
+        <span class="box-edge" aria-hidden="true">
+          <img :src="edgeNotchUrl" width="449.395" height="16" alt="" draggable="false">
+        </span>
         <slot name="actions" />
       </div>
     </div>

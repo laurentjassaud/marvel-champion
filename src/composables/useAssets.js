@@ -2,7 +2,7 @@
 // le décor de la table (la ville de nuit, l'illustration du méchant).
 
 import { definitionOf, isEncounterCard } from '../game/engine.js'
-import { DEFINITION_BY_ID } from '../game/data.js'
+import { DEFINITION_BY_ID, PAWN_KIND_BY_ID } from '../game/data.js'
 
 /** Racine du site : './' par défaut (version installable et version artefact), ou le chemin de déploiement. */
 const BASE_URL = import.meta.env.BASE_URL
@@ -70,6 +70,9 @@ export const tokenImageUrl = (kind, usage) => `${BASE_URL}tokens/${TOKEN_FILES[k
 
 /** Image d'une carte d'état posée sur un personnage (stunned, confused, tough). */
 export const statusImageUrl = statusId => `${BASE_URL}status/${statusId}.png`
+
+/** Image d'un pion libre de la table, par sa sorte (PAWN_KINDS ; scripts/resize-tokens.py la prépare). */
+export const pawnImageUrl = pawnId => `${BASE_URL}pawns/${PAWN_KIND_BY_ID[pawnId]?.file}`
 
 /** Image de la face A d'une carte, par l'identifiant de sa fiche (miniatures de l'écran Nouvelle partie). */
 export function imageUrlOfDefinition(definitionId) {

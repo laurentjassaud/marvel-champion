@@ -332,6 +332,20 @@ describe('mise en place', () => {
     expect(crew.setup).toMatchObject({ modulars: [], randomChoices: [] })
   })
 
+  it('héros et méchant au hasard : tirés parmi ceux des boîtes proposées, le héros avec son précon', () => {
+    const s = game({ hero: 'random', scenario: 'random' })
+    const hero = AVAILABLE_HEROES.find(h => h.id === s.setup.hero)
+    expect(hero).toBeTruthy()
+    expect(s.setup.deckList).toEqual(PRECON_DECKS[hero.id])
+    expect(s.setup.deckLabel).toBe(`précon ${hero.aspect}`)
+    expect(AVAILABLE_SCENARIOS.map(sc => sc.id)).toContain(s.setup.scenario)
+    // the chosen modular set is kept with a random villain
+    expect(s.setup.modulars).toEqual(['bomb_scare'])
+    // several draws do not always give the same hero, nor the same villain
+    expect(new Set(Array.from({ length: 12 }, () => game({ hero: 'random' }).setup.hero)).size).toBeGreaterThan(1)
+    expect(new Set(Array.from({ length: 12 }, () => game({ scenario: 'random' }).setup.scenario)).size).toBeGreaterThan(1)
+  })
+
   it('refuse un héros inconnu', () => {
     expect(() => game({ hero: 'heros_inconnu' })).toThrow()
   })
@@ -1550,23 +1564,26 @@ describe('placement', () => {
     expect(E.nextEncounterSpot(s, L).x).toBeGreaterThan(before.x)
   })
 
-  it('l\'identité en bas à droite ; vos cartes à sa gauche, de droite à gauche, puis une rangée plus haut', () => {
+  it('l\'identité en bas, au milieu ; vos cartes à sa gauche, puis à sa droite, puis une rangée plus haut', () => {
     const layout = { ...L, heroInset: 200 }
     const s = game()
     const id = E.identityCard(s)
-    expect(id).toMatchObject({ x: L.width - L.cardWidth - 16, y: L.height - L.cardWidth * 1.4 - 34 })
+    expect(id).toMatchObject({ x: (L.width - L.cardWidth) / 2, y: L.height - L.cardWidth * 1.4 - 34 })
     const step = L.cardWidth + 12
     const xs = []
     for (const card of E.cardsInZone(s, 'hand').slice(0, 5)) {
       xs.push(E.nextHeroSpot(s, layout).x)
       E.playToTable(s, layout, card)
     }
-    const first = id.x - 24 - L.cardWidth
-    // de 900 à 216 (après les PV du méchant, 200 px), par pas de 92 : 8 cartes par rangée
-    expect(xs).toEqual([0, 1, 2, 3, 4].map(n => first - n * step))
+    const left = id.x - 24 - L.cardWidth
+    const right = id.x + L.cardWidth + 24
+    // à gauche, de 406 à 216 (après les PV du méchant, 200 px), par pas de 92 : 3 cartes ; à droite, de 614
+    // à 1004 (16 px du bord) : 5 cartes ; 8 par rangée
+    expect(xs).toEqual([left, left - step, left - 2 * step, right, right + step])
     expect(Math.min(...E.cardsInZone(s, 'table').filter(c => !E.isEncounterCard(c)).map(c => c.x))).toBeGreaterThanOrEqual(216)
+    expect(Math.max(...E.cardsInZone(s, 'table').filter(c => !E.isEncounterCard(c)).map(c => c.x))).toBeLessThanOrEqual(L.width - 16 - L.cardWidth)
     for (let n = 5; n < 9; n++) E.playToTable(s, layout, E.cardsInZone(s, 'playerDeck').at(-1))
-    expect(E.nextHeroSpot(s, layout)).toEqual({ x: first - step, y: id.y - (L.cardWidth * 1.4 + 16) })
+    expect(E.nextHeroSpot(s, layout)).toEqual({ x: left - step, y: id.y - (L.cardWidth * 1.4 + 16) })
   })
 
   it('une carte posée à la main reste entière sur la table : remontée si elle dépasse du bas ou passe sous les PV du méchant', () => {
@@ -1588,6 +1605,27 @@ describe('placement', () => {
     // sans disposition (moteur, tests), la position demandée est gardée
     E.moveCard(s, card, 'table', { x: -30, y: 2000 })
     expect(card).toMatchObject({ x: -30, y: 2000 })
+  })
+
+  it('un pion de la liste « Pions » se pose où on le lâche, entier sur la table, à la taille de sa sorte', () => {
+    const s = game()
+    // lâché en haut à droite, à moitié hors de la table : ramené dedans (la bulle fait 0,9 carte de large)
+    const ready = E.addPawn(s, L, 'ready', { x: L.width - 20, y: -50 })
+    expect(ready).toMatchObject({ isPawn: true, pawn: 'ready', zone: 'table', x: L.width - L.cardWidth * 0.9 - 4, y: 0 })
+    expect(E.cardName(ready)).toBe('Bulle « Ready !! »')
+    expect(s.log.some(entry => entry.text === 'Sur la table : Bulle « Ready !! ».')).toBe(true)
+    // sans endroit : au milieu de la table, les suivants en ligne de part et d'autre
+    const pink = E.addPawn(s, L, 'rose')
+    expect(pink.y).toBeCloseTo(L.height / 2 - L.cardWidth * 0.42 / 2)
+    expect(pink.x).toBeCloseTo(L.width / 2 - L.cardWidth * 0.42 / 2 - L.cardWidth * 0.6)
+    // une sorte inconnue : rien
+    expect(E.addPawn(s, L, 'licorne')).toBeUndefined()
+    // déplacé, il reste entier sur la table ; sorti de la table, il disparaît
+    E.moveCard(s, pink, 'table', { x: -40, y: 100, layout: L })
+    expect(pink.x).toBe(0)
+    E.moveCard(s, ready, 'discard')
+    expect(E.cardsInZone(s, 'table').map(c => c.id)).not.toContain(ready.id)
+    expect(s.log.some(entry => entry.text === 'Retiré de la table : Bulle « Ready !! ».')).toBe(true)
   })
 })
 

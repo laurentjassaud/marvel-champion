@@ -109,10 +109,11 @@ async function pickRandomCard() {
   margin: 0 calc(190 * var(--u)) max(12px, calc(10 * var(--u))) 0;
 }
 
+/* le même écart que les piles Rencontre de la colonne de droite (main.css) */
 .piles {
   display: flex;
   align-items: flex-end;
-  gap: max(10px, calc(10 * var(--u)));
+  gap: var(--pile-gap);
 }
 
 /* le tour et les PV du héros, bien à l'écart de l'éventail : sa dernière carte, inclinée, déborde de sa colonne */
@@ -237,16 +238,16 @@ async function pickRandomCard() {
 }
 
 /* la tirette « Taille » : en bas à droite de l'écran, au-dessus de la bande rouge, alignée sur le bord droit
-   de la colonne de droite. Sous 1340 px, les onglets de la main iraient dessous : elle monte juste au-dessus
-   du bandeau, au pied de la colonne de droite (qui lui garde la place, main.css). Sur téléphone, elle se
-   range, centrée, sous la main */
+   de la colonne de droite. Sous 1460 px, les onglets de la main (« Piocher ») la toucheraient : elle monte
+   juste au-dessus du bandeau, au pied de la colonne de droite (qui lui garde la place, main.css). Sur
+   téléphone, elle se range, centrée, sous la main */
 .card-size {
   position: absolute;
   right: max(12px, calc(20 * var(--u)));
   bottom: calc(9px + max(8px, calc(14 * var(--u))));
 }
 
-@media (min-width: 701px) and (max-width: 1339px) {
+@media (min-width: 701px) and (max-width: 1459px) {
   .card-size {
     bottom: calc(100% + 12px);
   }

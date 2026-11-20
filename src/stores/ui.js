@@ -1,6 +1,6 @@
 // État de l'interface (et non de la partie) : taille des cartes, carte sélectionnée, survolée ou agrandie,
 // menu contextuel, fenêtre ouverte, onglet et largeur de la colonne de droite, place prise par le décor du
-// méchant sur la table.
+// méchant sur la table, changement de scène quand une partie est lancée.
 
 import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
@@ -18,6 +18,15 @@ const writeSetting = (key, value) => {
     else localStorage.setItem(key, String(value))
   } catch { /* stockage indisponible */ }
 }
+
+/**
+ * Changement de scène à « Lancer la partie » (launchGame), en ms : la sortie (la fenêtre, et l'accueil ou la
+ * partie en cours), puis, sur l'écran vide, l'entrée de la table (la barre, le bandeau, la colonne de droite) ;
+ * la distribution des cartes suit. Les mêmes durées sont dans main.css et IntroScreen.vue (« changement de
+ * scène ») ; « réduire les animations » : de simples fondus, plus courts.
+ */
+const SCENE_TIMES = { out: 800, in: 450 }
+const SCENE_TIMES_REDUCED = { out: 300, in: 250 }
 
 /** Échelle de la maquette (1920 × 1080 px) à l'écran : la même que --u dans main.css. */
 const screenScale = () => Math.min((globalThis.innerWidth ?? 1920) / 1920, (globalThis.innerHeight ?? 1080) / 1080)
@@ -57,9 +66,11 @@ export const useUiStore = defineStore('ui', () => {
   const preview = ref(null)
   /** Menu contextuel ouvert : {x, y, title, items: [{label, key, run, checked?} | null (séparateur)], cardId?}. */
   const contextMenu = ref(null)
+  /** La liste des pions (PawnTray), ouverte par l'onglet « Pions » de la barre. */
+  const pawnTrayOpen = ref(false)
   /**
-   * Fenêtre ouverte : {type: 'setup' | 'pile' | 'mulligan' | 'help' | 'restart' | 'villain' | 'scheme' | 'defeat'
-   * | 'reshuffle', zone?, result?, fromPile?}.
+   * Fenêtre ouverte : {type: 'setup' | 'pile' | 'mulligan' | 'help' | 'signup' | 'legal' | 'about' | 'restart' | 'villain'
+   * | 'scheme' | 'defeat' | 'reshuffle', zone?, result?, fromPile?}.
    */
   const modal = ref(null)
   /** La page d'accueil est affichée, par-dessus la table : au lancement, puis par le titre de la barre. */
@@ -68,6 +79,10 @@ export const useUiStore = defineStore('ui', () => {
   const setupCount = ref(0)
   /** Les cartes de la mise en place sont en route depuis leur paquet : la table les laisse déborder. */
   const isDealing = ref(false)
+  /** Changement de scène en cours (launchGame) : 'out' (la sortie), 'in' (l'entrée de la table), sinon null. */
+  const scene = ref(null)
+  /** Nombre d'entrées de la table depuis le lancement : le décor du méchant refait la sienne à chacune (App.vue). */
+  const sceneCount = ref(0)
 
   watch(cardWidth, width => writeSetting(CARD_WIDTH_KEY, width))
   watch(sideTab, tab => writeSetting(SIDE_TAB_KEY, tab))
@@ -110,17 +125,42 @@ export const useUiStore = defineStore('ui', () => {
   const showPreview = (cardId, showFace = false) => { preview.value = { cardId, showFace } }
   const openContextMenu = menu => { contextMenu.value = menu }
   const closeContextMenu = () => { contextMenu.value = null }
-  /** Ouvre une fenêtre (et ferme le menu contextuel) ; `extra` : ses paramètres (zone de la pile, résultat…). */
-  const openModal = (type, extra = {}) => { contextMenu.value = null; modal.value = { type, ...extra } }
+  /** Ouvre une fenêtre (et ferme le menu contextuel et la liste des pions) ; `extra` : ses paramètres (zone de la pile, résultat…). */
+  const openModal = (type, extra = {}) => { contextMenu.value = null; pawnTrayOpen.value = false; modal.value = { type, ...extra } }
   const closeModal = () => { modal.value = null }
-  /** Revient à la page d'accueil (le menu ou la fenêtre ouverts se ferment) ; la partie reste où elle en est. */
-  const openIntro = () => { contextMenu.value = null; modal.value = null; introOpen.value = true }
+  /** Revient à la page d'accueil (le menu, la liste des pions ou la fenêtre ouverts se ferment) ; la partie reste où elle en est. */
+  const openIntro = () => { contextMenu.value = null; pawnTrayOpen.value = false; modal.value = null; introOpen.value = true }
+  /** Ouvre ou ferme la liste des pions. */
+  const togglePawnTray = () => { contextMenu.value = null; pawnTrayOpen.value = !pawnTrayOpen.value }
+  const closePawnTray = () => { pawnTrayOpen.value = false }
   /** Quitte la page d'accueil : la table apparaît. */
   const closeIntro = () => { introOpen.value = false }
+  /**
+   * « Lancer la partie » : la fenêtre et l'accueil (ou la partie en cours) s'en vont (800 ms) ; sur l'écran
+   * vide, `setUp` met la nouvelle partie en place, l'accueil et la fenêtre se ferment, et la table entre ; ses
+   * cartes sont distribuées ensuite (useDealAnimation). Un second appui pendant le changement ne fait rien.
+   */
+  function launchGame(setUp) {
+    if (scene.value) return
+    const times = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? SCENE_TIMES_REDUCED : SCENE_TIMES
+    contextMenu.value = null
+    pawnTrayOpen.value = false
+    scene.value = 'out'
+    setTimeout(() => {
+      // même si la mise en place échoue, la table revient : l'écran ne reste pas vide
+      try { setUp() } finally {
+        modal.value = null
+        introOpen.value = false
+        sceneCount.value++
+        scene.value = 'in'
+        setTimeout(() => { scene.value = null }, times.in)
+      }
+    }, times.out)
+  }
 
   return {
     cardWidth, resetCardWidth, sideTab, sideColumnWidth, tableWidth, tableHeight, heroInset, selectedCardId, randomlyPickedCardId, hoveredCardId,
-    preview, contextMenu, modal, introOpen, setupCount, isDealing, layout, setTableSize, setHeroInset, selectCard, showPreview, openContextMenu, closeContextMenu,
-    openModal, closeModal, openIntro, closeIntro
+    preview, contextMenu, pawnTrayOpen, modal, introOpen, setupCount, isDealing, scene, sceneCount, layout, setTableSize, setHeroInset, selectCard, showPreview, openContextMenu, closeContextMenu,
+    openModal, closeModal, openIntro, closeIntro, launchGame, togglePawnTray, closePawnTray
   }
 })

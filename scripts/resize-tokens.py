@@ -1,5 +1,6 @@
 # Prépare les pions posés sur les cartes (public/tokens/) en versions réduites et nettes, à partir des
-# images d'origine (design/tokens/, qui ne sont pas publiées avec la table).
+# images d'origine (design/tokens/, qui ne sont pas publiées avec la table) ; puis les pions libres de la
+# table (public/pawns/, depuis design/pawns/ : voir en bas).
 #
 # Les images d'origine font 375 à 615 px de large, très détaillées (trames de points, contour fin). Le
 # navigateur les réduit à la volée, sur la table à une trentaine de pixels : la trame se brouille et le pion
@@ -42,3 +43,22 @@ for name, widths in WIDTHS.items():
         target = TARGET_FOLDER / f'{name}-{usage}.png'
         reduce(source, width).save(target, optimize=True)
         print(f'{target.name} : {width} px')
+
+
+# Les pions de la table (bouton « Pions » de la barre, PAWN_KINDS dans src/game/data.js), dans public/pawns/.
+# Les images d'origine (design/pawns/) sont déjà à la bonne taille et sont copiées telles quelles, sauf le
+# jeton +1 (1254 px, dans une large marge transparente) : recadré sur son dessin, puis réduit au double de sa
+# plus grande taille sur la table (une demi-carte de 130 px : 65 px de large).
+PAWN_SOURCE_FOLDER = ROOT / 'design' / 'pawns'
+PAWN_TARGET_FOLDER = ROOT / 'public' / 'pawns'
+PAWN_WIDTHS = {'rose': None, 'vert': None, 'bleu': None, 'ready': None, 'shoot-at-me': None, 'plus-un': 130}
+
+PAWN_TARGET_FOLDER.mkdir(exist_ok=True)
+for name, width in PAWN_WIDTHS.items():
+    source = Image.open(PAWN_SOURCE_FOLDER / f'{name}.png').convert('RGBA')
+    if width:
+        drawing = source.getchannel('A').point(lambda alpha: 255 if alpha > 8 else 0).getbbox()
+        source = reduce(source.crop(drawing), width)
+    target = PAWN_TARGET_FOLDER / f'{name}.png'
+    source.save(target, optimize=True)
+    print(f'{target.name} : {source.width} x {source.height} px')

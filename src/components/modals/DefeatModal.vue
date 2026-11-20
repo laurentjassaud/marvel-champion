@@ -34,11 +34,11 @@ function restart() {
     </div>
     <template #actions>
       <!-- un clic de trop sur les PV : la partie revient à l'état d'avant ce dégât -->
-      <button type="button" class="slant" title="Revenir à l'état d'avant ce dernier dégât" @click="gameStore.cancelPresentedChange()">Annuler</button>
+      <button type="button" class="modal-btn" title="Revenir à l'état d'avant ce dernier dégât" @click="gameStore.cancelPresentedChange()">Annuler</button>
       <span class="sp" />
-      <button type="button" class="slant" @click="ui.closeModal()">Fermer</button>
-      <button type="button" class="slant" @click="restart">Recommencer la partie</button>
-      <button type="button" class="slant red" @click="ui.openModal('setup')">Nouvelle partie</button>
+      <button type="button" class="modal-btn" @click="ui.closeModal()">Fermer</button>
+      <button type="button" class="modal-btn" @click="restart">Recommencer la partie</button>
+      <button type="button" class="modal-btn primary" @click="ui.openModal('setup')">Nouvelle partie</button>
     </template>
   </BaseModal>
 </template>

@@ -2,7 +2,7 @@
 // exceptions près signalées), l'entrée en jeu (jetons, Tenace), jouer une carte, la prendre dans une pile,
 // la retourner, l'épuiser, lui donner une carte d'état, changer la forme de l'identité, poser un pion.
 
-import { STATUS_CARDS, PAWN_COLORS } from '../data.js'
+import { STATUS_CARDS, PAWN_KIND_BY_ID } from '../data.js'
 import { MAIN_SCHEME_NOTES, VILLAIN_STAGE_RULES } from '../rules.js'
 import {
   definitionOf, cardName, cardLabel, cardsInZone, cardById, isEncounterCard, isCharacter, isAlterEgo, plural,
@@ -100,16 +100,17 @@ export function moveCard(game, card, targetZone, options = {}, quiet = false) {
   return hitPointsChange?.villainDefeated ? defeatVillain(game, hitPointsChange.villain, options.layout ?? DEFAULT_LAYOUT) : undefined
 }
 
-/** Un pion se déplace sur la table, ou disparaît s'il en sort. */
+/** Un pion se déplace sur la table (toujours entier dessus), ou disparaît s'il en sort. */
 function movePawn(game, pawn, targetZone, options, quiet) {
   if (targetZone !== 'table') {
     game.cards.splice(game.cards.indexOf(pawn), 1)
-    if (!quiet) logMessage(game, 'Pion retiré.')
+    if (!quiet) logMessage(game, `Retiré de la table : ${cardName(pawn)}.`)
     return
   }
   pawn.x = options.x ?? pawn.x
   pawn.y = options.y ?? pawn.y
   pawn.zIndex = ++game.topZIndex
+  if (options.layout) keepCardOnTable(pawn, options.layout)
 }
 
 /**
@@ -230,14 +231,26 @@ export function reorderHand(game, cardId, beforeCardId) {
   game.cards.splice(before ? game.cards.indexOf(before) : game.cards.length, 0, card)
 }
 
-/** Pose un pion libre sur la table, de la couleur suivante ; ils se rangent en ligne au milieu à gauche. */
-export function addPawn(game, layout) {
+/**
+ * Pose un pion libre sur la table (une sorte de PAWN_KINDS) : à l'endroit où on l'a lâché (`spot`, {x, y},
+ * son coin haut gauche), sinon au milieu de la table, les suivants en ligne de part et d'autre. Toujours
+ * entier sur la table. Rend le pion posé (rien pour une sorte inconnue).
+ */
+export function addPawn(game, layout, pawnId, spot = null) {
+  const kind = PAWN_KIND_BY_ID[pawnId]
+  if (!kind) return undefined
+  const [width, height] = kind.size.map(size => size * layout.cardWidth)
   const pawnCount = game.cards.filter(card => card.isPawn).length
-  game.cards.push({
-    id: uniqueId(), isPawn: true, color: PAWN_COLORS[pawnCount % PAWN_COLORS.length], zone: 'table', faceUp: true,
-    x: 40 + (pawnCount % 6) * 40, y: layout.height / 2 - 20, zIndex: ++game.topZIndex, damage: 0, threat: 0, tokens: 0
-  })
-  logMessage(game, 'Pion ajouté.')
+  const pawn = {
+    id: uniqueId(), isPawn: true, pawn: kind.id, zone: 'table', faceUp: true,
+    x: spot?.x ?? layout.width / 2 - width / 2 + ((pawnCount % 5) - 2) * layout.cardWidth * 0.6,
+    y: spot?.y ?? layout.height / 2 - height / 2,
+    zIndex: ++game.topZIndex, damage: 0, threat: 0, tokens: 0
+  }
+  game.cards.push(pawn)
+  keepCardOnTable(pawn, layout)
+  logMessage(game, `Sur la table : ${kind.label}.`)
+  return pawn
 }
 
 /* ---------------------------------------------------------------------------------------------------- */

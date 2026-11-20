@@ -84,8 +84,8 @@ const PAIR_MAX_TOKEN_ANGLE = 15
 // travers, et, avec les Démolisseurs, le badge « Actif ». Sur la table elle est placée à sa position (positioned).
 import { computed } from 'vue'
 import { definitionOf, cardName, characterTakesTokens } from '../game/engine.js'
-import { STATUS_CARDS } from '../game/data.js'
-import { cardImageUrl, cardBackUrl, statusImageUrl, tokenImageUrl } from '../composables/useAssets.js'
+import { STATUS_CARDS, PAWN_KIND_BY_ID, pawnSize } from '../game/data.js'
+import { cardImageUrl, cardBackUrl, statusImageUrl, tokenImageUrl, pawnImageUrl } from '../composables/useAssets.js'
 import { useGameStore } from '../stores/game.js'
 import { useUiStore } from '../stores/ui.js'
 
@@ -103,9 +103,12 @@ const gameStore = useGameStore()
 const ui = useUiStore()
 
 const isPawn = computed(() => !!props.card.isPawn)
+/** Un pion de la liste « Pions » (une image) ; les pions des anciennes parties sont des ronds de couleur. */
+const pawnKind = computed(() => (isPawn.value ? PAWN_KIND_BY_ID[props.card.pawn] ?? null : null))
 const isFaceShown = computed(() => props.showFace ?? props.card.faceUp)
 const classes = computed(() => ({
   token: isPawn.value,
+  pictured: !!pawnKind.value,
   land: !isPawn.value && isFaceShown.value && !!definitionOf(props.card).landscape,
   tapped: props.positioned && props.card.exhausted,
   sel: !props.inert && ui.selectedCardId === props.card.id,
@@ -114,7 +117,10 @@ const classes = computed(() => ({
 const style = computed(() => {
   const cardStyle = {}
   if (props.positioned) Object.assign(cardStyle, { left: `${props.card.x}px`, top: `${props.card.y}px`, zIndex: props.card.zIndex })
-  if (isPawn.value) cardStyle['--tok'] = props.card.color
+  if (pawnKind.value) {
+    const [width, height] = pawnSize(props.card)
+    Object.assign(cardStyle, { '--pawn-w': width, '--pawn-h': height })
+  } else if (isPawn.value) cardStyle['--tok'] = props.card.color
   return cardStyle
 })
 // Une carte jouable n'est pilotée que par les événements de pointeur (usePointer). Ses touchers ne doivent
@@ -168,7 +174,7 @@ const tokens = computed(() => {
 // nom lu par les lecteurs d'écran, avec ce qui est posé sur la carte
 const accessibleLabel = computed(() => {
   let name = 'Carte face cachée'
-  if (isPawn.value) name = 'Pion'
+  if (isPawn.value) name = cardName(props.card)
   else if (isFaceShown.value) name = cardName(props.card)
   const notes = [...(isActiveVillain.value ? ['actif'] : []), ...statuses.value.map(status => status.label), ...tokens.value.map(token => token.label)]
   return notes.length ? `${name} (${notes.join(', ')})` : name
@@ -186,6 +192,7 @@ const accessibleLabel = computed(() => {
     :aria-label="accessibleLabel"
     @touchstart="onTouchStart"
   >
+    <img v-if="pawnKind" class="pawn-image" :src="pawnImageUrl(pawnKind.id)" alt="" draggable="false">
     <template v-if="!isPawn">
       <div v-if="isFaceShown && faceImageUrl" class="face" :style="{ backgroundImage: `url('${faceImageUrl}')` }" />
       <!-- une carte de MarvelCDB sans image sur le site : son nom -->

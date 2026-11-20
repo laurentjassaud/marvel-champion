@@ -1,7 +1,10 @@
 // Mise en place d'une partie : le héros et son deck, le scénario (méchant, manigances, paquet Rencontre,
 // mise en place de la manigance 1A), la main de départ, puis le mulligan.
 
-import { CARD_DEFINITIONS, DEFINITION_BY_ID, addImportedDefinitions, SCENARIOS, MODULAR_SETS, AVAILABLE_MODULAR_SETS } from '../data.js'
+import {
+  CARD_DEFINITIONS, DEFINITION_BY_ID, addImportedDefinitions, SCENARIOS, MODULAR_SETS, PRECON_DECKS,
+  AVAILABLE_HEROES, AVAILABLE_SCENARIOS, AVAILABLE_MODULAR_SETS
+} from '../data.js'
 import { heroRules, scenarioRules } from '../rules.js'
 import { SAVED_GAME_VERSION } from '../savedGame.js'
 import {
@@ -20,8 +23,8 @@ import { byStage, revealVillainStage } from './villains.js'
 
 /**
  * ", module Alerte à la Bombe, standard" : la fin du résumé d'une mise en place (journal, barre du haut,
- * fenêtre « Recommencer »). Un set modulaire ou une difficulté tirés au hasard restent une surprise : ils
- * ne sont jamais nommés.
+ * fenêtre « Recommencer »). Un set modulaire ou une difficulté tirés au hasard ne sont pas nommés ici (la
+ * barre du haut montre quand même le badge Expert d'une partie en expert : stores/game.js, matchup).
  */
 export function setupSummary(setup) {
   const randomChoices = setup.randomChoices ?? []
@@ -49,6 +52,22 @@ function drawRandomModulars(scenario) {
   return picked
 }
 
+/**
+ * Les options d'une nouvelle partie (newGame), le héros et le scénario « random » tirés parmi ceux des boîtes
+ * proposées (AVAILABLE_PACKS) : le héros avec son deck préconstruit. Ils ne sont pas secrets : la table les
+ * montre aussitôt, et « Recommencer » rejoue ceux qui ont été tirés. À appeler avant de calculer la disposition
+ * de la table, qui dépend du méchant (store game.js) ; newGame l'appelle aussi.
+ */
+export function drawRandomHeroAndScenario(options) {
+  let drawn = options
+  if (drawn.hero === 'random') {
+    const hero = AVAILABLE_HEROES[randomIndex(AVAILABLE_HEROES.length)]
+    drawn = { ...drawn, hero: hero.id, deckList: PRECON_DECKS[hero.id], deckLabel: `précon ${hero.aspect}` }
+  }
+  if (drawn.scenario === 'random') drawn = { ...drawn, scenario: AVAILABLE_SCENARIOS[randomIndex(AVAILABLE_SCENARIOS.length)].id }
+  return drawn
+}
+
 /* ---------------------------------------------------------------------------------------------------- */
 /* Nouvelle partie                                                                                       */
 /* ---------------------------------------------------------------------------------------------------- */
@@ -56,9 +75,11 @@ function drawRandomModulars(scenario) {
 /**
  * Crée une nouvelle partie.
  * @param {object} options
- *   hero                 identifiant du héros (son set : 'spider_man')
+ *   hero                 identifiant du héros (son set : 'spider_man'), ou 'random' (tiré ici, avec son deck
+ *                        préconstruit : deckList et deckLabel sont alors ignorés)
  *   deckList             le deck : [identifiant de carte, exemplaires][] (identité comprise)
- *   scenario             identifiant du scénario ('rhino')
+ *   scenario             identifiant du scénario ('rhino'), ou 'random' (tiré ici ; les sets modulaires choisis
+ *                        sont gardés tels quels)
  *   modulars             identifiants des sets modulaires, ou 'random' (tirés ici)
  *   expert               difficulté expert, ou 'random' (tirée ici)
  *   deckLabel            nom du deck pour le journal ("précon Justice")
@@ -68,6 +89,7 @@ function drawRandomModulars(scenario) {
  * Ce qui a été tiré au hasard est gardé secret (setupSummary). Rend l'état de la nouvelle partie.
  */
 export function newGame(options, layout) {
+  options = drawRandomHeroAndScenario(options)
   addImportedDefinitions(options.importedDefinitions)
   const heroDefinition = CARD_DEFINITIONS.find(definition => definition.type === 'hero' && definition.set === options.hero)
   const scenario = SCENARIOS.find(candidate => candidate.id === options.scenario)

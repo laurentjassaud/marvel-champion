@@ -10,6 +10,8 @@
 //   <SignupForm source="marvel-champions" privacy-url="…" hide-submit @success="…" />
 // hide-submit : le bouton d'envoi est posé ailleurs (le pied d'une fenêtre, SignupModal), relié au formulaire
 // par son attribut form="…" : le composant expose formId et status ('idle', 'sending', 'done').
+// Slot privacy : un autre lien vers les informations sur les données que privacy-url (SignupModal les
+// affiche dans la fenêtre même).
 import { nextTick, onMounted, reactive, ref, useId, watch } from 'vue'
 import { sendSignup } from '../api/signup.js'
 
@@ -20,7 +22,7 @@ const props = defineProps({
   title: { type: String, default: 'Rester informé' },
   intro: {
     type: String,
-    default: 'Laissez votre nom et votre e-mail : nous vous préviendrons des nouveaux héros, scénarios et modules Gamebox Hero.'
+    default: 'Laissez votre nom et votre e-mail pour être tenu au courant des dernières mises à jour de l’application MARVEL CHAMPIONS TABLE.\nNous vous préviendrons dès que de nouveaux contenus (héros, scénarios, campagnes et mode de jeu) seront disponibles sur l’application.'
   },
   /** Lien vers la politique de confidentialité, affiché sous la case à cocher. */
   privacyUrl: { type: String, default: '' },
@@ -152,7 +154,7 @@ defineExpose({ status, formId: ids.form })
 
     <div v-if="status === 'done'" class="done">
       <p ref="doneMessage" class="lead" tabindex="-1">Merci {{ doneName }}, votre adresse est bien enregistrée.</p>
-      <p class="hint">Vous recevrez les nouvelles de Gamebox Hero. Un lien de désinscription figure dans chaque message.</p>
+      <p class="hint">Vous recevrez bien les newsletters de l’application MARVEL CHAMPIONS TABLE.<br>Un lien de désinscription figure dans chaque message.</p>
       <button type="button" class="btn" @click="restart">Enregistrer une autre adresse</button>
     </div>
 
@@ -179,11 +181,13 @@ defineExpose({ status, formId: ids.form })
       <div class="field check">
         <input :id="ids.consent" v-model="form.consent" class="checkbox" type="checkbox" name="consent" required
           :aria-invalid="errors.consent ? 'true' : undefined" :aria-describedby="errors.consent ? `${ids.consent}-error` : undefined">
-        <label :for="ids.consent" class="check-label">J'accepte que Gamebox Hero conserve mon nom et mon e-mail pour
-          m'envoyer ses nouvelles. Je peux me désinscrire à tout moment.</label>
+        <label :for="ids.consent" class="check-label">J'accepte que l’application MARVEL CHAMPIONS TABLE conserve mon nom et
+          mon e-mail pour m'envoyer des newsletters. Je peux me désinscrire à tout moment.</label>
         <p v-if="errors.consent" :id="`${ids.consent}-error`" class="error">{{ errors.consent }}</p>
       </div>
-      <p v-if="privacyUrl" class="hint"><a :href="privacyUrl" class="link" target="_blank" rel="noopener">Politique de confidentialité</a></p>
+      <p v-if="privacyUrl || $slots.privacy" class="hint">
+        <slot name="privacy"><a :href="privacyUrl" class="link" target="_blank" rel="noopener">Politique de confidentialité</a></slot>
+      </p>
 
       <!-- champ piège : invisible pour les visiteurs, rempli par les robots -->
       <div class="trap" aria-hidden="true">
@@ -210,6 +214,8 @@ defineExpose({ status, formId: ids.form })
 }
 .fields, .done { display: grid; gap: 16px; }
 .intro, .lead { margin: 0; line-height: 1.5; }
+/* l'introduction passe à la ligne là où son texte le demande (\n) */
+.intro { white-space: pre-line; }
 .lead { color: var(--fg); font-weight: 600; }
 .lead:focus { outline: none; }
 .hint { margin: -6px 0 0; font-size: 14px; color: var(--muted); }
@@ -232,9 +238,32 @@ defineExpose({ status, formId: ids.form })
 }
 
 .check { grid-template-columns: auto 1fr; gap: 6px 12px; align-items: start; }
-.checkbox { width: 20px; height: 20px; margin: 1px 0 0; accent-color: var(--yellow); cursor: pointer; }
+/* la case à cocher, dessinée comme les cases des fenêtres (grille de « Préparation de la partie ») : un carré
+   sombre, filet bleu, coins de 4 px, cerné de noir ; cochée, filet lavande sur fond violet, et la coche
+   lavande qui apparaît en grandissant */
+.checkbox {
+  appearance: none; -webkit-appearance: none; display: grid; place-content: center; flex: none;
+  width: 20px; height: 20px; margin: 1px 0 0; cursor: pointer;
+  border: 1px solid #34426c; border-radius: 4px; background: rgb(13 16 37 / .5);
+  box-shadow: 0 0 0 2px rgb(0 0 0 / .25);
+  transition: background-color 150ms ease, border-color 150ms ease;
+}
+.checkbox::before {
+  content: ''; width: 12px; height: 12px; background: #c2c3fd;
+  clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0, 43% 62%);
+  transform: scale(0); transition: transform 160ms var(--ease-out);
+}
+.checkbox:checked { border-color: #c2c3fd; background: rgb(48 51 101 / .85); }
+.checkbox:checked::before { transform: none; }
+@media (hover: hover) and (pointer: fine) {
+  /* la case ou son libellé survolés : le filet passe au violet */
+  .checkbox:not(:checked):hover, .check:has(.check-label:hover) .checkbox:not(:checked) { border-color: #6567c6; }
+}
 .checkbox:focus-visible { outline: 2px solid var(--yellow); outline-offset: 2px; }
-.checkbox[aria-invalid='true'] { outline: 1px solid var(--danger); outline-offset: 2px; }
+.checkbox[aria-invalid='true'] { border-color: var(--danger); }
+@media (prefers-reduced-motion: reduce) {
+  .checkbox::before { transition: none; }
+}
 .check-label { line-height: 1.45; color: var(--muted); cursor: pointer; }
 .check .error { grid-column: 2; }
 

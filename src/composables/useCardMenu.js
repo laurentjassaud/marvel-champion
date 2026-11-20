@@ -51,7 +51,7 @@ export function useCardMenu() {
     // une carte d'une pioche est face cachée, mais sa fenêtre la montre : son menu la nomme et la montre
     const isKnown = !card.isPawn && (card.faceUp || card.zone === 'hand' || inPileWindow)
     let title = 'Carte face cachée'
-    if (card.isPawn) title = 'Pion'
+    if (card.isPawn) title = cardName(card)
     else if (isKnown) title = cardName(card)
     // cardId : la carte, montrée en grand à côté du menu sur écran tactile, où l'aperçu de côté est petit
     ui.openContextMenu({ x, y, title, items: withoutExtraSeparators(items), cardId: isKnown ? card.id : null })

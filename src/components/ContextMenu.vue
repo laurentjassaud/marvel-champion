@@ -18,16 +18,18 @@ const menuCard = computed(() => {
   return card ? printedCard(card) : null
 })
 
-// garde le menu dans l'écran, puis donne le focus à sa première ligne
+// garde le menu dans l'écran, puis donne le focus à sa première ligne. Sa taille de mise en page (offsetWidth,
+// offsetHeight), et non celle qu'il a à l'écran : il apparaît légèrement réduit (main.css, @starting-style), et
+// mesuré ainsi il dépasserait de quelques pixels une fois à sa taille
 watch(() => ui.contextMenu, async menu => {
   if (!menu) return
   position.x = menu.x
   position.y = menu.y
   await nextTick()
   if (!menuElement.value) return
-  const rect = menuElement.value.getBoundingClientRect()
-  position.x = Math.max(4, Math.min(menu.x, innerWidth - rect.width - 8))
-  position.y = Math.max(4, Math.min(menu.y, innerHeight - rect.height - 8))
+  const { offsetWidth: width, offsetHeight: height } = menuElement.value
+  position.x = Math.max(4, Math.min(menu.x, innerWidth - width - 8))
+  position.y = Math.max(4, Math.min(menu.y, innerHeight - height - 8))
   menuElement.value.querySelector('button')?.focus()
 })
 

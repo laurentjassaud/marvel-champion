@@ -15,11 +15,14 @@ import PlayerDock from './components/PlayerDock.vue'
 import SideTabs from './components/SideTabs.vue'
 import SideResizer from './components/SideResizer.vue'
 import ContextMenu from './components/ContextMenu.vue'
+import PawnTray from './components/PawnTray.vue'
 import SetupModal from './components/modals/SetupModal.vue'
 import PileModal from './components/modals/PileModal.vue'
 import MulliganModal from './components/modals/MulliganModal.vue'
 import HelpModal from './components/modals/HelpModal.vue'
 import SignupModal from './components/modals/SignupModal.vue'
+import LegalModal from './components/modals/LegalModal.vue'
+import AboutModal from './components/modals/AboutModal.vue'
 import RestartModal from './components/modals/RestartModal.vue'
 import VillainModal from './components/modals/VillainModal.vue'
 import SchemeModal from './components/modals/SchemeModal.vue'
@@ -46,9 +49,11 @@ onMounted(() => { if (!gameStore.isReady) gameStore.startExampleGame() })
 </script>
 
 <template>
-  <div class="app">
-    <!-- derrière tout le reste, sans rien capter -->
-    <VillainBackdrop />
+  <!-- « Lancer la partie » (ui.launchGame) : scene-out pendant la sortie, scene-in pendant l'entrée de la
+       table (main.css, « changement de scène ») -->
+  <div class="app" :class="{ 'scene-out': ui.scene === 'out', 'scene-in': ui.scene === 'in', 'under-intro': ui.introOpen }">
+    <!-- derrière tout le reste, sans rien capter ; il refait son entrée avec la table (sceneCount) -->
+    <VillainBackdrop :key="ui.sceneCount" />
     <TopBar :inert="ui.introOpen" />
     <!-- --side : la largeur de la colonne de droite, une fois son bord gauche glissé -->
     <main class="mid" :inert="ui.introOpen" :style="ui.sideColumnWidth ? { '--side': `${ui.sideColumnWidth}px` } : null">
@@ -74,16 +79,20 @@ onMounted(() => { if (!gameStore.isReady) gameStore.startExampleGame() })
     </main>
     <PlayerDock :inert="ui.introOpen" />
 
-    <!-- la page d'accueil, par-dessus la table et sous les fenêtres (« Scénarios » ouvre « Nouvelle partie ») -->
-    <Transition name="fade-intro">
+    <!-- la page d'accueil, par-dessus la table et sous les fenêtres (« Scénarios » ouvre « Nouvelle partie ») ;
+         après « Lancer la partie », elle a déjà disparu (sa sortie) : retirée aussitôt, sans fondu -->
+    <Transition name="fade-intro" :css="ui.scene !== 'in'">
       <IntroScreen v-if="ui.introOpen" />
     </Transition>
     <ContextMenu />
+    <PawnTray />
     <SetupModal v-if="ui.modal?.type === 'setup'" />
     <PileModal v-else-if="ui.modal?.type === 'pile'" :key="ui.modal.zone" :zone="ui.modal.zone" />
     <MulliganModal v-else-if="ui.modal?.type === 'mulligan' && gameStore.isReady" />
     <HelpModal v-else-if="ui.modal?.type === 'help'" />
     <SignupModal v-else-if="ui.modal?.type === 'signup'" />
+    <LegalModal v-else-if="ui.modal?.type === 'legal'" />
+    <AboutModal v-else-if="ui.modal?.type === 'about'" />
     <RestartModal v-else-if="ui.modal?.type === 'restart' && gameStore.isReady" />
     <!-- une clé par changement présenté (la fenêtre repart de zéro pour le suivant), préfixée : deux branches
          d'un même v-if ne peuvent pas avoir la même clé -->

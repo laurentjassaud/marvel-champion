@@ -115,12 +115,12 @@ onBeforeUnmount(() => { if (DECK_PILES.includes(props.zone)) gameStore.shuffleAf
     <template #actions>
       <!-- défausse du joueur ou Rencontre : tout remélanger dans le paquet, après confirmation (ReshuffleModal) -->
       <template v-if="DECK_OF_DISCARD[zone]">
-        <button type="button" class="slant" :disabled="!cards.length" @click="ui.openModal('reshuffle', { zone, fromPile: true })">
+        <button type="button" class="modal-btn" :disabled="!cards.length" @click="ui.openModal('reshuffle', { zone, fromPile: true })">
           Remélanger dans le paquet{{ zone === 'encounterDiscard' ? ' Rencontre' : '' }}…
         </button>
         <span class="sp" />
       </template>
-      <button type="button" class="slant red" @click="ui.closeModal()">Fermer</button>
+      <button type="button" class="modal-btn primary" @click="ui.closeModal()">Fermer</button>
     </template>
   </BaseModal>
 </template>

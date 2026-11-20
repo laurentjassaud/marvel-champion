@@ -3,15 +3,63 @@
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <!-- référencement : le titre (moins de 60 caractères) et la description (moins de 160) des résultats de
+         recherche, l'adresse canonique. __SITE_URL__, __SITE_ORIGIN__ et __DESCRIPTION__ sont remplis à la
+         construction (vite.config.js : SITE_URL, DESCRIPTION) -->
+    <title>Marvel Champions Table – le jeu de cartes en solo, en ligne</title>
+    <meta name="description" content="__DESCRIPTION__">
+    <link rel="canonical" href="__SITE_URL__">
+    <meta name="robots" content="index, follow, max-image-preview:large">
+    <meta name="application-name" content="Marvel Champions Table">
+    <meta name="apple-mobile-web-app-title" content="MC Table">
     <meta name="theme-color" content="#2b2c55">
-    <meta name="description" content="Table solo Marvel Champions : mise en place automatique, decks préconstruits, import OCTGN.">
-    <title>Marvel Champions</title>
+    <!-- l'aperçu d'un lien partagé (Open Graph : Facebook, Discord, WhatsApp, LinkedIn… ; X lit les mêmes balises) -->
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Gamebox Hero">
+    <meta property="og:locale" content="fr_FR">
+    <meta property="og:url" content="__SITE_URL__">
+    <meta property="og:title" content="Marvel Champions Table – le jeu de cartes en solo, en ligne">
+    <meta property="og:description" content="__DESCRIPTION__">
+    <meta property="og:image" content="__SITE_URL__og-image.jpg">
+    <meta property="og:image:type" content="image/jpeg">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="Le logo Marvel Champions Table sur une ville de nuit : le jeu de cartes en solo, en ligne, en français">
+    <meta name="twitter:card" content="summary_large_image">
     <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">
     <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
     <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
+    <!-- données structurées (schema.org) : une application web de jeu, gratuite, en français -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "Marvel Champions Table",
+        "url": "__SITE_URL__",
+        "description": "__DESCRIPTION__",
+        "image": "__SITE_URL__og-image.jpg",
+        "inLanguage": "fr",
+        "applicationCategory": "GameApplication",
+        "applicationSubCategory": "Jeu de cartes",
+        "operatingSystem": "Navigateur web : ordinateur, tablette, téléphone",
+        "browserRequirements": "JavaScript",
+        "isAccessibleForFree": true,
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" },
+        "publisher": { "@type": "Organization", "name": "Gamebox Hero", "url": "__SITE_ORIGIN__/" }
+      }
+    </script>
   </head>
   <body>
     <div id="app"></div>
+    <!-- sans JavaScript (certains robots d'indexation, navigateurs bridés) : de quoi savoir ce qu'est la page -->
+    <noscript>
+      <div style="max-width: 40rem; margin: 15vh auto; padding: 0 16px; font: 16px/1.5 sans-serif; color: #c2c3fd;">
+        <h1 style="margin: 0 0 12px; color: #fff;">Marvel Champions Table</h1>
+        <p>Le jeu de cartes Marvel Champions en solo, en ligne et en français : mise en place automatique, decks
+          préconstruits, règles assistées. Gratuit, dans votre navigateur, sur ordinateur, tablette ou téléphone.</p>
+        <p>Activez JavaScript pour jouer.</p>
+      </div>
+    </noscript>
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

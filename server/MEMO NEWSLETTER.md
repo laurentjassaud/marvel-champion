@@ -24,11 +24,12 @@ Les mails partent par le serveur d'envoi d'OVH (`ssl0.ovh.net`), avec le compte 
 | `private/bin/mailing.php` | `/home/prod/gamebox-private/bin/` | envoi de la newsletter |
 | `private/bin/signups.php` | `/home/prod/gamebox-private/bin/` | consulter et gérer les inscrits |
 | `private/templates/*.html` | `/home/prod/gamebox-private/templates/` | mail de confirmation et newsletters |
+| `public/mail/*` | `/home/prod/WWW/base/mail/` | images du mail de confirmation (fond de l'en-tête, logo) et de la page de désinscription (le fond), servies sur `https://www.gameboxheroes.fr/mail/` |
 | `private/vendor/` | `/home/prod/gamebox-private/vendor/` | PHPMailer |
 | *(pas dans le dépôt)* `config.php` | `/home/prod/gamebox-private/` | réglages et secrets |
 | *(pas dans le dépôt)* `data/` | `/home/prod/gamebox-private/data/` | la base des inscrits |
 
-- L'appli est en ligne sur `https://gameboxheroes.fr/marvel-champions/`.
+- L'appli est en ligne sur `https://www.gameboxheroes.fr/marvel-champions-table/`.
 - Le dossier `server/` existe en deux exemplaires : dans le dépôt `marvel-champion` et dans le dépôt `home`. Toute modification doit être reportée dans les deux.
 - **Pour mettre à jour le script**, dépose les fichiers modifiés avec WinSCP aux emplacements du tableau. Pas besoin de redémarrer quoi que ce soit.
 
@@ -66,7 +67,7 @@ Le premier doit afficher `No syntax errors detected`. Le second vérifie que la 
 - `<title>` devient le sujet du mail.
 - Le bloc caché après `<body>` est le texte d'aperçu, affiché à côté du sujet.
 - Variables possibles : `{{prenom}}`, `{{nom}}`, `{{email}}`, et `{{desinscription}}`, le lien de désinscription, à garder dans le pied de page.
-- Pour les images, mieux vaut des adresses en `https://gameboxheroes.fr/...`. Une image en chemin relatif est jointe au mail.
+- Pour les images, mieux vaut des adresses en `https://www.gameboxheroes.fr/...` (le dossier `public/mail/`, déposé dans `WWW/base/mail/`, sert à ça). Une image en chemin relatif est jointe au mail.
 
 Dépose le fichier dans `/home/prod/gamebox-private/templates/`.
 
@@ -166,7 +167,8 @@ for p in 465 587; do timeout 5 bash -c "</dev/tcp/ssl0.ovh.net/$p" 2>/dev/null &
 - [ ] **Changer le mot de passe de `contact@`** chez OVH (il est apparu sur une capture), puis le reporter dans `config.php`.
 - [ ] **DKIM** : espace client OVH → Web Cloud → E-mails → gameboxheroes.fr → activer DKIM.
 - [ ] **DMARC** : Zone DNS de gameboxheroes.fr → ajouter une entrée TXT, sous-domaine `_dmarc`, valeur `v=DMARC1; p=none`.
-- [ ] **Politique de confidentialité** : la rédiger, puis passer son adresse au formulaire (`privacy-url`).
+- [x] **Politique de confidentialité** : rédigée dans l'appli Marvel (fenêtre « Mentions légales », `src/components/LegalNotice.vue`) et reliée au formulaire (« Vos données et vos droits »). À tenir à jour si les données collectées, les prestataires ou la durée de conservation changent.
+- [ ] **Durée de conservation** : les mentions légales annoncent « jusqu'à la désinscription, ou 3 ans après le dernier contact ». Le script ne purge rien de lui-même : une fois par an, supprimer avec `bin/signups.php supprimer` les inscrits dont l'inscription date de plus de 3 ans.
 - [ ] **Un seul exemplaire de `server/`** : choisir entre le dépôt `marvel-champion` et le dépôt `home`.
 
 ## Tester le script sur ton PC

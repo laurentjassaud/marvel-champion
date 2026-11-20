@@ -57,14 +57,15 @@ export const useGameStore = defineStore('game', () => {
   /**
    * L'affiche de la partie, pour la barre du haut : {hero, villain, expert} ("Spider-Man", "Rhino II", true).
    * Le méchant est celui en cours, avec son étape (le nom de son compteur) ; Les Démolisseurs, à quatre,
-   * gardent le nom du scénario. Une difficulté tirée au hasard n'est pas dévoilée. null sans partie.
+   * gardent le nom du scénario. Une partie en expert a toujours son badge Expert, même quand la difficulté a
+   * été tirée au hasard. null sans partie.
    */
   const matchup = computed(() => {
     const setup = game.value?.setup
     if (!setup) return null
     const scenario = SCENARIOS.find(candidate => candidate.id === setup.scenario)
     const currentVillain = game.value.crew ? null : game.value.counters?.[1]?.label
-    return { hero: heroName(setup.hero), villain: currentVillain || scenario?.villainName || '', expert: !!setup.expert && !setup.randomChoices?.includes('expert') }
+    return { hero: heroName(setup.hero), villain: currentVillain || scenario?.villainName || '', expert: !!setup.expert }
   })
   /** La même affiche en une phrase : "Spider-Man contre Rhino · expert". */
   const subtitle = computed(() => {
@@ -130,8 +131,10 @@ export const useGameStore = defineStore('game', () => {
 
   /** Commence une nouvelle partie (options : voir engine/setup.js newGame) et vide la sélection. */
   function newGame(options) {
-    // le décor du méchant de la nouvelle partie, pas celui de la partie qu'elle remplace
-    game.value = Engine.newGame(options, ui.layout(options.scenario))
+    // le décor du méchant de la nouvelle partie, pas celui de la partie qu'elle remplace : un méchant tiré au
+    // hasard l'est avant de disposer la table
+    const drawn = Engine.drawRandomHeroAndScenario(options)
+    game.value = Engine.newGame(drawn, ui.layout(drawn.scenario))
     ui.selectCard(null)
     ui.preview = null
     ui.randomlyPickedCardId = null
@@ -241,7 +244,8 @@ export const useGameStore = defineStore('game', () => {
     mulligan: cardIds => run(Engine.mulligan, layout(), cardIds),
 
     /* ---------- table ---------- */
-    addPawn: () => run(Engine.addPawn, layout()),
+    /** Pose un pion de cette sorte (PAWN_KINDS) : à `spot` ({x, y} sur la table), sinon au milieu ; rend le pion. */
+    addPawn: (pawnId, spot) => run(Engine.addPawn, layout(), pawnId, spot),
     keepCardsOnTable: () => run(Engine.keepCardsOnTable, layout()),
     // une manigance qui sort du jeu peut reprendre au méchant des PV qui le gardaient en vie (Klaw
     // « l'Immortel ») : sa défaite est présentée

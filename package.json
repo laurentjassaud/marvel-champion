@@ -1,9 +1,9 @@
 {
   "name": "marvel-champions-table",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Table solo Marvel Champions (boîte de base, VF) en Vue 3 — mise en place automatique, decks préconstruits, import OCTGN .o8d.",
+  "description": "Table solo Marvel Champions (boîte de base, VF) en Vue 3 — mise en place automatique, decks préconstruits, règles assistées.",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

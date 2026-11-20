@@ -1,8 +1,10 @@
 // Souris, doigt et stylet, gérés de la même façon et en un seul endroit (écouteurs posés sur le document) :
 // glisser-déposer entre les zones, toucher, double-clic / double toucher, aperçu au survol, menu au clic
-// droit ou à l'appui long. Les cartes portent l'attribut data-id, les zones où l'on dépose data-zone.
+// droit ou à l'appui long. Les cartes portent l'attribut data-id, les zones où l'on dépose data-zone, les
+// pions de la liste « Pions » (PawnTray), qu'on glisse sur la table pour les y poser, data-pawn.
 
 import { onMounted, onBeforeUnmount } from 'vue'
+import { PAWN_KIND_BY_ID } from '../game/data.js'
 import { useGameStore } from '../stores/game.js'
 import { useUiStore } from '../stores/ui.js'
 import { useZoneActions } from './useZoneActions.js'
@@ -32,7 +34,7 @@ export function usePointer() {
 
   /** Appui du pointeur principal, pas encore devenu un glisser. */
   let press = null
-  /** Glisser en cours : {cardElement, card, ghost, offsetX, offsetY, pointerId…}. */
+  /** Glisser en cours : {cardElement, card, ghost, offsetX, offsetY, pointerId…}, ou pour un nouveau pion {pawnId, ghost…}. */
   let drag = null
   /** Dernier toucher {cardId, time, x, y} : pour reconnaître un double toucher (doigt et stylet). */
   let lastTap = null
@@ -50,8 +52,9 @@ export function usePointer() {
     return card ? { element, card } : null
   }
   // l'appui long agit comme un clic droit sur toute carte (aussi dans une fenêtre de pile), sur les pioches
-  // et les défausses ; la main elle-même s'appuie, pour qu'un doigt la fasse défiler depuis les espaces vides
-  const pressableUnder = target => target.closest?.(`.card, .hand-row, ${PILE_SELECTOR}`)
+  // et les défausses ; la main elle-même s'appuie, pour qu'un doigt la fasse défiler depuis les espaces vides ;
+  // un pion de la liste « Pions » s'appuie pour être glissé
+  const pressableUnder = target => target.closest?.(`.card, .hand-row, [data-pawn], ${PILE_SELECTOR}`)
   // Doigt et stylet : une main qui déborde défile de côté sous le doigt. On la fait défiler nous-mêmes : un
   // défilement natif qui atteint le bout de la rangée peut devenir le geste « page précédente » du navigateur.
   const scrollableHandUnder = target => {
@@ -84,6 +87,13 @@ export function usePointer() {
     if (!event.isPrimary || event.button !== 0) return
     const target = pressableUnder(event.target)
     if (!target || target.closest('.menu')) return
+    // un pion de la liste « Pions » : un glisser le pose sur la table ; un simple toucher, son bouton s'en charge
+    // (au milieu de la table). Pas d'appui long : on peut le tenir avant de le tirer
+    const pawnSource = target.closest('[data-pawn]')
+    if (pawnSource) {
+      press = { pawnSource, hit: null, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, longPressTimer: null }
+      return
+    }
     const hit = cardUnder(event.target)
     // la carte appuyée est sélectionnée tout de suite (filet jaune), sans attendre que le bouton remonte
     if (hit) ui.selectCard(hit.card.id)
@@ -130,6 +140,19 @@ export function usePointer() {
     press = null
   }
 
+  /** Un pion de la liste « Pions » quitte la liste : son image, à sa taille sur la table, suit le pointeur par son milieu. */
+  function startPawnDrag() {
+    const pawnId = press.pawnSource.dataset.pawn
+    const [width, height] = (PAWN_KIND_BY_ID[pawnId]?.size ?? [0.4, 0.4]).map(size => size * ui.cardWidth)
+    const ghost = document.createElement('div')
+    ghost.className = 'ghost pawn-ghost'
+    Object.assign(ghost.style, { width: `${width}px`, height: `${height}px` })
+    ghost.append(press.pawnSource.querySelector('img').cloneNode())
+    document.body.appendChild(ghost)
+    drag = { ...press, pawnId, ghost, offsetX: width / 2, offsetY: height / 2 }
+    press = null
+  }
+
   function onPointerMove(event) {
     if (press && event.pointerId === press.pointerId) {
       const deltaX = event.clientX - press.startX
@@ -143,14 +166,17 @@ export function usePointer() {
         press.scrollRow.scrollLeft = press.scrollStart - deltaX
         return
       }
+      if (press.pawnSource) startPawnDrag()
       // une pile, une carte dans une fenêtre de pile ou la main ne se glissent pas : bouger annule seulement l'appui long
-      if (!press.hit) { clearTimeout(press.longPressTimer); press = null; return }
-      startDrag()
+      else if (!press.hit) { clearTimeout(press.longPressTimer); press = null; return }
+      else startDrag()
     }
     if (!drag || event.pointerId !== drag.pointerId) return
     drag.ghost.style.transform = `translate(${event.clientX - drag.offsetX}px, ${event.clientY - drag.offsetY}px)`
     clearDropHighlight()
-    zoneElementAt(event.clientX, event.clientY)?.classList.add('over')
+    // un pion ne se pose que sur la table : seule elle s'éclaire sous lui
+    const zoneElement = zoneElementAt(event.clientX, event.clientY)
+    if (zoneElement && (!drag.pawnId || zoneElement.dataset.zone === 'table')) zoneElement.classList.add('over')
   }
 
   function onPointerUp(event) {
@@ -184,8 +210,12 @@ export function usePointer() {
     const finished = drag
     drag = null
     finished.ghost.remove()
-    finished.cardElement.style.opacity = ''
+    if (finished.cardElement) finished.cardElement.style.opacity = ''
     clearDropHighlight()
+    if (finished.pawnId) {
+      dropPawn(finished, event)
+      return
+    }
     const zoneElement = zoneElementAt(event.clientX, event.clientY)
     if (!zoneElement) return
     const zone = zoneElement.dataset.zone
@@ -211,12 +241,28 @@ export function usePointer() {
     ui.selectCard(card.id)
   }
 
+  /**
+   * Un pion lâché sur la table s'y pose, à l'endroit lâché (le moteur le garde entier sur la table), et est
+   * sélectionné ; lâché ailleurs, ou rendu à la liste, il n'est pas posé.
+   */
+  function dropPawn(finished, event) {
+    if (document.elementFromPoint(event.clientX, event.clientY)?.closest('.pawn-tray')) return
+    const tableElement = zoneElementAt(event.clientX, event.clientY)
+    if (tableElement?.dataset.zone !== 'table') return
+    const tableRect = tableElement.getBoundingClientRect()
+    const pawn = gameStore.addPawn(finished.pawnId, {
+      x: event.clientX - tableRect.left - finished.offsetX,
+      y: event.clientY - tableRect.top - finished.offsetY
+    })
+    if (pawn) ui.selectCard(pawn.id)
+  }
+
   function onPointerCancel() {
     if (press) clearTimeout(press.longPressTimer)
     press = null
     if (!drag) return
     drag.ghost.remove()
-    drag.cardElement.style.opacity = ''
+    if (drag.cardElement) drag.cardElement.style.opacity = ''
     drag = null
     clearDropHighlight()
   }

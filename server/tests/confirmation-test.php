@@ -173,7 +173,7 @@ $mails = wait_inbox(1);
 check('un mail de confirmation', count($mails) === 1, (string) count($mails));
 $m = $mails[0] ?? ['headers' => [], 'body' => ''];
 check('destinataire', header_of($m, 'x-sink-rcpt') === 'peter@example.com', header_of($m, 'x-sink-rcpt'));
-check('sujet : le <title> du template', mb_decode_mimeheader(header_of($m, 'subject')) === 'Votre inscription aux nouvelles de Gamebox Hero');
+check('sujet : le <title> du template', mb_decode_mimeheader(header_of($m, 'subject')) === 'Votre inscription à Marvel Champions Table');
 check('expéditeur', str_contains(header_of($m, 'from'), 'nouvelles@gameboxheroes.fr'));
 $unsub = header_of($m, 'list-unsubscribe');
 check('List-Unsubscribe : lien signé vers la page de désinscription', (bool) preg_match('~^<http://127\.0\.0\.1:\d+/api/unsubscribe\.php\?u=1&t=[a-f0-9]{32}>$~', $unsub), $unsub);

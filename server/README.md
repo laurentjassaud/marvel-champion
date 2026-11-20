@@ -86,6 +86,7 @@ import SignupForm from './SignupForm.vue'
 ```
 
 Props : `source` (enregistrée avec l'adresse, utile si d'autres modules réutilisent le script), `title`, `intro`, `privacy-url`.
+Slot `privacy` : un autre lien à la place de celui de `privacy-url` (l'appli Marvel y met « Vos données et vos droits », qui affiche les mentions légales dans la fenêtre même).
 Événement : `@success="({ name, email }) => …"`.
 
 Le composant reprend la police et la couleur de texte de l'appli. Pour l'accorder au thème, surcharge ses variables :
@@ -236,9 +237,9 @@ Si le site passe derrière Cloudflare ou un reverse proxy, active `mod_remoteip`
 
 ## RGPD : ce qui reste à ta charge
 
-- **Politique de confidentialité** : y indiquer ce qui est collecté (nom, e-mail), pourquoi (envoyer les nouvelles de Gamebox Hero), combien de temps on le garde, et comment demander l'accès ou la suppression. Passe son URL au composant avec `privacy-url`.
+- **Politique de confidentialité** : rédigée dans l'appli Marvel (`src/components/LegalNotice.vue`), montrée par « Mentions légales » en bas de l'accueil et par « Vos données et vos droits » sous le formulaire. La tenir à jour si ce qui est collecté, les prestataires ou la durée de conservation changent.
 - **Désinscription** : gérée par `bin/mailing.php` et `api/unsubscribe.php` (partie 4). Si tu envoies un jour depuis un autre outil, il faudra y mettre un lien de désinscription.
-- **Durée de conservation** : pour ce type de liste, la CNIL recommande en général 3 ans après le dernier contact. Pour supprimer une adresse : `bin/signups.php supprimer`.
+- **Durée de conservation** : les mentions légales annoncent « jusqu'à la désinscription, ou 3 ans après le dernier contact », ce que recommande la CNIL pour ce type de liste. Le script ne purge rien de lui-même : supprime à la main les inscrits de plus de 3 ans avec `bin/signups.php supprimer`.
 
 ## Tests
 

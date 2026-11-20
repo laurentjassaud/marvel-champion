@@ -373,7 +373,7 @@ check('exemple : envoyé aux inscrits restants seulement', $code === 0 && array_
 check('exemple : aucun avertissement', !str_contains($out, 'Attention'), $out);
 $text = part_of($box[1], 'text/plain')['decoded'] ?? '';
 check('exemple : texte sans le texte d’aperçu caché', !str_contains($text, 'surprise pour les joueurs solo'), $text);
-check('exemple : texte avec liste et liens', str_contains($text, "Bonjour Jennifer,") && str_contains($text, '- De nouveaux decks') && str_contains($text, 'Lancer une partie (https://gameboxheroes.fr/)'), $text);
+check('exemple : texte avec liste et liens', str_contains($text, "Bonjour Jennifer,") && str_contains($text, '- De nouveaux decks') && str_contains($text, 'Lancer une partie (https://www.gameboxheroes.fr/marvel-champions-table/)'), $text);
 check('exemple : {{email}} dans le pied de page', str_contains(part_of($box[1], 'text/html')['decoded'] ?? '', '(jennifer@example.com)'));
 
 clear_inbox();

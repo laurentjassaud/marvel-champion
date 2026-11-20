@@ -8,6 +8,10 @@
  * Le GET ne désinscrit pas : les antivirus de messagerie ouvrent les liens des e-mails
  * et désinscriraient tout le monde. Le POST sert aussi au désabonnement en un clic des
  * messageries (en-tête List-Unsubscribe-Post, RFC 8058).
+ *
+ * Les pages suivent la maquette Figma (« Frame 12 » à « Frame 14 ») : le bleu nuit du mail de
+ * confirmation, son fond de comics en haut (/mail/fond-entete.jpg, du dossier public/mail),
+ * « MARVEL CHAMPIONS TABLE », le titre, puis une colonne de 580 px.
  */
 declare(strict_types=1);
 
@@ -19,7 +23,7 @@ header('Content-Type: text/html; charset=utf-8');
 header('Cache-Control: no-store');
 header('X-Content-Type-Options: nosniff');
 header('Referrer-Policy: no-referrer');
-header("Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'");
+header("Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'");
 
 function page(int $status, string $title, string $body): never
 {
@@ -32,20 +36,41 @@ function page(int $status, string $title, string $body): never
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="robots" content="noindex">
-        <title>$title · Gamebox Hero</title>
+        <title>$title · Marvel Champions Table</title>
         <style>
-          body { margin: 0; padding: 2rem 1rem; background: #14161d; color: #f1f1f1; font: 1rem/1.5 system-ui, sans-serif; }
-          main { max-width: 32rem; margin: 0 auto; }
-          h1 { font-size: 1.5rem; line-height: 1.2; }
-          .brand { margin: 0 0 2rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #ff6b6b; }
-          button { min-height: 2.75rem; padding: .6rem 1.25rem; border: 0; border-radius: 6px; background: #c8102e; color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+          /* le bleu nuit ; en haut, le fond de comics (960 × 460, qui s'y fond par le bas) et, sur un écran plus
+             large que lui, ses bords qui s'effacent aussi. Sur html, qui couvre toute la fenêtre (body n'est pas
+             plus haut que son texte) ; le texte à 42 px du haut, sur 580 px */
+          html {
+            background:
+              linear-gradient(to right, #02153a, rgb(2 21 58 / 0) 12%, rgb(2 21 58 / 0) 88%, #02153a) center top / 960px 460px no-repeat,
+              url('/mail/fond-entete.jpg') center top / 960px 460px no-repeat,
+              #02153a;
+          }
+          body { margin: 0; padding: 42px 20px 64px; color: #fff; font: 16px/1.35 Arial, Helvetica, sans-serif; }
+          main { max-width: 580px; margin: 0 auto; }
+          p { margin: 0; }
+          .brand { text-transform: uppercase; }
+          h1 { margin: 0; font-size: 40px; line-height: 1.35; font-weight: 700; }
+          .actions { margin-top: 31px; }
+          .back { margin-top: 22px; font-weight: 700; }
+          /* le bouton rouge des mails : 24 px tout autour, texte gras de 21 px */
+          button {
+            padding: 24px; border: 0; border-radius: 4px; background: #d94040; color: #fff;
+            font: 700 21px/1.35 Arial, Helvetica, sans-serif; cursor: pointer; transition: background-color 150ms ease;
+          }
+          button:hover { background: #c53434; }
           button:focus-visible, a:focus-visible { outline: 3px solid #ffd54f; outline-offset: 2px; }
           a { color: inherit; }
+          @media (max-width: 620px) {
+            body { padding-top: 32px; }
+            h1 { font-size: 32px; }
+          }
         </style>
         </head>
         <body>
         <main>
-        <p class="brand">Gamebox Hero</p>
+        <p class="brand">Marvel Champions Table</p>
         <h1>$title</h1>
         $body
         </main>
@@ -95,14 +120,14 @@ try {
 
     if ($method === 'POST') {
         delete_subscriber($pdo, $email);
-        page(200, 'Vous êtes désinscrit', "<p><strong>$safeEmail</strong> ne recevra plus les nouvelles de Gamebox Hero, "
+        page(200, 'Vous êtes désinscrit', "<p><strong>$safeEmail</strong> ne recevra plus les newsletters de MARVEL CHAMPIONS TABLE, "
             . 'et votre nom et votre adresse ont été effacés de notre liste.</p>'
-            . '<p><a href="/">Retour au site</a></p>');
+            . '<p class="back"><a href="/">Retour au site</a></p>');
     }
 
     $action = htmlspecialchars('?' . http_build_query(['u' => $id, 't' => $token]));
-    page(200, 'Se désinscrire', "<p>Vous ne recevrez plus les nouvelles de Gamebox Hero à l’adresse <strong>$safeEmail</strong>.</p>"
-        . "<form method=\"post\" action=\"$action\"><button type=\"submit\">Confirmer la désinscription</button></form>");
+    page(200, 'Se désinscrire', "<p>Vous ne recevrez plus les newsletters de MARVEL CHAMPIONS TABLE<br>à l’adresse $safeEmail.</p>"
+        . "<form method=\"post\" action=\"$action\" class=\"actions\"><button type=\"submit\">Confirmer la désinscription</button></form>");
 } catch (Throwable $e) {
     error_log('[gamebox-unsubscribe] ' . $e::class . ': ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
     page(500, 'Service indisponible', '<p>La désinscription n’a pas pu être enregistrée. Réessayez dans quelques minutes, '

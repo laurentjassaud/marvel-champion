@@ -431,8 +431,23 @@ export const ZONE_LABELS = {
   outOfGame: 'hors jeu' // étapes de méchant vaincues, manigances d'un Démolisseur vaincu : montrées nulle part
 }
 
-/** Couleurs des pions libres posés sur la table (bouton « + Pion »), utilisées tour à tour. */
-export const PAWN_COLORS = ['#d9705c', '#4f7fc9', '#6fbf73', '#d1a356', '#a77ad9']
+/**
+ * Les pions libres à poser sur la table (bouton « Pions » de la barre : on les glisse depuis sa liste, ou on
+ * en touche un) : `id` est aussi le champ card.pawn du pion posé ; son nom ; son image (public/pawns/,
+ * préparée par scripts/resize-tokens.py) ; sa taille sur la table, en largeurs de carte [largeur, hauteur].
+ * Les pions des parties plus anciennes n'ont pas de card.pawn : ce sont des ronds de couleur (card.color).
+ */
+export const PAWN_KINDS = [
+  { id: 'rose', label: 'Pion rose', file: 'rose.png', size: [0.42, 0.42] },
+  { id: 'vert', label: 'Pion vert', file: 'vert.png', size: [0.42, 0.42] },
+  { id: 'bleu', label: 'Pion bleu', file: 'bleu.png', size: [0.42, 0.42] },
+  { id: 'plus-un', label: 'Jeton +1', file: 'plus-un.png', size: [0.5, 0.6] },
+  { id: 'ready', label: 'Bulle « Ready !! »', file: 'ready.png', size: [0.9, 0.493] },
+  { id: 'shoot', label: 'Bulle « Shoot at me !! »', file: 'shoot-at-me.png', size: [1.25, 0.473] }
+]
+export const PAWN_KIND_BY_ID = Object.fromEntries(PAWN_KINDS.map(kind => [kind.id, kind]))
+/** Taille d'un pion sur la table, en largeurs de carte : celle de sa sorte, ou le rond des anciennes parties. */
+export const pawnSize = card => PAWN_KIND_BY_ID[card.pawn]?.size ?? [0.4, 0.4]
 
 /**
  * Cartes d'état qu'un personnage peut porter : `id` est aussi le nom du champ booléen sur la carte en

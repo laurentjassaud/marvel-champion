@@ -1,36 +1,44 @@
 <script setup>
-// La fenêtre « Nouvelle partie » (maquette Figma « Préparation de la partie ») : trois hexagones, le héros puis,
-// après le VS, le méchant et le set modulaire. Ils sont vides (« ? ») à l'ouverture ; celui de l'étape en cours
-// porte deux anneaux. Choisir une vignette remplit son hexagone du portrait et passe à l'étape suivante encore
-// vide ; un appui sur un hexagone revient à son étape. La difficulté se règle au pied, à gauche ; « Lancer la
-// partie » s'allume quand les trois hexagones sont remplis.
+// La fenêtre « Nouvelle partie » (maquette Figma « Préparation de la partie », 2e version). Dans l'en-tête,
+// les trois étapes (le héros, le méchant, le set modulaire), vides à l'ouverture, et la difficulté à droite.
+// Dessous, les onglets des étapes et la grille de leurs choix. Choisir une case remplit son étape du portrait
+// et passe à l'étape suivante encore vide ; un appui sur une étape ou un onglet y revient. Au pied, à gauche,
+// l'affiche des choix faits (« Spider-Man vs Rhino + Alerte à la bombe »), ou le nom de la case survolée ;
+// « Lancer la partie » s'allume quand les trois étapes sont remplies.
+// Chaque étape a sa case « Au hasard » : le héros (avec son deck préconstruit) et le méchant sont tirés au
+// lancement (engine/setup.js), le set modulaire à la mise en place, gardé secret. L'import d'un deck
+// personnalisé (fichier .o8d ou .txt, lien MarvelCDB) est retiré de la fenêtre en attendant sa version 2 ; le
+// moteur sait toujours le lire (engine/deckImport.js, game/marvelcdb.js).
 // Seuls les héros, scénarios et sets modulaires des boîtes proposées (AVAILABLE_PACKS, data.js) y figurent.
 import { reactive, ref, computed, watch, nextTick, onMounted } from 'vue'
 import BaseModal from './BaseModal.vue'
 import SetupHex from './setup/SetupHex.vue'
 import PortraitChoice from './setup/PortraitChoice.vue'
-import DiceIcon from './setup/DiceIcon.vue'
 import { portraitOf } from './setup/portraits.js'
-import vsUrl from '../../assets/setup/vs-dim.svg'
+import heroIconUrl from '../../assets/setup/icon-hero.svg'
+import villainIconUrl from '../../assets/setup/icon-villain.svg'
+import modularIconUrl from '../../assets/setup/icon-modular.svg'
 import {
-  HEROES, SCENARIOS, MODULAR_SETS, AVAILABLE_HEROES, AVAILABLE_SCENARIOS, AVAILABLE_MODULAR_SETS, DEFINITION_BY_ID, heroName
+  HEROES, SCENARIOS, MODULAR_SETS, AVAILABLE_HEROES, AVAILABLE_SCENARIOS, AVAILABLE_MODULAR_SETS, heroName
 } from '../../game/data.js'
 import { scenarioRules } from '../../game/rules.js'
-import { fetchMarvelCdbDeck } from '../../game/marvelcdb.js'
 import { useGameStore } from '../../stores/game.js'
 import { useUiStore } from '../../stores/ui.js'
 
 const gameStore = useGameStore()
 const ui = useUiStore()
 
-/** Les trois étapes, dans l'ordre des hexagones. */
+/**
+ * Les trois étapes, dans l'ordre ; l'icône de leur onglet (maquette : 25,8 × 28,9, 26 × 28 et 30,4 × 33,6 px),
+ * dessinée en masque pour prendre la couleur de l'onglet.
+ */
 const STEPS = [
-  { id: 'hero', name: 'Héros', title: 'Choix du héros' },
-  { id: 'villain', name: 'Méchant', title: 'Choix du méchant' },
-  { id: 'modular', name: 'Set modulaire', title: 'Choix du set modulaire' }
+  { id: 'hero', name: 'Héros', icon: { mask: `url("${heroIconUrl}")`, width: 25.791, height: 28.891 } },
+  { id: 'villain', name: 'Méchant', icon: { mask: `url("${villainIconUrl}")`, width: 25.982, height: 28 } },
+  { id: 'modular', name: 'Set modulaire', icon: { mask: `url("${modularIconUrl}")`, width: 30.441, height: 33.609 } }
 ]
 const DIFFICULTIES = [
-  { id: 'standard', label: 'Standard', title: 'Étapes I et II du méchant, set Standard' },
+  { id: 'standard', label: 'Normal', title: 'Mode standard : étapes I et II du méchant, set Standard' },
   { id: 'expert', label: 'Expert', title: 'Étapes II et III du méchant, set Expert' },
   { id: 'random', label: 'Hasard', title: 'Standard ou expert, tiré à la mise en place' }
 ]
@@ -43,9 +51,9 @@ const direction = ref(1)
 /** La partie en cours : seule sa difficulté est reprise, les hexagones s'ouvrent vides. */
 const previousSetup = gameStore.game?.setup ?? {}
 const form = reactive({
-  /** Identifiant du héros (son deck préconstruit), 'import' (le deck personnalisé), ou null : à choisir. */
-  deckChoice: null,
-  /** Identifiant du scénario, ou null. */
+  /** Identifiant du héros (il joue son deck préconstruit), 'random' (tiré au lancement), ou null : à choisir. */
+  hero: null,
+  /** Identifiant du scénario, 'random' (tiré au lancement), ou null. */
   scenario: null,
   /** null : à choisir ; 'random' ; ou les sets modulaires choisis (autant que le scénario en prend). */
   modulars: null,
@@ -53,37 +61,21 @@ const form = reactive({
   difficulty: previousSetup.randomChoices?.includes('expert') ? 'random' : previousSetup.expert ? 'expert' : 'standard'
 })
 
-/* ---------- héros et deck personnalisé ---------- */
+/* ---------- héros, scénario et sets modulaires ---------- */
 
-/** Le deck personnalisé importé : {deckList, hero, label, cardCount, importedCount, unknownCount, missing}. */
-const importedDeck = ref(null)
-const errorMessage = ref('')
-/** Le panneau d'import (fichier, lien MarvelCDB), ouvert par la vignette « + ». */
-const showImport = ref(false)
 const heroOf = heroId => HEROES.find(hero => hero.id === heroId)
-const usesImportedDeck = computed(() => form.deckChoice === 'import' && !!importedDeck.value)
-const chosenHero = computed(() => (usesImportedDeck.value ? importedDeck.value.hero : form.deckChoice))
-/** "Mon deck : 40 cartes, dont 3 lues sur MarvelCDB…, 2 inconnues ignorées : …" */
-const importSummary = computed(() => {
-  const deck = importedDeck.value
-  const parts = [`${deck.cardCount} cartes`]
-  if (deck.importedCount) parts.push(`dont ${deck.importedCount} lue${deck.importedCount > 1 ? 's' : ''} sur MarvelCDB (images du site, en anglais)`)
-  if (deck.unknownCount) {
-    const names = deck.missing.slice(0, 4).join(', ') + (deck.missing.length > 4 ? '…' : '')
-    const plural = deck.unknownCount > 1 ? 's' : ''
-    parts.push(`${deck.unknownCount} inconnue${plural} ignorée${plural}${names ? ` : ${names}` : ''}`)
-  }
-  return `${deck.label} : ${parts.join(', ')}.`
-})
+/** Le détail d'une case « Au hasard », au pied quand on la survole. */
+const DRAWN_AT_LAUNCH = 'tiré au lancement'
 
-/* ---------- scénario et sets modulaires ---------- */
-
-/** Les sets modulaires conseillés d'un scénario : un, ou plusieurs (Crossbones 3, Crâne Rouge 2). */
+/**
+ * Les sets modulaires conseillés d'un scénario : un, ou plusieurs (Crossbones 3, Crâne Rouge 2). Un méchant
+ * tiré au hasard n'en conseille aucun, et prend un set.
+ */
 const advisedModularsOf = scenarioId => SCENARIOS.find(scenario => scenario.id === scenarioId)?.advisedModulars ?? []
 const modularsNeededBy = scenarioId => Math.max(1, advisedModularsOf(scenarioId).length)
 const chosenScenario = computed(() => SCENARIOS.find(scenario => scenario.id === form.scenario) ?? null)
 // plusieurs méchants à la fois (Les Démolisseurs) : pas de set modulaire
-const isCrew = computed(() => !!form.scenario && !!scenarioRules(form.scenario).crew)
+const isCrew = computed(() => !!chosenScenario.value && !!scenarioRules(chosenScenario.value.id).crew)
 const modularsNeeded = computed(() => modularsNeededBy(form.scenario))
 const pickedModulars = computed(() => (Array.isArray(form.modulars) ? form.modulars : []))
 const modularName = modularId => MODULAR_SETS.find(modular => modular.id === modularId)?.name ?? ''
@@ -92,7 +84,7 @@ const modularName = modularId => MODULAR_SETS.find(modular => modular.id === mod
 
 /** Chaque étape est-elle faite (son hexagone rempli) ? */
 const doneSteps = computed(() => [
-  !!form.deckChoice,
+  !!form.hero,
   !!form.scenario,
   isCrew.value || form.modulars === 'random' || (pickedModulars.value.length > 0 && pickedModulars.value.length === modularsNeeded.value)
 ])
@@ -109,9 +101,8 @@ function goToNextOpenStep() {
   if (open !== undefined) goTo(open)
 }
 
-function pickHero(deckChoice) {
-  form.deckChoice = deckChoice
-  showImport.value = false
+function pickHero(heroId) {
+  form.hero = heroId
   goToNextOpenStep()
 }
 function pickScenario(scenarioId) {
@@ -130,13 +121,16 @@ function pickModular(modularId) {
   if (doneSteps.value[2]) goToNextOpenStep()
 }
 
-/** Ce que montre chaque hexagone. */
+/** Ce que montre chaque étape ; un choix « au hasard » y montre « Hasard » à la place du portrait. */
 const hexes = computed(() => {
-  const heroValue = form.deckChoice ? heroName(chosenHero.value) : ''
+  const heroRandom = form.hero === 'random'
+  const villainRandom = form.scenario === 'random'
+  const heroValue = heroRandom ? 'au hasard' : form.hero ? heroName(form.hero) : ''
+  const villainValue = villainRandom ? 'au hasard' : chosenScenario.value?.villainName ?? ''
   const modularValue = isCrew.value ? 'aucun' : form.modulars === 'random' ? 'au hasard' : pickedModulars.value.map(modularName).join(', ')
   return [
-    { value: heroValue, ...(form.deckChoice ? portraitOf('hero', chosenHero.value) : {}) },
-    { value: chosenScenario.value?.villainName ?? '', ...(form.scenario ? portraitOf('villain', form.scenario) : {}) },
+    { value: heroValue, random: heroRandom, ...(form.hero && !heroRandom ? portraitOf('hero', form.hero) : {}) },
+    { value: villainValue, random: villainRandom, ...(chosenScenario.value ? portraitOf('villain', form.scenario) : {}) },
     {
       value: doneSteps.value[2] ? modularValue : '',
       random: form.modulars === 'random',
@@ -146,160 +140,151 @@ const hexes = computed(() => {
 })
 
 /**
- * L'affiche sous les hexagones, comme celle de la barre du haut : « Spider-Man vs Rhino + Alerte à la Bombe »,
- * au fil des choix. Des morceaux : {text, link} (link : le mot de liaison, plus discret).
+ * L'affiche du pied, comme celle de la barre du haut : « Spider-Man vs Rhino + Alerte à la Bombe », au fil des
+ * choix. Des morceaux : {text, link} (link : le mot de liaison, plus discret).
  */
 const matchup = computed(() => {
   const [hero, villain, modular] = hexes.value
   const parts = []
-  if (hero.value) parts.push({ text: hero.value })
-  if (villain.value) parts.push({ text: 'vs', link: true }, { text: villain.value })
+  if (hero.value) parts.push({ text: hero.random ? 'héros au hasard' : hero.value })
+  if (villain.value) parts.push({ text: 'vs', link: true }, { text: villain.random ? 'méchant au hasard' : villain.value })
   if (modular.value && !isCrew.value) parts.push({ text: '+', link: true }, { text: form.modulars === 'random' ? 'set au hasard' : modular.value })
   if (parts[0]?.link) parts.shift() // « vs Rhino » sans héros : le méchant seul
   return parts
 })
 
-/* ---------- import d'un deck ---------- */
+/* ---------- la grille et le pied ---------- */
+
+/** Dix cases par rangée, deux rangées au moins (maquette) : des cases vides complètent la dernière. */
+const COLUMNS = 10
+/** Nombre de cases de l'étape affichée : ses choix et sa case « Au hasard ». */
+const cellCount = computed(() => {
+  if (step.value === 0) return AVAILABLE_HEROES.length + 1
+  if (step.value === 1) return AVAILABLE_SCENARIOS.length + 1
+  return isCrew.value ? 0 : AVAILABLE_MODULAR_SETS.length + 1
+})
+const fillerCount = computed(() => Math.max(2 * COLUMNS, Math.ceil(cellCount.value / COLUMNS) * COLUMNS) - cellCount.value)
 
 /**
- * Un deck lu (fichier ou MarvelCDB) devient le deck personnalisé et remplit l'hexagone du héros ; un import
- * raté garde le précédent et affiche pourquoi. Rend true si le deck a été gardé.
- *   fallbackName  nom du deck s'il n'a pas de titre (nom du fichier, « Deck MarvelCDB »)
+ * La case survolée, ou qui a le focus au clavier : son nom et son détail ({label, detail}), montrés au pied à la
+ * place de l'affiche (les cases n'ont pas de légende). Un focus donné par le script, après un choix à la souris,
+ * ne compte pas : seul celui qui se voit (:focus-visible).
  */
-function keepImportedDeck({ deckList, hero, unknownCount, missing, title, heroName: marvelCdbHeroName }, fallbackName) {
-  if (!hero) {
-    errorMessage.value = marvelCdbHeroName
-      ? `Deck de ${marvelCdbHeroName} : ce héros n'est pas encore disponible sur la table.`
-      : 'Aucune identité reconnue dans ce deck. Choisis un fichier .o8d OCTGN (héros de la boîte de base) ou un export texte MarvelCDB (.txt) d\'un des héros disponibles.'
-    return false
-  }
-  // nombre d'exemplaires du deck (hors identité et obligation) qui remplissent la condition
-  const countCopies = condition => deckList.reduce((total, [definitionId, copies]) => {
-    const definition = DEFINITION_BY_ID[definitionId]
-    return total + (!['hero', 'obligation'].includes(definition.type) && condition(definition) ? copies : 0)
-  }, 0)
-  importedDeck.value = {
-    deckList, hero, label: title || fallbackName, unknownCount, missing,
-    cardCount: countCopies(() => true),
-    importedCount: countCopies(definition => definition.pack === 'marvelcdb') // cartes lues sur MarvelCDB, avec les images du site
-  }
-  errorMessage.value = ''
-  pickHero('import')
-  return true
-}
+const pointedChoice = ref(null)
+const pointing = (label, detail = '') => ({
+  pointerenter: () => { pointedChoice.value = { label, detail } },
+  pointerleave: () => { pointedChoice.value = null },
+  focus: event => { if (event.target.matches(':focus-visible')) pointedChoice.value = { label, detail } },
+  blur: () => { pointedChoice.value = null }
+})
+watch(step, () => { pointedChoice.value = null })
 
-// fichier .o8d d'OCTGN ou export texte de MarvelCDB (.txt)
-async function importDeckFile(event) {
-  const file = event.target.files[0]
-  event.target.value = '' // le même fichier peut être choisi à nouveau après une correction
-  if (file) keepImportedDeck(gameStore.parseDeckFile(await file.text()), file.name.replace(/\.[^.]+$/, ''))
-}
-
-// un deck MarvelCDB par son lien ou son numéro, lu dans l'API publique du site
-const marvelCdbLink = ref('')
-const isImporting = ref(false)
-async function importMarvelCdbDeck() {
-  if (isImporting.value || !marvelCdbLink.value.trim()) return
-  isImporting.value = true
-  errorMessage.value = ''
-  try {
-    if (keepImportedDeck(await fetchMarvelCdbDeck(marvelCdbLink.value), 'Deck MarvelCDB')) marvelCdbLink.value = ''
-  } catch (error) {
-    errorMessage.value = error.message
-  } finally {
-    isImporting.value = false
-  }
+/** Les onglets au clavier (rôle tablist) : les flèches passent à l'étape voisine, Début et Fin aux extrémités. */
+let focusTabAfterStep = false
+function onTabKey(event) {
+  const target = { ArrowRight: step.value + 1, ArrowLeft: step.value - 1, Home: 0, End: STEPS.length - 1 }[event.key]
+  if (target === undefined) return
+  event.preventDefault()
+  const next = (target + STEPS.length) % STEPS.length
+  if (next === step.value) return
+  focusTabAfterStep = true
+  goTo(next)
 }
 
 /* ---------- lancement ---------- */
 
-/** « Lancer la partie » : la nouvelle partie, avec les trois choix et la difficulté. */
+/**
+ * « Lancer la partie » : la nouvelle partie, avec les trois choix et la difficulté. Un héros ou un méchant
+ * « au hasard » est passé tel quel : le moteur le tire (engine/setup.js, drawRandomHeroAndScenario).
+ * La fenêtre et l'accueil (ou la partie en cours) s'en vont d'abord ; la partie est mise en place sur l'écran
+ * vide, puis la table entre (ui.launchGame).
+ */
 function startGame() {
   if (!isReady.value) return
-  gameStore.newGame({
-    hero: chosenHero.value,
-    deckList: usesImportedDeck.value ? importedDeck.value.deckList : gameStore.preconDeck(chosenHero.value),
+  const randomHero = form.hero === 'random'
+  const options = {
+    hero: form.hero,
+    deckList: randomHero ? null : gameStore.preconDeck(form.hero),
     scenario: form.scenario,
     modulars: isCrew.value ? [] : form.modulars === 'random' ? 'random' : [...form.modulars],
     expert: form.difficulty === 'random' ? 'random' : form.difficulty === 'expert',
-    deckLabel: usesImportedDeck.value ? importedDeck.value.label : `précon ${heroOf(chosenHero.value).aspect}`
-  })
-  ui.closeModal()
-  ui.closeIntro() // ouverte depuis l'accueil (« Scénarios ») : la nouvelle partie apparaît
+    deckLabel: randomHero ? null : `précon ${heroOf(form.hero).aspect}`
+  }
+  ui.launchGame(() => gameStore.newGame(options))
 }
 
 /* ---------- focus ---------- */
 
-// à l'ouverture et à chaque étape, le focus va au choix fait de l'étape, sinon à sa première vignette :
-// au clavier, on enchaîne les trois choix sans chercher où l'on est
-// (l'étape qui arrive : celle qui part est encore là le temps de son fondu, avec une classe « …-leave-… »)
+// à l'ouverture et à chaque étape, le focus va au choix fait de l'étape, sinon à sa première case : au
+// clavier, on enchaîne les trois choix sans chercher où l'on est ; après une flèche sur les onglets, il reste
+// sur l'onglet (l'étape qui arrive : celle qui part est encore là le temps de son fondu, avec une classe « …-leave-… »)
 const stageElement = ref(null)
 function focusChoice() {
   const panel = stageElement.value?.querySelector('.panel:not([class*="-leave-"])')
-  const choice = panel?.querySelector('.choice[aria-pressed="true"]') ?? panel?.querySelector('.choice')
+  const choice = panel?.querySelector('button.choice[aria-pressed="true"]') ?? panel?.querySelector('button.choice')
   choice?.focus({ preventScroll: true })
 }
 onMounted(focusChoice)
 watch(step, async () => {
   await nextTick()
-  focusChoice()
+  if (focusTabAfterStep) document.getElementById(`setup-tab-${step.value}`)?.focus()
+  else focusChoice()
+  focusTabAfterStep = false
 })
 </script>
 
 <template>
   <BaseModal title="Préparation de la partie" wide>
-    <div class="setup">
-      <!-- les trois hexagones : héros, VS, méchant, set modulaire -->
-      <ol class="hexes" aria-label="Étapes de la mise en place">
-        <li v-for="(hex, index) in hexes" :key="hex.id">
-          <SetupHex :name="hex.name" :value="hex.value" :done="hex.done" :active="step === index" :image-url="hex.imageUrl"
-            :crop="hex.crop" :random="hex.random" @select="goTo(index)" />
-          <img v-if="index === 0" class="vs" :src="vsUrl" width="42.9686" height="36.0131" alt="" draggable="false">
-        </li>
-      </ol>
-      <p class="matchup" aria-live="polite">
-        <span v-for="(part, index) in matchup" :key="index" :class="{ link: part.link }">{{ part.text }}</span>
-      </p>
+    <!-- l'en-tête : les trois étapes au milieu, la difficulté à droite -->
+    <template #header>
+      <div class="setup-head">
+        <ol class="hexes" aria-label="Étapes de la mise en place">
+          <li v-for="(hex, index) in hexes" :key="hex.id">
+            <SetupHex :name="hex.name" :value="hex.value" :done="hex.done" :active="step === index" :image-url="hex.imageUrl"
+              :crop="hex.crop" :random="hex.random" @select="goTo(index)" />
+          </li>
+        </ol>
+        <div class="difficulty" role="radiogroup" aria-label="Difficulté">
+          <label v-for="option in DIFFICULTIES" :key="option.id" :title="option.title">
+            <input v-model="form.difficulty" type="radio" name="difficulty" :value="option.id">
+            <span>{{ option.label }}</span>
+          </label>
+        </div>
+      </div>
+    </template>
 
-      <!-- le contenu de l'étape : il glisse dans le sens du changement d'étape, les vignettes arrivent l'une après l'autre -->
+    <div class="setup">
+      <!-- les onglets des étapes ; sous celui de l'étape en cours, un trait et une flèche -->
+      <div class="tabs" role="tablist" aria-label="Étapes" @keydown="onTabKey">
+        <button v-for="(item, index) in STEPS" :id="`setup-tab-${index}`" :key="item.id" type="button" role="tab" class="tab"
+          :class="{ active: step === index }" :aria-selected="step === index" aria-controls="setup-panel"
+          :tabindex="step === index ? 0 : -1" @click="goTo(index)">
+          <span class="tab-icon" :style="{ '--mask': item.icon.mask, '--w': item.icon.width, '--h': item.icon.height }" aria-hidden="true" />
+          {{ item.name }}
+        </button>
+      </div>
+
+      <!-- le contenu de l'étape : il glisse dans le sens du changement d'étape, les cases arrivent l'une après l'autre -->
       <div ref="stageElement" class="stage">
         <Transition :name="direction > 0 ? 'step-forward' : 'step-back'" :duration="{ enter: 460, leave: 150 }">
-          <section :key="step" class="panel" :aria-labelledby="`setup-step-${step}`">
-            <h3 :id="`setup-step-${step}`" class="step-title">{{ STEPS[step].title }}</h3>
-
-            <template v-if="step === 0">
-              <div class="choices">
-                <PortraitChoice v-for="(hero, index) in AVAILABLE_HEROES" :key="hero.id" :style="{ '--i': index }" :label="hero.name"
-                  :detail="hero.aspect" v-bind="portraitOf('hero', hero.id)" :selected="form.deckChoice === hero.id"
-                  @pick="pickHero(hero.id)" />
-                <PortraitChoice v-if="importedDeck" :style="{ '--i': AVAILABLE_HEROES.length }" :label="importedDeck.label"
-                  detail="Deck importé" v-bind="portraitOf('hero', importedDeck.hero)" :selected="form.deckChoice === 'import'"
-                  @pick="pickHero('import')" />
-                <PortraitChoice :style="{ '--i': AVAILABLE_HEROES.length + 1 }" label="Deck personnalisé" dashed
-                  :selected="showImport" :aria-expanded="showImport" aria-controls="setup-import" @pick="showImport = !showImport">
-                  <span class="plus" aria-hidden="true">+</span>
-                </PortraitChoice>
-              </div>
-              <Transition name="reveal">
-                <div v-if="showImport" id="setup-import" class="import">
-                  <label class="btn file-btn">Fichier .o8d ou .txt<input type="file" accept=".o8d,.xml,.txt"
-                      aria-label="Importer un fichier de deck" @change="importDeckFile"></label>
-                  <form class="cdb" :aria-busy="isImporting" @submit.prevent="importMarvelCdbDeck">
-                    <input v-model="marvelCdbLink" type="text" inputmode="url" enterkeyhint="go" autocomplete="off" autocapitalize="off"
-                      spellcheck="false" aria-label="Lien d'un deck MarvelCDB" placeholder="Lien MarvelCDB ou numéro de decklist">
-                    <button type="submit" class="btn" :disabled="isImporting || !marvelCdbLink.trim()">{{ isImporting ? 'Import…' : 'Importer' }}</button>
-                  </form>
-                  <p class="note">Par lien, un héros ou des cartes absents de la table sont lus sur MarvelCDB, avec les images du site (en anglais).</p>
-                </div>
-              </Transition>
-              <p v-if="importedDeck" class="note">{{ importSummary }}</p>
-              <p v-if="errorMessage" class="err" role="alert">{{ errorMessage }}</p>
-            </template>
+          <section id="setup-panel" :key="step" class="panel" role="tabpanel" :aria-labelledby="`setup-tab-${step}`">
+            <div v-if="step === 0" class="choices">
+              <PortraitChoice v-for="(hero, index) in AVAILABLE_HEROES" :key="hero.id" :style="{ '--i': index }" :label="hero.name"
+                :detail="hero.aspect" v-bind="portraitOf('hero', hero.id)" :selected="form.hero === hero.id"
+                v-on="pointing(hero.name, hero.aspect)" @pick="pickHero(hero.id)" />
+              <PortraitChoice :style="{ '--i': AVAILABLE_HEROES.length }" label="Au hasard" :detail="DRAWN_AT_LAUNCH" special
+                :selected="form.hero === 'random'" v-on="pointing('Héros au hasard', DRAWN_AT_LAUNCH)" @pick="pickHero('random')" />
+              <PortraitChoice v-for="n in fillerCount" :key="`filler-${n}`" filler />
+            </div>
 
             <div v-else-if="step === 1" class="choices">
               <PortraitChoice v-for="(scenario, index) in AVAILABLE_SCENARIOS" :key="scenario.id" :style="{ '--i': index }"
                 :label="scenario.villainName" :detail="scenario.title ?? scenario.level" v-bind="portraitOf('villain', scenario.id)"
-                :selected="form.scenario === scenario.id" @pick="pickScenario(scenario.id)" />
+                :selected="form.scenario === scenario.id" v-on="pointing(scenario.villainName, scenario.title ?? scenario.level)"
+                @pick="pickScenario(scenario.id)" />
+              <PortraitChoice :style="{ '--i': AVAILABLE_SCENARIOS.length }" label="Au hasard" :detail="DRAWN_AT_LAUNCH" special
+                :selected="form.scenario === 'random'" v-on="pointing('Méchant au hasard', DRAWN_AT_LAUNCH)" @pick="pickScenario('random')" />
+              <PortraitChoice v-for="n in fillerCount" :key="`filler-${n}`" filler />
             </div>
 
             <template v-else>
@@ -309,12 +294,14 @@ watch(step, async () => {
                 <div class="choices">
                   <PortraitChoice v-for="(modular, index) in AVAILABLE_MODULAR_SETS" :key="modular.id" :style="{ '--i': index }"
                     :label="modular.name" v-bind="portraitOf('modular', modular.id)" :selected="pickedModulars.includes(modular.id)"
-                    :advised="advisedModularsOf(form.scenario).includes(modular.id)" @pick="pickModular(modular.id)" />
-                  <PortraitChoice :style="{ '--i': AVAILABLE_MODULAR_SETS.length }" label="Au hasard"
-                    :detail="modularsNeeded > 1 ? `${modularsNeeded} sets tirés` : 'Tiré en secret'" :selected="form.modulars === 'random'"
-                    @pick="pickModular('random')">
-                    <DiceIcon class="dice" />
-                  </PortraitChoice>
+                    :advised="advisedModularsOf(form.scenario).includes(modular.id)"
+                    v-on="pointing(modular.name, advisedModularsOf(form.scenario).includes(modular.id) ? 'conseillé' : '')"
+                    @pick="pickModular(modular.id)" />
+                  <PortraitChoice :style="{ '--i': AVAILABLE_MODULAR_SETS.length }" label="Au hasard" special
+                    :detail="modularsNeeded > 1 ? `${modularsNeeded} sets tirés` : 'tiré en secret'" :selected="form.modulars === 'random'"
+                    v-on="pointing('Au hasard', modularsNeeded > 1 ? `${modularsNeeded} sets tirés` : 'tiré en secret')"
+                    @pick="pickModular('random')" />
+                  <PortraitChoice v-for="n in fillerCount" :key="`filler-${n}`" filler />
                 </div>
                 <p v-if="chosenScenario" class="note legend"><span class="star" aria-hidden="true">★</span> Conseillé avec
                   {{ chosenScenario.villainName }}<template v-if="modularsNeeded > 1"> · {{ modularsNeeded }} sets à choisir
@@ -326,68 +313,115 @@ watch(step, async () => {
       </div>
     </div>
 
+    <!-- le pied : l'affiche des choix faits (ou le nom de la case survolée), puis les boutons -->
     <template #actions>
-      <div class="difficulty" role="radiogroup" aria-label="Difficulté">
-        <label v-for="option in DIFFICULTIES" :key="option.id" :title="option.title">
-          <input v-model="form.difficulty" type="radio" name="difficulty" :value="option.id">
-          <span>{{ option.label }}</span>
-        </label>
+      <div class="footer-info">
+        <p class="matchup" :class="{ covered: pointedChoice }" aria-live="polite">
+          <span v-for="(part, index) in matchup" :key="index" :class="{ link: part.link }">{{ part.text }}</span>
+        </p>
+        <p v-if="pointedChoice" class="pointed" aria-hidden="true">
+          <span>{{ pointedChoice.label }}</span><span v-if="pointedChoice.detail" class="link">· {{ pointedChoice.detail }}</span>
+        </p>
       </div>
-      <span class="sp" />
-      <button type="button" class="slant" @click="ui.closeModal()">Annuler</button>
-      <button type="button" class="slant red" :disabled="!isReady" @click="startGame">Lancer la partie</button>
+      <button type="button" class="modal-btn" @click="ui.closeModal()">Annuler</button>
+      <button type="button" class="modal-btn primary" :disabled="!isReady" @click="startGame">Lancer la partie</button>
     </template>
   </BaseModal>
 </template>
 
 <style scoped>
+/* ---------- l'en-tête ----------
+   les étapes à 17 px sous le titre, centrées ; la difficulté à droite, à 25 px du bord du panneau (la ligne
+   déborde dans la marge de l'en-tête), alignée sur le bas des étapes. Si la place manque, les étapes se
+   décalent un peu à gauche plutôt que de passer sous la difficulté */
+.setup-head {
+  justify-self: stretch; display: grid; grid-template-columns: 1fr auto 1fr; align-items: end;
+  margin: calc(17 * var(--su)) calc(25 * var(--su) - var(--pad)) 0;
+}
+.hexes { grid-column: 2; display: flex; margin: 0; padding: 0; list-style: none; }
+.difficulty { grid-column: 3; justify-self: end; display: flex; margin-bottom: calc(1 * var(--su)); }
+
+/* la difficulté : un sélecteur en trois parts (maquette : « Normal | Expert »), filet fin, texte en capitales ;
+   le choix fait est plein */
+.difficulty label { position: relative; cursor: pointer; }
+.difficulty input { position: absolute; opacity: 0; pointer-events: none; }
+.difficulty span {
+  display: block; padding: 10px 20px; border: 1px solid #303365;
+  font: 500 12px/1.2 var(--font-text); text-transform: uppercase; color: #c2c3fd;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+.difficulty label + label span { border-left: 0; }
+.difficulty label:first-child span { border-radius: 4px 0 0 4px; }
+.difficulty label:last-child span { border-radius: 0 4px 4px 0; }
+.difficulty input:checked + span { background: rgb(48 51 101 / .85); color: #fff; }
+.difficulty input:focus-visible + span { position: relative; z-index: 1; outline: 2px solid var(--yellow); outline-offset: 2px; }
+@media (hover: hover) and (pointer: fine) {
+  .difficulty label:hover input:not(:checked) + span { background: rgb(48 51 101 / .4); color: #fff; }
+}
+@media (pointer: coarse) {
+  .difficulty span { padding-block: 13px; }
+}
+
+/* ---------- le contenu : les onglets, puis la grille (916 px de large au plus : dix cases) ---------- */
 .setup { display: grid; justify-items: center; }
+.tabs, .stage { width: min(100%, calc(916 * var(--su))); }
 
-/* les hexagones, aux écarts de la maquette : 5 px de part et d'autre du VS, 11 px entre méchant et set */
-.hexes { display: flex; align-items: flex-start; margin: calc(26 * var(--su)) 0 0; padding: 0; list-style: none; }
-.hexes li { display: flex; align-items: flex-start; }
-.hexes li:last-child { margin-left: calc(11.22 * var(--su)); }
-/* le VS sombre, descendu au pied des hexagones */
-.vs { width: calc(42.9686 * var(--su)); height: calc(36.0131 * var(--su)); margin: calc(71 * var(--su)) calc(5.1 * var(--su)) 0; }
-
-/* l'affiche des choix faits, sous les hexagones ; sa ligne reste réservée, vide, pour que rien ne bouge */
-.matchup {
-  display: flex; flex-wrap: wrap; justify-content: center; gap: 0 .35em; min-height: 1.2em; max-width: none;
-  margin: calc(28 * var(--su)) 0 0; text-align: center;
-  font: italic 700 max(18px, calc(22 * var(--su)))/1.2 var(--font-display); letter-spacing: -.02em; text-transform: uppercase;
-  color: #c9cbf2;
+/* les onglets : trois parts égales, 64 px de haut, sur un filet ; l'onglet en cours est lavande, sur un dégradé
+   qui monte du filet, souligné de 3 px, une flèche dessous ; les autres en violet */
+.tabs { position: relative; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.tabs::before { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: #353970; }
+.tab {
+  position: relative; display: flex; align-items: center; justify-content: center; gap: calc(12 * var(--su));
+  height: calc(64 * var(--su)); min-width: 0; padding: 0 8px; border: 0; background: none;
+  font: italic 700 max(18px, calc(28 * var(--su)))/1 var(--font-display); letter-spacing: -.02em; text-transform: uppercase;
+  white-space: nowrap; color: #6567c6;
+  transition: color 150ms ease, background-color 150ms ease;
 }
-.matchup .link { color: var(--steel); }
-
-/* le contenu de l'étape : les deux étapes se superposent le temps du fondu */
-.stage { display: grid; justify-self: stretch; margin-top: calc(40 * var(--su)); }
-.panel { grid-area: 1 / 1; display: grid; gap: calc(30 * var(--su)); align-content: start; min-width: 0; }
-.step-title {
-  margin: 0; font: italic 700 max(20px, calc(28 * var(--su)))/1.1 var(--font-display); letter-spacing: -.02em;
-  text-transform: uppercase; color: var(--fg);
+.tab.active { color: #c2c3fd; background: linear-gradient(rgb(55 59 115 / 0) 8.654%, rgb(55 59 115 / .4) 69.231%, #373b73); }
+.tab::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: #c2c3fd;
+  transform: scaleX(0); transition: transform 220ms var(--ease-out);
 }
-.choices { display: flex; flex-wrap: wrap; gap: calc(28 * var(--su)) calc(14 * var(--su)); padding: 8px 8px 0; margin: -8px -8px 0; }
+.tab.active::after { transform: none; }
+/* la flèche : un triangle de 30 × 16,5 px, 7 px sous le trait */
+.tab.active::before {
+  content: ''; position: absolute; left: 50%; top: calc(100% + 7 * var(--su)); translate: -50% 0;
+  width: calc(30 * var(--su)); height: calc(16.5 * var(--su)); background: #c2c3fd;
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+}
+.tab-icon {
+  flex: none; width: calc(var(--w) * var(--su)); height: calc(var(--h) * var(--su)); background: currentColor;
+  -webkit-mask: var(--mask) center / contain no-repeat; mask: var(--mask) center / contain no-repeat;
+}
+.tab:focus-visible { outline: 2px solid var(--yellow); outline-offset: -2px; }
+@media (hover: hover) and (pointer: fine) {
+  .tab:not(.active):hover { color: #8f91ea; }
+}
 
-.plus { font: italic 700 calc(44 * var(--su))/1 var(--font-display); color: var(--yellow); }
-.choices .dice { width: calc(40 * var(--su)); height: calc(40 * var(--su)); }
+/* la grille, 51 px sous les onglets : des cases de 88 px, 4 px entre elles, autant par rangée que la place le
+   permet (dix à la taille de la maquette) ; les deux étapes se superposent le temps du fondu */
+.stage { display: grid; margin-top: calc(51 * var(--su)); }
+.panel { grid-area: 1 / 1; display: grid; gap: calc(20 * var(--su)); align-content: start; min-width: 0; }
+.choices {
+  display: grid; grid-template-columns: repeat(auto-fill, calc(88 * var(--su))); gap: calc(4 * var(--su));
+  justify-content: center;
+}
 .legend .star { color: var(--yellow); }
 
-/* le panneau d'import, sous les vignettes */
-.import { display: grid; gap: 10px; justify-items: start; }
-.cdb { display: flex; flex-wrap: wrap; gap: 8px; width: min(100%, 520px); }
-.cdb input {
-  flex: 1 1 240px; min-width: 0; background: rgb(17 23 50 / .6); border: 1px solid #34426c; border-radius: 6px; padding: 6px 10px;
-  transition: border-color 150ms ease;
+/* ---------- le pied : l'affiche des choix faits, ou le nom de la case survolée, à la même place ---------- */
+.footer-info { flex: 1 1 auto; min-width: 0; display: grid; }
+.footer-info > * { grid-area: 1 / 1; }
+.matchup, .pointed {
+  display: flex; flex-wrap: wrap; gap: 0 .35em; align-self: center; max-width: none; margin: 0;
+  font: italic 700 max(16px, calc(22 * var(--su)))/1.2 var(--font-display); letter-spacing: -.02em; text-transform: uppercase;
+  color: #c9cbf2;
 }
-.cdb input::placeholder { color: var(--muted); }
-.cdb input:focus-visible { outline: none; border-color: var(--yellow); }
-/* sous 16 px, iOS zoome la page quand le champ prend le focus */
-@media (pointer: coarse) {
-  .cdb input { font-size: 16px; min-height: 36px; }
-}
+.matchup .link, .pointed .link { color: #6567c6; }
+.matchup.covered { visibility: hidden; }
+.pointed { color: #c2c3fd; }
 
 /* changement d'étape : le contenu glisse dans le sens de la marche (en avant : vers la gauche), en fondu ; les
-   vignettes arrivent l'une après l'autre (25 ms d'écart), sans jamais bloquer un appui. L'étape qui part
+   cases arrivent l'une après l'autre (25 ms d'écart), sans jamais bloquer un appui. L'étape qui part
    s'efface vite et ne prend plus les appuis */
 .step-forward-enter-active, .step-back-enter-active { transition: opacity 220ms var(--ease-out), transform 300ms var(--ease-out); }
 .step-forward-leave-active, .step-back-leave-active { transition: opacity 130ms ease, transform 150ms ease; pointer-events: none; }
@@ -395,41 +429,28 @@ watch(step, async () => {
 .step-forward-leave-to { opacity: 0; transform: translateX(calc(-12 * var(--su))); }
 .step-back-enter-from { opacity: 0; transform: translateX(calc(-20 * var(--su))); }
 .step-back-leave-to { opacity: 0; transform: translateX(calc(12 * var(--su))); }
-.step-forward-enter-active .choice, .step-back-enter-active .choice {
+.step-forward-enter-active .choice:not(.filler), .step-back-enter-active .choice:not(.filler) {
   transition: opacity 200ms var(--ease-out), transform 260ms var(--ease-out);
   transition-delay: calc(40ms + var(--i, 0) * 25ms);
 }
-.step-forward-enter-from .choice, .step-back-enter-from .choice { opacity: 0; transform: translateY(calc(8 * var(--su))); }
+.step-forward-enter-from .choice:not(.filler), .step-back-enter-from .choice:not(.filler) { opacity: 0; transform: translateY(calc(8 * var(--su))); }
 
-/* le panneau d'import se déplie sous les vignettes */
-.reveal-enter-active { transition: opacity 200ms var(--ease-out), transform 220ms var(--ease-out); }
-.reveal-leave-active { transition: opacity 120ms ease; }
-.reveal-enter-from { opacity: 0; transform: translateY(-6px); }
-.reveal-leave-to { opacity: 0; }
-
-/* la difficulté, au pied à gauche : trois onglets en biais bord à bord, comme les boutons, en violet (le badge
-   « Expert » de la barre du haut) ; le choix fait est plein. Le contour de focus serait coupé par le biais :
-   le pied de l'onglet passe au jaune */
-.difficulty { display: flex; align-self: center; margin-top: calc(7 * var(--su)); }
-.difficulty label { --h: calc(32 * var(--su)); --cut: calc(var(--h) * .441); position: relative; cursor: pointer; }
-.difficulty label + label { margin-left: calc(2px - var(--cut)); }
-.difficulty input { position: absolute; opacity: 0; pointer-events: none; }
-.difficulty span {
-  display: flex; align-items: center; height: var(--h); padding: 0 calc(var(--cut) + 10px);
-  font: italic 600 max(16px, calc(20 * var(--su)))/1 var(--font-display); letter-spacing: -.02em; text-transform: uppercase;
-  color: #a3a5ee; background: rgb(101 103 198 / .14);
-  clip-path: polygon(var(--cut) 0, 100% 0, calc(100% - var(--cut)) 100%, 0 100%);
-  transition: background-color 150ms ease, color 150ms ease, box-shadow 150ms ease;
-}
-.difficulty input:checked + span { background: #6567c6; color: var(--fg); }
-.difficulty input:focus-visible + span { box-shadow: inset 0 -3px 0 var(--yellow); }
-@media (hover: hover) and (pointer: fine) {
-  .difficulty label:hover input:not(:checked) + span { background: rgb(101 103 198 / .26); color: var(--fg); }
+/* téléphones : les étapes, puis la difficulté dessous, centrées ; les onglets sans icône, leur nom sur deux
+   lignes s'il le faut (« Set modulaire ») */
+@media (max-width: 700px) {
+  .setup-head { grid-template-columns: minmax(0, 1fr); justify-items: center; row-gap: 12px; margin-inline: 0; }
+  .hexes, .difficulty { grid-column: 1; }
+  .difficulty { justify-self: center; }
+  .tab { white-space: normal; text-align: center; font-size: 17px; }
+  .tab-icon { display: none; }
+  /* au pied, l'affiche sur sa ligne, les deux boutons ensemble dessous */
+  .footer-info:has(span) { flex-basis: 100%; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .step-forward-enter-from, .step-forward-leave-to, .step-back-enter-from, .step-back-leave-to,
-  .step-forward-enter-from .choice, .step-back-enter-from .choice, .reveal-enter-from { transform: none; }
+  .step-forward-enter-from .choice, .step-back-enter-from .choice { transform: none; }
   .step-forward-enter-active .choice, .step-back-enter-active .choice { transition-delay: 0ms; }
+  .tab::after { transition: none; }
 }
 </style>

@@ -5,13 +5,22 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="x-apple-disable-message-reformatting">
 <meta name="color-scheme" content="light">
-<!-- Mail de confirmation, envoyé par api/signup.php à chaque nouvelle inscription. Le titre devient le sujet.
-     Variables (entre doubles accolades) : nom, prenom, email, desinscription (le lien personnel). -->
-<title>Votre inscription aux nouvelles de Gamebox Hero</title>
+<meta name="supported-color-schemes" content="light">
+<!-- Mail de confirmation (maquette Figma « Frame 11 », version bleu nuit), envoyé par api/signup.php à chaque nouvelle
+     inscription. Le titre devient le sujet. Variables (entre doubles accolades) : nom, prenom, email, desinscription
+     (le lien personnel). Les deux images sont hébergées sur le site (dossier public/mail du script serveur, déposé
+     dans WWW/base/mail) : le fond de l'en-tête (960 × 460, son dégradé vers le bleu nuit compris) et le logo
+     (593 × 182, en double résolution). Sans elles (images bloquées, Outlook qui ignore les fonds), le mail reste
+     bleu nuit et tout son texte se lit. -->
+<title>Votre inscription à Marvel Champions Table</title>
 <style>
   @media (max-width: 620px) {
-    .container { width: 100% !important; }
-    .px { padding-left: 20px !important; padding-right: 20px !important; }
+    .hero { padding: 40px 20px 48px !important; }
+    .gap-title { padding-top: 32px !important; }
+    .gap-title h1 { font-size: 34px !important; line-height: 40px !important; }
+    .gap-text { padding-top: 16px !important; }
+    .gap-button { padding-top: 32px !important; }
+    .gap-footer { padding-top: 56px !important; }
   }
 </style>
 </head>
@@ -24,56 +33,72 @@
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#eceef2;">
     <tr>
       <td align="center" style="padding:24px 12px;">
-        <table role="presentation" class="container" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:600px;background:#ffffff;border-radius:8px;overflow:hidden;">
-
-          <!-- En-tête -->
+        <table role="presentation" class="container" width="960" cellpadding="0" cellspacing="0" border="0" bgcolor="#02153a" style="width:100%;max-width:960px;background:#02153a;border-radius:12px;overflow:hidden;">
           <tr>
-            <td class="px" style="padding:24px 40px;background:#14161d;font:800 14px/1 Arial,Helvetica,sans-serif;letter-spacing:3px;text-transform:uppercase;color:#ff6b6b;">
-              Gamebox Hero
-            </td>
-          </tr>
-          <tr>
-            <td style="height:4px;line-height:4px;font-size:0;background:#c8102e;">&nbsp;</td>
-          </tr>
-
-          <!-- Contenu -->
-          <tr>
-            <td class="px" style="padding:36px 40px 8px;font:16px/1.6 Arial,Helvetica,sans-serif;color:#1d2129;">
-              <h1 style="margin:0 0 16px;font:700 26px/1.25 Arial,Helvetica,sans-serif;color:#14161d;">Bienvenue {{prenom}} !</h1>
-              <p style="margin:0 0 16px;">Votre adresse <strong>{{email}}</strong> est bien inscrite aux nouvelles de Gamebox Hero.</p>
-              <p style="margin:0 0 16px;">Nous vous préviendrons des nouveaux héros, scénarios et modules de la table Marvel Champions. Seulement quand il y a du nouveau, et chaque message contiendra un lien pour vous désinscrire.</p>
-              <p style="margin:0 0 28px;">En attendant, votre table vous attend.</p>
-            </td>
-          </tr>
-
-          <!-- Bouton -->
-          <tr>
-            <td class="px" style="padding:0 40px 32px;">
-              <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+            <!-- tout le mail sur le bleu nuit : le fond de comics en haut (il s'y fond), le logo à 69 px du haut -->
+            <td class="hero" align="center" valign="top" background="https://www.gameboxheroes.fr/mail/fond-entete.jpg" bgcolor="#02153a" style="padding:69px 40px 110px;background-color:#02153a;background-image:url('https://www.gameboxheroes.fr/mail/fond-entete.jpg');background-position:center top;background-size:100% auto;background-repeat:no-repeat;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
                 <tr>
-                  <td style="border-radius:6px;background:#c8102e;">
-                    <a href="https://gameboxheroes.fr/" style="display:inline-block;padding:14px 28px;font:700 16px/1 Arial,Helvetica,sans-serif;color:#ffffff;text-decoration:none;border-radius:6px;">Lancer une partie</a>
+                  <td align="center">
+                    <img src="https://www.gameboxheroes.fr/mail/logo-marvel-champions-table.png" width="593" height="182" alt="Marvel Champions Table" style="display:block;width:593px;max-width:100%;height:auto;margin:0 auto;border:0;outline:none;text-decoration:none;font:700 28px/1.2 Arial,Helvetica,sans-serif;color:#ffffff;">
+                  </td>
+                </tr>
+
+                <!-- la colonne du message (691 px, centrée), tout aligné à gauche : la bienvenue 103 px sous le logo,
+                     le texte (580 px) 23 px dessous, le bouton rouge (224 × 76 px) 48 px plus bas -->
+                <tr>
+                  <td class="gap-title" align="center" style="padding-top:103px;">
+                    <table role="presentation" width="691" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:691px;">
+                      <tr>
+                        <td align="left">
+                          <h1 style="margin:0;font:700 60px/69px Arial,Helvetica,sans-serif;text-transform:uppercase;color:#ffffff;text-align:left;">Bienvenue {{prenom}} !</h1>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td class="gap-text" align="left" style="padding-top:23px;">
+                          <table role="presentation" width="580" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:580px;">
+                            <tr>
+                              <td style="font:16px/1.35 Arial,Helvetica,sans-serif;color:#ffffff;text-align:left;">
+                                <p style="margin:0 0 22px;">Votre adresse <a href="mailto:{{email}}" style="color:#ffffff;font-weight:700;text-decoration:underline;">{{email}}</a> est bien inscrite à la newsletter de l’application MARVEL CHAMPIONS TABLE.</p>
+                                <p style="margin:0 0 22px;">Nous vous préviendrons uniquement lorsque de nouveaux héros, scénarios et campagnes seront disponibles sur l’application. Chaque message contiendra un lien pour vous désinscrire.</p>
+                                <p style="margin:0;">En attendant, votre table vous attend.</p>
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td class="gap-button" align="left" style="padding-top:48px;">
+                          <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                            <tr>
+                              <td align="center" bgcolor="#d94040" style="border-radius:4px;background:#d94040;">
+                                <a href="https://www.gameboxheroes.fr/marvel-champions-table/" target="_blank" style="display:inline-block;padding:24px;font:700 21px/1.35 Arial,Helvetica,sans-serif;color:#ffffff;text-decoration:none;border-radius:4px;">Lancer une partie</a>
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+
+                <!-- pied de page, en petit, centré sur 580 px -->
+                <tr>
+                  <td class="gap-footer" align="center" style="padding-top:137px;">
+                    <table role="presentation" width="580" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:580px;">
+                      <tr>
+                        <td align="center" style="font:12px/1.35 Arial,Helvetica,sans-serif;color:#ffffff;text-align:center;">
+                          <p style="margin:0 0 16px;">Ce n’est pas vous qui avez donné cette adresse, ou vous changez d’avis ?<br><a href="{{desinscription}}" style="color:#ffffff;text-decoration:underline;">Se désinscrire</a> : Votre nom et votre adresse seront effacés.</p>
+                          <p style="margin:0 0 16px;">Vous recevez ce message car votre adresse (<a href="mailto:{{email}}" style="color:#ffffff;text-decoration:underline;">{{email}}</a>) a été inscrite sur<br><a href="https://www.gameboxheroes.fr/marvel-champions-table/" target="_blank" style="color:#ffffff;text-decoration:underline;">gameboxheroes.fr/marvel-champions-table</a></p>
+                          <p style="margin:0;"><a href="{{desinscription}}" style="color:#ffffff;text-decoration:underline;">Se désinscrire</a></p>
+                        </td>
+                      </tr>
+                    </table>
                   </td>
                 </tr>
               </table>
             </td>
           </tr>
-
-          <!-- Ce n'est pas vous ? -->
-          <tr>
-            <td class="px" style="padding:0 40px 32px;font:14px/1.6 Arial,Helvetica,sans-serif;color:#5b6170;">
-              <p style="margin:0;">Ce n’est pas vous qui avez donné cette adresse, ou vous changez d’avis ? <a href="{{desinscription}}" style="color:#c8102e;text-decoration:underline;">Se désinscrire</a> : votre nom et votre adresse seront effacés.</p>
-            </td>
-          </tr>
-
-          <!-- Pied de page -->
-          <tr>
-            <td class="px" style="padding:24px 40px;background:#f5f6f8;border-top:1px solid #e1e4ea;font:13px/1.6 Arial,Helvetica,sans-serif;color:#5b6170;">
-              <p style="margin:0 0 8px;">Vous recevez ce message car votre adresse ({{email}}) a été inscrite sur gameboxheroes.fr.</p>
-              <p style="margin:0;"><a href="{{desinscription}}" style="color:#5b6170;text-decoration:underline;">Se désinscrire</a></p>
-            </td>
-          </tr>
-
         </table>
       </td>
     </tr>

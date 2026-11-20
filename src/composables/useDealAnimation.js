@@ -9,8 +9,9 @@
 // pendant qu'elle arrive se pose aussitôt, et une nouvelle mise en place arrête la précédente. Pendant la distribution,
 // la table laisse déborder ses cartes (ui.isDealing) : elles sortent de dessous les paquets.
 //
-// Pas de distribution sous l'accueil (la partie d'exemple du premier lancement) ; après « Scénarios », elle
-// attend que l'accueil ait presque disparu. « Réduire les animations » : un simple fondu, sans trajet.
+// Pas de distribution sous l'accueil (la partie d'exemple du premier lancement) ; après « Lancer la partie »,
+// elle suit l'entrée de la table (ui.launchGame), quand les paquets sont à leur place. « Réduire les
+// animations » : un simple fondu, sans trajet.
 import { watch, onMounted, onBeforeUnmount } from 'vue'
 import { useGameStore } from '../stores/game.js'
 import { useUiStore } from '../stores/ui.js'
@@ -22,8 +23,6 @@ const GROUP_GAP = 120
 /** Durée d'un trajet : depuis la colonne de droite ou le bas de l'écran jusqu'à la table, puis jusqu'à la main. */
 const TABLE_FLIGHT = 520
 const HAND_FLIGHT = 460
-/** L'accueil s'efface en 300 ms : la distribution commence quand il a presque disparu. */
-const AFTER_INTRO = 220
 
 export function useDealAnimation() {
   const gameStore = useGameStore()
@@ -40,7 +39,12 @@ export function useDealAnimation() {
   // après le rendu de la nouvelle partie : les cartes sont à leur place, il reste à les faire venir
   watch(() => ui.setupCount, () => {
     stop()
-    if (!ui.introOpen) deal()
+    if (!ui.introOpen && !ui.scene) deal()
+  }, { flush: 'post' })
+  // « Lancer la partie » : la table a fini d'entrer (main.css cache ses cartes jusque-là ; la classe est
+  // retirée dans le même rendu, avant que la distribution ne les cache à son tour : pas d'image entre les deux)
+  watch(() => ui.scene, (scene, before) => {
+    if (before === 'in' && !scene) deal()
   }, { flush: 'post' })
 
   // une carte prise pendant qu'elle arrive (glisser, appui long) se pose aussitôt : elle suit le doigt
@@ -57,12 +61,10 @@ export function useDealAnimation() {
     const tableCards = [...document.querySelectorAll('.table > .card[data-id]')]
     const handCards = [...document.querySelectorAll('.hand-row .card[data-id]')]
     if (!tableCards.length && !handCards.length) return
-    // l'accueil est encore là, en train de s'effacer (« Scénarios » → « Mettre en place »)
-    const start = document.querySelector('.intro-screen') ? AFTER_INTRO : 0
 
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       for (const element of [...tableCards, ...handCards]) {
-        running.push(element.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, delay: start, easing: 'ease', fill: 'backwards' }))
+        running.push(element.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, easing: 'ease', fill: 'backwards' }))
       }
       return
     }
@@ -84,7 +86,7 @@ export function useDealAnimation() {
     const easing = getComputedStyle(document.documentElement).getPropertyValue('--ease-drawer').trim() || 'ease-out'
     ui.isDealing = true
 
-    let at = start
+    let at = 0
     const dealGroup = (cards, source, stagger, duration) => {
       if (!cards.length || !source) return
       cards.forEach(({ element, rect }, index) => running.push(fly(element, rect, source, at + index * stagger, duration, easing)))
