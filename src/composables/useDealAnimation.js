@@ -5,7 +5,7 @@
 // manigance) se couche en arrivant.
 //
 // Animations Web (element.animate) des propriétés translate, scale et rotate : elles s'ajoutent au transform
-// des cartes (carte épuisée, éventail de la main) sans le remplacer. Elles ne bloquent rien : une carte prise
+// des cartes (carte inclinée, éventail de la main) sans le remplacer. Elles ne bloquent rien : une carte prise
 // pendant qu'elle arrive se pose aussitôt, et une nouvelle mise en place arrête la précédente. Pendant la distribution,
 // la table laisse déborder ses cartes (ui.isDealing) : elles sortent de dessous les paquets.
 //

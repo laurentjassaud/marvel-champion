@@ -1597,7 +1597,7 @@ describe('placement', () => {
     // lâchée sur les PV du méchant : remontée au-dessus
     E.moveCard(s, other, 'table', { x: 50, y: 450, layout })
     expect(other).toMatchObject({ x: 50, y: 400 - height - 4 })
-    // épuisée au bord gauche : elle pivote sur son centre, sa boîte reste dans la table
+    // inclinée au bord gauche : elle pivote sur son centre, sa boîte reste dans la table
     E.moveCard(s, third, 'table', { x: 0, y: 100, layout })
     third.exhausted = true
     E.keepCardOnTable(third, layout)

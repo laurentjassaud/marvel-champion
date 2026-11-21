@@ -62,7 +62,7 @@ export const SPOTS = {
   crewMainScheme: layout => ({ x: crewColumnX(layout, 4), y: TOP_MARGIN })
 }
 
-/** Taille d'une carte sur la table, avant toute rotation d'épuisement : {width, height}. */
+/** Taille d'une carte sur la table, avant toute rotation d'inclinaison : {width, height}. */
 export function cardSize(card, cardWidth) {
   if (card.isPawn) {
     const [width, height] = pawnSize(card)
@@ -148,7 +148,7 @@ const EDGE_GAP = 4
 
 /**
  * Ce qu'une carte de la table occupe à l'écran : la taille de sa boîte, et (dx, dy), de son coin (x, y) au
- * coin de cette boîte. Une carte épuisée pivote d'un quart de tour sur son centre : sa boîte a sa hauteur
+ * coin de cette boîte. Une carte inclinée pivote d'un quart de tour sur son centre : sa boîte a sa hauteur
  * pour largeur, et inversement.
  */
 function visibleBox(card, cardWidth) {
@@ -158,7 +158,7 @@ function visibleBox(card, cardWidth) {
 }
 
 /**
- * Garde une carte de la table entière à l'écran (glissée, épuisée, retournée, ou la table redimensionnée) :
+ * Garde une carte de la table entière à l'écran (glissée, inclinée, retournée, ou la table redimensionnée) :
  * ramenée dans la table si elle en dépasse, et remontée au-dessus des PV du méchant, posés par-dessus la
  * table en bas à gauche (`layout.villainHud`), si elle passe dessous.
  */

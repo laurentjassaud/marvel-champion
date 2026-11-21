@@ -38,7 +38,7 @@
 //   zone               où elle se trouve (data.js : ZONE_LABELS)
 //   side               face en jeu : 0 face A, 1 face B (alter ego, verso), 2 face C (deuxième face héros)
 //   faceUp             face visible ou cachée
-//   exhausted          inclinée (épuisée)
+//   exhausted          inclinée (« épuisée » dans les règles)
 //   x, y, zIndex       position sur la table, en pixels, et ordre d'empilement
 //   damage, threat, tokens  dégâts, menace et jetons génériques posés dessus
 //   isIdentity?        la carte d'identité du joueur (héros / alter ego)

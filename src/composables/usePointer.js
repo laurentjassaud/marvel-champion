@@ -132,7 +132,7 @@ export function usePointer() {
     ghost.classList.remove('sel', 'tapped')
     ghost.removeAttribute('data-id')
     Object.assign(ghost.style, { width: `${element.offsetWidth}px`, height: `${element.offsetHeight}px`, zIndex: '', left: '0', top: '0' })
-    // une carte épuisée est tournée : on la saisit par son centre
+    // une carte inclinée est tournée : on la saisit par son centre
     if (card.zone === 'table' && card.exhausted) { press.offsetX = element.offsetWidth / 2; press.offsetY = element.offsetHeight / 2 }
     document.body.appendChild(ghost)
     element.style.opacity = '.25'
@@ -277,7 +277,7 @@ export function usePointer() {
     lastTap = null
     return true
   }
-  /** Double-clic / double toucher : épuise ou redresse une carte de la table, joue une carte de la main. */
+  /** Double-clic / double toucher : incline ou redresse une carte de la table, joue une carte de la main. */
   function doubleActivate(card) {
     if (card.zone === 'table') gameStore.toggleExhausted(card.id)
     else if (card.zone === 'hand') gameStore.playToTable(card.id)

@@ -57,7 +57,7 @@ export function useCardMenu() {
     ui.openContextMenu({ x, y, title, items: withoutExtraSeparators(items), cardId: isKnown ? card.id : null })
   }
 
-  /** Lignes d'une carte sur la table : épuiser, retourner, compteurs, stade de Kang, jeton Actif, cartes d'état. */
+  /** Lignes d'une carte sur la table : incliner, retourner, compteurs, stade de Kang, jeton Actif, cartes d'état. */
   function tableItems(card) {
     if (card.zone !== 'table') return []
     const definition = definitionOf(card)
@@ -88,7 +88,7 @@ export function useCardMenu() {
     const items = [
       nemesisItem,
       null,
-      menuItem(card.exhausted ? 'Redresser' : 'Épuiser', () => gameStore.toggleExhausted(cardId), 'T'),
+      menuItem(card.exhausted ? 'Redresser' : 'Incliner', () => gameStore.toggleExhausted(cardId), 'T'),
       menuItem(flipLabel, () => gameStore.flipCard(cardId), 'F'),
       otherFormItem,
       null,

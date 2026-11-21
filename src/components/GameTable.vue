@@ -39,7 +39,7 @@ function onPointerDown(event) {
     class="table"
     :class="{ dealing: ui.isDealing }"
     data-zone="table"
-    aria-label="Table de jeu (glisser les cartes, double-clic pour épuiser, clic droit ou appui long pour le menu, ? pour les raccourcis)"
+    aria-label="Table de jeu (glisser les cartes, double-clic pour incliner, clic droit ou appui long pour le menu, ? pour les raccourcis)"
     :style="{ '--cw': `${ui.cardWidth}px` }"
     @pointerdown="onPointerDown"
   >
@@ -52,7 +52,7 @@ function onPointerDown(event) {
 .table { position: relative; isolation: isolate; overflow: hidden; touch-action: none; min-height: 0; }
 /* mise en place : les cartes arrivent de leur paquet, hors de la table (useDealAnimation) */
 .table.dealing { overflow: visible; }
-/* épuiser une carte la fait pivoter sur place */
+/* incliner une carte la fait pivoter sur place */
 .table > .card { position: absolute; transition: transform 200ms var(--ease-in-out); }
 .table > .card.tapped { transform: rotate(90deg); }
 @media (max-width: 700px) {

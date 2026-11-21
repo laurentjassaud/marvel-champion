@@ -1,6 +1,6 @@
 // Déplacer et changer les cartes : moveCard (la seule fonction qui change la zone d'une carte, à quelques
 // exceptions près signalées), l'entrée en jeu (jetons, Tenace), jouer une carte, la prendre dans une pile,
-// la retourner, l'épuiser, lui donner une carte d'état, changer la forme de l'identité, poser un pion.
+// la retourner, l'incliner, lui donner une carte d'état, changer la forme de l'identité, poser un pion.
 
 import { STATUS_CARDS, PAWN_KIND_BY_ID } from '../data.js'
 import { MAIN_SCHEME_NOTES, VILLAIN_STAGE_RULES } from '../rules.js'
@@ -28,7 +28,7 @@ import {
  *               (keepCardOnTable) et placer ce qu'amène la défaite du méchant
  *   quiet       ne rien écrire au journal (l'appelant écrit son propre message)
  * Un pion qui quitte la table disparaît. Ce que fait la carte en arrivant :
- *   - en quittant la table, elle est remise à zéro (jetons, dégâts, menace, cartes d'état, épuisement,
+ *   - en quittant la table, elle est remise à zéro (jetons, dégâts, menace, cartes d'état, inclinaison,
  *     face A ; l'identité revient en alter ego) ;
  *   - dans une pioche elle est face cachée (le deck Invocation, lui, est face visible) ; dans la main ou
  *     une défausse, face visible ; ailleurs elle garde sa face, sauf si elle arrive d'une autre zone ;
@@ -115,7 +115,7 @@ function movePawn(game, pawn, targetZone, options, quiet) {
 
 /**
  * Remise à zéro d'une carte qui quitte la table : ni jetons, ni dégâts, ni menace, ni carte d'état, plus
- * épuisée, face A (l'identité revient en alter ego), plus sous une manigance, plus reçue ni boost.
+ * inclinée, face A (l'identité revient en alter ego), plus sous une manigance, plus reçue ni boost.
  */
 function resetCard(card) {
   Object.assign(card, { exhausted: false, damage: 0, threat: 0, tokens: 0, side: card.isIdentity ? 1 : 0 })
@@ -257,11 +257,11 @@ export function addPawn(game, layout, pawnId, spot = null) {
 /* État d'une carte sur la table                                                                         */
 /* ---------------------------------------------------------------------------------------------------- */
 
-/** Épuise ou redresse une carte de la table. */
+/** Incline ou redresse une carte de la table. */
 export function toggleExhausted(game, card) {
   if (card.zone !== 'table' || card.isPawn) return
   card.exhausted = !card.exhausted
-  logMessage(game, `${card.exhausted ? 'Épuisée' : 'Redressée'} : ${cardLabel(card)}.`)
+  logMessage(game, `${card.exhausted ? 'Inclinée' : 'Redressée'} : ${cardLabel(card)}.`)
 }
 
 /** Pose ou retire une carte d'état (stunned, confused, tough) sur un personnage de la table ; elles se cumulent. */

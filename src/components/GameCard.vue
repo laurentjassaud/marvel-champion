@@ -1,6 +1,6 @@
 <script>
 /**
- * La carte telle qu'imprimée (menu, fenêtres) : sans rotation d'épuisement, ni pions ni cartes d'état
+ * La carte telle qu'imprimée (menu, fenêtres) : sans rotation d'inclinaison, ni pions ni cartes d'état
  * par-dessus le texte. `printed` : même la menace du compteur n'y est pas posée.
  */
 export const printedCard = card => ({ ...card, exhausted: false, damage: 0, threat: 0, tokens: 0, stunned: false, confused: false, tough: false, printed: true })

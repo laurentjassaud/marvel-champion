@@ -253,7 +253,7 @@ export const useGameStore = defineStore('game', () => {
     playToTable: (cardId, faceDown) => withCard(cardId, card => run(Engine.playToTable, layout(), card, faceDown)),
     takeFromPile: (cardId, zone) => withCard(cardId, card => run(Engine.takeFromPile, layout(), card, zone)),
     reorderHand: (cardId, beforeCardId) => run(Engine.reorderHand, cardId, beforeCardId),
-    // épuisée, une carte pivote ; retournée, une manigance se couche : elle reste entière sur la table
+    // inclinée, une carte pivote ; retournée, une manigance se couche : elle reste entière sur la table
     toggleExhausted: cardId => withCard(cardId, card => {
       run(Engine.toggleExhausted, card)
       Engine.keepCardOnTable(card, layout())
