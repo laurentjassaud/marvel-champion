@@ -1,6 +1,20 @@
+import { execSync } from 'node:child_process'
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { VitePWA } from 'vite-plugin-pwa'
+
+/**
+ * Le commit construit (« 1679dc1 »), que « Signaler un bug » joint au rapport (src/api/bugReport.js,
+ * __APP_COMMIT__) ; « (dev) » derrière sur le serveur de développement ; vide hors d'un dépôt git.
+ */
+function gitCommit(command) {
+  try {
+    const commit = execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim()
+    return command === 'serve' ? `${commit} (dev)` : commit
+  } catch {
+    return ''
+  }
+}
 
 // Deux constructions possibles :
 //  - par défaut : application installable (PWA : service worker, images des cartes gardées hors ligne) ;
@@ -39,10 +53,11 @@ function seo({ sitemap }) {
   }
 }
 
-export default defineConfig(({ mode }) => {
+export default defineConfig(({ mode, command }) => {
   const artifact = mode === 'artifact'
   return {
     base: artifact ? './' : (process.env.BASE_PATH || './'),
+    define: { __APP_COMMIT__: JSON.stringify(gitCommit(command)) },
     server: { proxy: SIGNUP_PROXY },
     preview: { proxy: SIGNUP_PROXY },
     build: {
@@ -50,9 +65,11 @@ export default defineConfig(({ mode }) => {
       emptyOutDir: true,
       copyPublicDir: !artifact,
       // la page unique de l'artefact embarque ses polices (src/styles/fonts.css, ≈450 Ko de woff2), ses SVG (le
-      // grand logo de l'accueil, ≈70 Ko) et le fond de comics des fenêtres (webp, ≈70 Ko) : elle n'a pas de
-      // dossier assets/ à côté d'elle
-      ...(artifact ? { assetsInlineLimit: filePath => (/\.(woff2|svg|webp)$/.test(filePath) ? true : undefined) } : {})
+      // grand logo de l'accueil, ≈70 Ko), le fond de comics des fenêtres (webp, ≈70 Ko) et la bande des decks de
+      // « Préparation de la partie » (png, 12 Ko) : elle n'a pas de dossier assets/ à côté d'elle. Une seule page
+      // par principe (scripts/inline-artifact.mjs) : son script dépasse les 500 Ko de l'avertissement de Vite
+      // sans qu'un découpage y serve à rien
+      ...(artifact ? { assetsInlineLimit: filePath => (/\.(woff2|svg|webp|png)$/.test(filePath) ? true : undefined), chunkSizeWarningLimit: 1024 } : {})
     },
     plugins: [
       vue(),
@@ -77,12 +94,15 @@ export default defineConfig(({ mode }) => {
           ]
         },
         workbox: {
-          // les cartes de la boîte de base (cards/base, 209 images, ≈16 Mo) sont téléchargées dès l'installation :
-          // toute partie proposée (AVAILABLE_PACKS dans data.js, la boîte de base) se joue hors ligne, quels que
-          // soient le héros, le méchant et le set modulaire. Une autre boîte proposée un jour : l'ajouter ici.
+          // les cartes des boîtes proposées (AVAILABLE_PACKS dans data.js) sont téléchargées dès l'installation :
+          // la boîte de base (cards/base, 209 images, ≈16 Mo), le paquet Le Bouffon Vert (57 images, ≈4 Mo) et les
+          // paquets héros Captain America, Hulk et Thor (84 images, ≈6 Mo). Toute partie proposée se joue hors
+          // ligne, quels que soient le héros, le méchant et le set modulaire. Une autre boîte proposée un jour :
+          // l'ajouter ici.
           // Les polices (woff2, src/styles/fonts.css) aussi : le texte garde sa police hors ligne ; et les SVG (le
           // grand logo de l'accueil)
-          globPatterns: ['**/*.{js,css,html,png,webp,woff2,svg}', 'backs/*.jpg', 'cards/base/*.jpg'],
+          globPatterns: ['**/*.{js,css,html,png,webp,woff2,svg}', 'backs/*.jpg', 'cards/base/*.jpg', 'cards/bouffon vert/*.jpg',
+            'cards/captain america/*.jpg', 'cards/hulk/*.jpg', 'cards/thor/*.jpg'],
           // les pages du script d'inscription (api/unsubscribe.php, ouverte depuis le lien d'un e-mail) ne sont pas
           // l'appli : le service worker ne les remplace pas par index.html
           navigateFallbackDenylist: [/\/api\//],
@@ -98,6 +118,12 @@ export default defineConfig(({ mode }) => {
               urlPattern: /^https:\/\/(fr\.)?marvelcdb\.com\/bundles\/cards\//,
               handler: 'CacheFirst',
               options: { cacheName: 'mc-marvelcdb', expiration: { maxEntries: 600 }, cacheableResponse: { statuses: [0, 200] } }
+            },
+            {
+              // leurs scans français, pris sur cgbuilder quand il les a (src/data/cgbuilder.json) : gardés de même
+              urlPattern: /^https:\/\/mc-src\.cgbuilder\.fr\/images\/carte\//,
+              handler: 'CacheFirst',
+              options: { cacheName: 'mc-cgbuilder', expiration: { maxEntries: 600 }, cacheableResponse: { statuses: [0, 200] } }
             },
             {
               // la vidéo du ciel de l'accueil (11 Mo) : la balise <video> ne la demande que par morceaux (réponses

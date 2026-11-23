@@ -13,17 +13,20 @@ let hasPlayedSky = false
 // normalement), et revient par le titre de la barre. « Scénarios » ouvre la fenêtre « Nouvelle partie »,
 // « Reprendre une partie » découvre la table, « Guide de référence 1.8 » ouvre le guide des règles et
 // « Apprendre le jeu » une vidéo d'explication des règles, chacun dans une nouvelle fenêtre ; les autres liens
-// ne sont pas encore prêts (SoonHint). Tout en bas, discrets, « Mentions légales » (qui ouvre la fenêtre du même
-// nom) et la version de l'appli.
+// ne sont pas encore prêts (SoonHint). Tout en bas, discrets, « Mentions légales » et « Remerciements » (qui
+// ouvrent chacun la fenêtre du même nom) et la version de l'appli.
 //
 // L'entrée, au lancement : le logo (« TABLE » frappe, « MARVEL CHAMPIONS » se dévoile, un reflet passe sur
 // l'or), puis les héros un à un, puis la barre et le menu, en 2 s. Ce sont des animations CSS : elles restent
 // fluides pendant que la table se monte derrière. Elle attend les polices et les images (1,2 s au plus), pour
 // ne pas jouer sur des héros encore invisibles.
 //
-// Sur téléphone (700 px de large au plus, comme main.css ; maquette « iPhone 17 - 1 ») : seulement le fond de
-// comics et le logo, l'appli ne s'y joue pas pour l'instant ; tout en bas, les mentions légales et la version.
-// Ni décor, ni vidéo, ni héros, ni barre, ni menu : ils ne sont pas créés, donc pas téléchargés.
+// Sur téléphone (700 px de large au plus, comme main.css, ou un écran tactile de 500 px de haut au plus : un
+// téléphone tenu à l'horizontale ; maquette « iPhone 17 - 1 ») : le fond de comics, le logo et, dessous, le
+// message « Pas encore sur mobile » : l'appli ne s'y joue pas pour l'instant ; tout en bas, les mentions
+// légales, les remerciements et la version. Ni décor, ni vidéo, ni héros, ni barre, ni menu : ils ne sont pas
+// créés, donc pas téléchargés. L'accueil y fait la hauteur visible de l'écran (100dvh, qui suit les barres du
+// navigateur), et la page de jeu, dessous, ne défile pas tant qu'il est ouvert (main.css).
 import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import TopBar from './TopBar.vue'
 import SoonHint from './SoonHint.vue'
@@ -63,8 +66,12 @@ const hasLegalNotice = import.meta.env.MODE !== 'artifact'
 /** La version de l'appli (celle de package.json), sans un « .0 » final : 0.1.0 s'affiche « 0.1 ». */
 const APP_VERSION = packageVersion.replace(/\.0$/, '')
 
-/** Téléphone : l'accueil n'y montre que le fond de comics et le logo ; suit la largeur de l'écran (rotation, fenêtre). */
-const PHONE_QUERY = window.matchMedia('(max-width: 700px)')
+/**
+ * Téléphone, en portrait (700 px de large au plus) ou à l'horizontale (écran tactile de 500 px de haut au plus) :
+ * l'accueil n'y montre que le fond de comics, le logo et le message « Pas encore sur mobile » ; suit l'écran
+ * (rotation, fenêtre). La même requête est dans le style plus bas et dans main.css.
+ */
+const PHONE_QUERY = window.matchMedia('(max-width: 700px), (pointer: coarse) and (max-height: 500px)')
 const isPhone = ref(PHONE_QUERY.matches)
 const onPhoneChange = event => { isPhone.value = event.matches }
 
@@ -156,6 +163,12 @@ watch(() => ui.modal, modal => {
           <span class="sheen" :style="{ '--letters-mask': LETTERS_MASK }" />
         </span>
       </h1>
+      <!-- téléphone : l'appli ne s'y joue pas encore -->
+      <div v-if="isPhone" class="phone-note">
+        <p class="phone-note-title">Pas encore sur mobile</p>
+        <p>Marvel Champions Table ne se joue pas encore sur téléphone. Pour lancer une partie, ouvrez-la sur un
+          ordinateur ou une tablette.</p>
+      </div>
       <nav v-if="!isPhone" class="main-menu" aria-label="Menu principal">
         <ul class="links">
           <li><button type="button" class="link" @click="ui.openModal('setup')">Scénarios</button></li>
@@ -182,12 +195,14 @@ watch(() => ui.modal, modal => {
       </nav>
     </div>
 
-    <!-- tout en bas, aussi sur téléphone : les mentions légales et la version de l'appli -->
+    <!-- tout en bas, aussi sur téléphone : les mentions légales, les remerciements et la version de l'appli -->
     <footer class="legal">
       <template v-if="hasLegalNotice">
         <button type="button" class="legal-link" @click="ui.openModal('legal')">Mentions légales</button>
         <span class="legal-sep" aria-hidden="true">·</span>
       </template>
+      <button type="button" class="legal-link" @click="ui.openModal('thanks')">Remerciements</button>
+      <span class="legal-sep" aria-hidden="true">·</span>
       <span class="version">Version {{ APP_VERSION }}</span>
     </footer>
   </section>
@@ -317,6 +332,11 @@ watch(() => ui.modal, modal => {
 @media (pointer: coarse) {
   .legal-link { min-height: 44px; }
 }
+/* téléphone étroit : les liens se resserrent, et passent sur deux lignes plutôt que de sortir de l'écran */
+@media (max-width: 420px) {
+  .legal { flex-wrap: wrap; justify-content: center; width: max-content; max-width: calc(100vw - 16px); }
+  .legal-link, .version { padding: 0 6px; }
+}
 
 /* ---------- l'entrée (2 s, au lancement) ----------
    0 ms « TABLE » frappe (un peu trop grand, il se pose), 250 ms « MARVEL CHAMPIONS » se dévoile de gauche à
@@ -420,16 +440,35 @@ watch(() => ui.modal, modal => {
 .fade-intro-enter-from, .fade-intro-leave-to { opacity: 0; }
 .fade-intro-leave-to { transform: scale(1.04); }
 
-/* téléphones (maquette « iPhone 17 - 1 », 402 px de large) : le bleu nuit des mails, et en haut leur fond de
-   comics recadré (402 × 416, il s'y fond de 271 à 416 px), à la largeur de l'écran ; le logo à 56 px du haut
-   (plus bas que la maquette, qui le met à 28 px ; sous l'encoche de l'iPhone dans l'appli installée), à 32 px
-   des bords (ses lettres font toute la largeur moins 64 px) */
-@media (max-width: 700px) {
+/* téléphones (maquette « iPhone 17 - 1 », 402 px de large ; même requête que PHONE_QUERY) : le bleu nuit des
+   mails, et en haut leur fond de comics recadré (402 × 416, il s'y fond de 271 à 416 px), à la largeur de
+   l'écran ; le logo à 56 px du haut (plus bas que la maquette, qui le met à 28 px ; sous l'encoche de l'iPhone
+   dans l'appli installée), à 32 px des bords (ses lettres font toute la largeur moins 64 px), moins large sur
+   un téléphone à l'horizontale pour laisser la place au message. L'accueil fait la hauteur visible de l'écran
+   (100dvh : elle suit les barres du navigateur qui apparaissent ou s'effacent), pas plus */
+@media (max-width: 700px), (pointer: coarse) and (max-height: 500px) {
   .intro-screen {
+    bottom: auto; height: 100dvh;
     grid-template-rows: minmax(0, 1fr);
     background: url('../assets/intro/fond-comics-mobile.webp') center top / 100% auto no-repeat, #02153a;
+    /* le haut du logo, et l'échelle de la maquette du logo (--tu) : le logo et le message se placent d'après eux */
+    --logo-top: calc(56px + env(safe-area-inset-top, 0px));
+    --tu: min((100vw - 64px) / 576.989, (100dvh - 270px) / 170);
   }
-  .title { top: calc(56px + env(safe-area-inset-top, 0px)); --tu: calc((100vw - 64px) / 576.989); }
+  .title { top: var(--logo-top); }
+  /* le message, 28 px sous le logo, dans un panneau comme les fenêtres : lisible sur le fond de comics */
+  .phone-note {
+    position: absolute; z-index: 1; left: 50%; translate: -50% 0; top: calc(var(--logo-top) + 170 * var(--tu) + 28px);
+    width: min(100vw - 48px, 440px); padding: 16px 18px; text-align: center;
+    background: rgb(24 30 72 / .86); border: 1px solid #353970; border-radius: 4px;
+    box-shadow: 0 4px 0 rgb(0 0 0 / .25); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+    font: 400 15px/1.5 var(--font-text); color: #c3c5f5;
+  }
+  .phone-note p { margin: 0; }
+  .phone-note .phone-note-title {
+    margin-bottom: 6px;
+    font: italic 700 24px/1.1 var(--font-display); letter-spacing: -.02em; text-transform: uppercase; color: #c2c3fd;
+  }
 }
 
 /* mouvement réduit : pas d'entrée chorégraphiée ; tout apparaît ensemble, en fondu, sans rien déplacer */

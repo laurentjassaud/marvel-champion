@@ -1,6 +1,6 @@
 // Placement des cartes sur la table : la place fixe de chaque grande carte (méchant, manigance, identité),
-// la prochaine place libre d'une carte qui arrive (rangée Rencontre en haut, rangée du héros en bas,
-// cartes reçues devant l'identité), et une carte toujours entière sur la table.
+// la prochaine place libre d'une carte qui arrive (zone Rencontre au milieu, rangée du héros en bas, cartes
+// reçues devant l'identité), et une carte toujours entière sur la table.
 //
 // La table est vue de dessus : le méchant et ses cartes en haut, le joueur en bas. Toutes les mesures
 // sont en pixels et suivent la largeur d'une carte (`layout.cardWidth`) : une carte debout mesure
@@ -8,10 +8,12 @@
 //
 // Le bord gauche de la table est occupé par le décor du méchant : son illustration en haut
 // (`layout.villainInset`, en pixels depuis le bord gauche) et ses PV en grand en bas (`layout.heroInset` ;
-// `layout.villainHud` : {right, top}, le bloc mesuré, posé par-dessus la table). La rangée du méchant
-// commence après l'illustration ; l'identité est en bas, au milieu de la table, et la rangée du héros va
-// d'abord vers la gauche jusqu'aux PV du méchant, puis à droite de l'identité. Sans ces mesures (tests), au
-// bord de la table.
+// `layout.villainHud` : {right, top}, le bloc mesuré, posé par-dessus la table). Le méchant et sa manigance
+// principale sont en haut, après l'illustration. L'identité est en bas, au milieu de la partie libre de la
+// table (entre les PV du méchant et le bord droit : au-dessus de la main) ; la rangée du héros va d'abord vers
+// la gauche jusqu'aux PV du méchant, puis à droite de l'identité. Les cartes Rencontre que la table pose
+// (révélées, boosts) arrivent dans la zone Rencontre, sous la rangée du méchant, dans la colonne de
+// l'identité. Sans ces mesures (tests), au bord de la table.
 
 import { cardsInZone, definitionOf, isEncounterCard, identityCard } from './state.js'
 import { pawnSize } from '../data.js'
@@ -40,6 +42,8 @@ const villainRowLeft = layout => LEFT_MARGIN + (layout.villainInset ?? 0)
 const heroRowLeft = layout => LEFT_MARGIN + (layout.heroInset ?? 0)
 /** Hauteur de la rangée du héros : celle de l'identité, au bas de la table. */
 const heroRowY = layout => layout.height - layout.cardWidth * CARD_RATIO - BOTTOM_MARGIN
+/** Le milieu de la partie libre de la table, entre les PV du méchant et le bord droit (au-dessus de la main). */
+const freeCenterX = layout => (heroRowLeft(layout) + layout.width - RIGHT_MARGIN) / 2
 
 /** Abscisse de la colonne n° `index` des Démolisseurs : une colonne par méchant, large comme une manigance couchée. */
 const crewColumnX = (layout, index) => villainRowLeft(layout) + index * (layout.cardWidth * CARD_RATIO + CARD_GAP)
@@ -52,8 +56,8 @@ export const SPOTS = {
   mainScheme: layout => ({ x: villainRowLeft(layout) + layout.cardWidth + 20, y: TOP_MARGIN }),
   /** Kang : Le Maître du Temps attend sous la manigance principale pendant le stade 3. */
   masterOfTime: layout => ({ x: villainRowLeft(layout) + layout.cardWidth + 20, y: TOP_MARGIN + layout.cardWidth + 14 }),
-  /** L'identité du joueur, en bas, au milieu de la table (jamais sur les PV du méchant). */
-  identity: layout => ({ x: Math.max(heroRowLeft(layout), Math.round((layout.width - layout.cardWidth) / 2)), y: heroRowY(layout) }),
+  /** L'identité du joueur, en bas, au milieu de la partie libre de la table (jamais sur les PV du méchant). */
+  identity: layout => ({ x: Math.max(heroRowLeft(layout), Math.round(freeCenterX(layout) - layout.cardWidth / 2)), y: heroRowY(layout) }),
   /** Les Démolisseurs : le méchant n° index en haut de sa colonne… */
   crewVillain: (layout, index) => ({ x: crewColumnX(layout, index), y: TOP_MARGIN }),
   /** … sa manigance annexe (couchée) dessous… */
@@ -75,10 +79,42 @@ export function cardSize(card, cardWidth) {
 }
 
 /**
- * Prochaine place libre de la rangée Rencontre : à droite du méchant et de la manigance principale (sous
- * les quatre colonnes des Démolisseurs), après les cartes Rencontre déjà posées — chacune prend sa propre
- * largeur, une manigance annexe étant couchée —, et une nouvelle rangée quand la table est pleine. La
- * carte qui arrive est comptée large comme une carte couchée, pour toujours tenir.
+ * Les rangées de la zone Rencontre, dans l'ordre où elles se remplissent : {y, startX, leftLimit} (à partir de
+ * startX vers la droite, puis vers la gauche tant que leftLimit le permet).
+ *   - Sous la rangée du méchant, à partir de la colonne de l'identité, vers la gauche jusqu'à l'illustration
+ *     du méchant : une demi-carte plus bas que la rangée du méchant, moins si la table est basse ; une rangée
+ *     de plus tant qu'elle reste au-dessus des cartes reçues devant l'identité.
+ *   - Puis la rangée du méchant, à droite de la manigance principale (une table trop basse ou trop pleine).
+ *   - Puis de nouvelles rangées sous la zone, quoi qu'il arrive.
+ * Avec les Démolisseurs : sous leurs colonnes, à partir de la gauche, vers la droite seulement.
+ */
+function* encounterRows(game, layout) {
+  const cardHeight = layout.cardWidth * CARD_RATIO
+  const rowHeight = cardHeight + 16
+  if (game.crew) {
+    for (let y = TOP_MARGIN + layout.cardWidth * 2.4 + 26; ; y += rowHeight) yield { y, startX: villainRowLeft(layout), leftLimit: Infinity }
+  }
+  const identity = SPOTS.identity(layout)
+  const startX = identity.x
+  const leftLimit = villainRowLeft(layout)
+  // le bas de la zone : 8 px au-dessus des cartes reçues devant l'identité (nextDealtSpot)
+  const bottomLimit = identity.y - cardHeight - 12 - 8
+  const villainRowBottom = TOP_MARGIN + cardHeight
+  const gap = Math.max(8, Math.min(layout.cardWidth * 0.5, bottomLimit - villainRowBottom - cardHeight))
+  let y = villainRowBottom + gap
+  yield { y, startX, leftLimit }
+  for (y += rowHeight; y + cardHeight <= bottomLimit; y += rowHeight) yield { y, startX, leftLimit }
+  yield { y: TOP_MARGIN, startX: villainRowLeft(layout) + layout.cardWidth + 20 + cardHeight + 24, leftLimit: Infinity }
+  for (; ; y += rowHeight) yield { y, startX, leftLimit }
+}
+
+/**
+ * Prochaine place libre de la zone Rencontre (encounterRows) : sous la rangée du méchant, à partir de la
+ * colonne de l'identité, d'abord vers la droite jusqu'au bord de la table, puis vers la gauche jusqu'à
+ * l'illustration du méchant, puis la rangée suivante. Les cartes déjà posées sont comptées dans leur ordre : à
+ * droite, chacune prend sa propre largeur (une manigance annexe est couchée) ; à gauche, chaque place est
+ * large comme une carte couchée (la carte qui y arrive n'est pas encore connue). La carte qui arrive est
+ * comptée large comme une carte couchée, pour toujours tenir.
  * Ne comptent pas : le méchant et les manigances principales (places fixes), les manigances des
  * Démolisseurs (dans leurs colonnes), les cartes reçues devant l'identité (en bas, près du joueur).
  */
@@ -86,21 +122,35 @@ export function nextEncounterSpot(game, layout) {
   const hasFixedSpot = card => ['villain', 'main_scheme'].includes(definitionOf(card).type)
     || (game.crew && definitionOf(card).type === 'side_scheme' && game.crew.includes(definitionOf(card).set))
   const rowCards = cardsInZone(game, 'table').filter(card => isEncounterCard(card) && !hasFixedSpot(card) && !card.dealtToPlayer)
-  const rowStartX = villainRowLeft(layout) + (game.crew ? 0 : layout.cardWidth + 20 + layout.cardWidth * CARD_RATIO + 24)
-  const rowHeight = layout.cardWidth * CARD_RATIO + 16
-  let x = rowStartX
-  let y = game.crew ? TOP_MARGIN + layout.cardWidth * 2.4 + 26 : TOP_MARGIN
-  // passe à la rangée suivante si une carte de cette largeur dépasse le bord droit
-  const wrapIfNeeded = width => {
-    if (x > rowStartX && x + width > layout.width - 10) { x = rowStartX; y += rowHeight }
+  const wideWidth = layout.cardWidth * CARD_RATIO
+  const rows = encounterRows(game, layout)
+  let row = rows.next().value
+  // le bord gauche de la prochaine carte à droite, le bord gauche de la dernière carte à gauche
+  let rightX = row.startX
+  let leftX = row.startX
+  /**
+   * Place une carte de cette largeur dans la rangée en cours (ou la suivante) et rend sa place. Qu'elle tienne
+   * à droite se décide toujours pour une carte couchée, comme au moment où elle a été posée : une carte
+   * debout recomptée ne doit pas trouver à droite une place qu'elle n'avait pas eue (deux cartes au même endroit)
+   */
+  const place = width => {
+    for (;;) {
+      if (rightX === row.startX || rightX + wideWidth <= layout.width - 10) {
+        const spot = { x: rightX, y: row.y }
+        rightX += width + CARD_GAP
+        return spot
+      }
+      if (leftX - CARD_GAP - wideWidth >= row.leftLimit) {
+        leftX -= CARD_GAP + wideWidth
+        return { x: leftX, y: row.y }
+      }
+      row = rows.next().value
+      rightX = row.startX
+      leftX = row.startX
+    }
   }
-  for (const card of rowCards) {
-    const { width } = cardSize(card, layout.cardWidth)
-    wrapIfNeeded(width)
-    x += width + CARD_GAP
-  }
-  wrapIfNeeded(layout.cardWidth * CARD_RATIO)
-  return { x, y }
+  for (const card of rowCards) place(cardSize(card, layout.cardWidth).width)
+  return place(wideWidth)
 }
 
 /**

@@ -1,8 +1,11 @@
 // Adresses des images : la face d'une carte (et ses faces B et C), le dos des cartes, les cartes d'état,
-// le décor de la table (la ville de nuit, l'illustration du méchant).
+// le décor de la table (la ville de nuit, l'illustration du méchant). Les cartes de nos boîtes ont leurs scans
+// dans public/cards/ ; celles lues sur MarvelCDB, les scans français de cgbuilder quand il les a (liste
+// src/data/cgbuilder.json), sinon les scans anglais de MarvelCDB.
 
 import { definitionOf, isEncounterCard } from '../game/engine.js'
 import { DEFINITION_BY_ID, PAWN_KIND_BY_ID } from '../game/data.js'
+import cgbuilderData from '../data/cgbuilder.json'
 
 /** Racine du site : './' par défaut (version installable et version artefact), ou le chemin de déploiement. */
 const BASE_URL = import.meta.env.BASE_URL
@@ -10,20 +13,55 @@ const BASE_URL = import.meta.env.BASE_URL
 /** Dossier des images d'une boîte, sous cards/ (encodé : « bouffon vert » contient une espace). */
 const imageFolderUrl = definition => `${BASE_URL}cards/${encodeURIComponent(definition?.imageFolder ?? 'base')}`
 
-/** Carte lue sur MarvelCDB : elle a l'image du site (null si le site n'en a pas). */
+/** Carte lue sur MarvelCDB (une boîte absente de la table) : son image vient de cgbuilder, sinon de MarvelCDB. */
 const isImportedDefinition = definition => definition?.pack === 'marvelcdb'
+
+/** Les scans français de cgbuilder (CardGame Builder) : images/carte/<dossier>/<numéro><face>.jpg. */
+export const CGBUILDER_IMAGES_URL = 'https://mc-src.cgbuilder.fr/images/carte'
+
+/**
+ * Les cartes que cgbuilder a, par code MarvelCDB : "06001a" → "6/1A", "60017" → "60/17". Le numéro et la face
+ * sont ceux du code, pas toujours le dossier (MarvelCDB 02, Le Bouffon Vert, est le dossier 3 de cgbuilder).
+ * Lues dans src/data/cgbuilder.json, que scripts/cgbuilder-images.py tient à jour et vérifie carte par carte :
+ * cgbuilder ne répond pas « introuvable » pour une image qu'il n'a pas, il renvoie vers une carte voisine.
+ */
+const CGBUILDER_PATHS = new Map()
+for (const [prefix, { folder, cards }] of Object.entries(cgbuilderData.packs)) {
+  for (const entry of cards.split(' ').filter(Boolean)) {
+    const [stem, file = stem] = entry.split('=') // « 17=17A » : la carte 17 est le fichier 17A
+    const [, number, face] = /^(\d+)([A-Z]?)$/.exec(stem)
+    CGBUILDER_PATHS.set(`${prefix}${number.padStart(3, '0')}${face.toLowerCase()}`, `${folder}/${file}`)
+  }
+}
+
+/**
+ * Le scan français d'une carte sur cgbuilder, d'après son code MarvelCDB ; null si cgbuilder ne l'a pas.
+ *   side  '' (face A, ou la seule), 'b' ou 'c' : la face de même numéro ("06001a", face 'b' → 6/1B.jpg)
+ */
+export function cgbuilderImageUrl(code, side = '') {
+  // une autre face : le même code, d'une autre lettre ; un code sans lettre n'a pas d'autre face connue
+  if (side && !/[a-z]$/.test(code ?? '')) return null
+  const path = CGBUILDER_PATHS.get(side ? code.slice(0, -1) + side : code)
+  return path ? `${CGBUILDER_IMAGES_URL}/${path}.jpg` : null
+}
 
 /**
  * Image de la face en jeu d'une carte : "<id>.jpg" pour la face A, "<id>.b.jpg" pour la face B (verso
  * d'une carte double), "<id>.c.jpg" pour la troisième face d'une identité (La Guêpe Géant) ; null s'il
  * n'y en a pas. Une face que la carte n'a pas donne l'image de sa face A.
+ * Une carte lue sur MarvelCDB prend le scan français de cgbuilder (cgbuilderImageUrl), trouvé depuis son code
+ * (les decks et parties déjà sauvegardés en profitent aussi) ; si cgbuilder ne l'a pas, le scan anglais de
+ * MarvelCDB.
  */
 export function cardImageUrl(card) {
   const definition = definitionOf(card)
   let sideSuffix = ''
   if (card.side === 2 && definition.thirdName) sideSuffix = 'c'
   else if (card.side && definition.backName) sideSuffix = 'b'
-  if (isImportedDefinition(definition)) return (sideSuffix === 'b' ? definition.backImageUrl : definition.imageUrl) ?? null
+  if (isImportedDefinition(definition)) {
+    const marvelCdbUrl = sideSuffix === 'b' ? definition.backImageUrl : definition.imageUrl
+    return cgbuilderImageUrl(definition.code, sideSuffix) ?? marvelCdbUrl ?? null
+  }
   return `${imageFolderUrl(definition)}/${card.definitionId}${sideSuffix ? `.${sideSuffix}` : ''}.jpg`
 }
 
@@ -37,9 +75,12 @@ export function cardBackUrl(card) {
 
 /**
  * Illustrations des méchants, en décor à gauche de la table, par scénario (setup.scenario). Chaque image fait
- * 694 × 923 px, détourée en biais sur sa droite (maquette) ; les autres méchants n'en ont pas encore.
+ * 694 × 923 px, détourée en biais sur sa droite (maquette) ; les autres scénarios n'en ont pas encore.
  */
-const VILLAIN_ART_FILES = { rhino: 'villains/rhino.webp', klaw: 'villains/klaw.webp', ultron: 'villains/ultron.webp' }
+const VILLAIN_ART_FILES = {
+  rhino: 'villains/rhino.webp', klaw: 'villains/klaw.webp', ultron: 'villains/ultron.webp',
+  risky_business: 'villains/norman-osborn.webp', mutagen_formula: 'villains/bouffon-vert.webp'
+}
 
 /** Le fond de la table (maquette) : une ville de nuit vue d'en bas, 1672 × 941 px. */
 export const CITY_BACKGROUND_URL = `${BASE_URL}backgrounds/ville-nuit.webp`
@@ -77,5 +118,6 @@ export const pawnImageUrl = pawnId => `${BASE_URL}pawns/${PAWN_KIND_BY_ID[pawnId
 /** Image de la face A d'une carte, par l'identifiant de sa fiche (miniatures de l'écran Nouvelle partie). */
 export function imageUrlOfDefinition(definitionId) {
   const definition = DEFINITION_BY_ID[definitionId]
-  return isImportedDefinition(definition) ? definition.imageUrl ?? '' : `${imageFolderUrl(definition)}/${definitionId}.jpg`
+  if (isImportedDefinition(definition)) return cgbuilderImageUrl(definition.code) ?? definition.imageUrl ?? ''
+  return `${imageFolderUrl(definition)}/${definitionId}.jpg`
 }

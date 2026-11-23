@@ -12,7 +12,7 @@ Node 20.19+ ou 22.12+ (exigence de Vite 8).
 ```bash
 npm install
 npm run dev            # http://localhost:5173
-npm test               # Vitest, 133 tests (moteur + import MarvelCDB)
+npm test               # Vitest, 146 tests (moteur, import MarvelCDB, decks sauvegardés, scans cgbuilder, rapport de bug)
 npm run test:watch
 npm run build          # PWA dans dist/
 npm run preview        # sert dist/ : seul moyen de tester le service worker et le préchargement
@@ -37,11 +37,14 @@ GAMEBOX_PRIVATE_DIR=$PWD/server/private php -S 127.0.0.1:8000 -t server/public
 php server/tests/api-test.php          # 39 vérifications attendues
 php server/tests/mailing-test.php      # 77
 php server/tests/confirmation-test.php # 42
+php server/tests/bug-report-test.php   # 40
 ```
 
 Sans PHP sur le poste : `docker run --rm -v "$PWD/server:/srv:ro" -w /srv php:8.3-cli php tests/api-test.php`. Les tests travaillent sur une copie temporaire avec un faux SMTP : ils ne touchent ni la base ni le SMTP réels.
 
 `python scripts/build-data.py` régénère `src/data/cards.json` et `precons.json` (boîte de base seulement) et demande des dépôts externes clonés à côté : voir l'en-tête du script.
+
+`python scripts/cgbuilder-images.py` régénère `src/data/cgbuilder.json` : les scans français de cgbuilder que prennent les cartes lues sur MarvelCDB (`cgbuilderImageUrl`, `useAssets.js`). Ne jamais deviner une adresse cgbuilder sans cette liste : ses dossiers ne suivent pas toujours les préfixes MarvelCDB, et une image absente y redirige vers une autre carte au lieu de répondre 404.
 
 ## Architecture
 
@@ -54,11 +57,12 @@ Trois couches, à garder étanches :
 Autres points qui demandent de lire plusieurs fichiers :
 
 - **Fiches des cartes** : les JSON de `src/data/` utilisent des clés courtes (`n`, `t`, `s`, `hp`…) pour rester compacts ; `data.js` les traduit **une seule fois** au chargement (`readDefinition`, table `SHORT_KEYS`) et tout le reste du code n'utilise que les noms lisibles (`name`, `type`, `hitPoints`…). Les index `DEFINITION_BY_ID` et `DEFINITION_BY_CODE` (code MarvelCDB) sont la porte d'entrée.
-- **`AVAILABLE_PACKS` vs `PACKS`** (`data.js`) : seule la boîte de base est proposée en « Nouvelle partie » ; les autres boîtes restent connues de la table pour les parties sauvegardées et les decks importés.
+- **`AVAILABLE_PACKS` vs `PACKS`** (`data.js`) : seuls la boîte de base, le paquet de scénarios Le Bouffon Vert et les paquets héros Captain America, Hulk et Thor sont proposés en « Nouvelle partie » ; les autres boîtes restent connues de la table pour les parties sauvegardées et les decks importés.
 - **`src/game/rules.js`** : tout ce qu'un héros ou un scénario demande en plus des règles de base, une entrée par héros (`HERO_RULES`) et par scénario (`SCENARIO_RULES`), avec les listes en clair `automated` / `byHand` et les réglages que le moteur lit. Un test vérifie qu'aucune entrée ne manque et que chaque identifiant cité existe avec le bon type.
-- **Partie enregistrée** : `savedGame.js` porte un numéro de version et convertit les parties des formats précédents à l'ouverture. Toute modification de la forme de l'état passe par là. Clés du navigateur : `mc-table-vue-v1` (partie), `mc-table-card-size`, `mc-table-side-tab`, `mc-table-side-width`, `gbh-signup`.
+- **Partie enregistrée** : `savedGame.js` porte un numéro de version et convertit les parties des formats précédents à l'ouverture. Toute modification de la forme de l'état passe par là. Clés du navigateur : `mc-table-vue-v1` (partie), `mc-table-card-size`, `mc-table-side-tab`, `mc-table-side-width`, `mc-table-deck-tab` (dernier sous-onglet du choix du héros), `mc-table-decks` (decks sauvegardés, `stores/decks.js`), `gbh-signup`.
 - **Pointeur** : souris, doigt et stylet sont gérés en un seul endroit (`composables/usePointer.js`, écouteurs délégués sur `document`) grâce aux attributs `data-id` (cartes) et `data-zone` (zones). Ne pas ajouter de gestionnaires de glisser / appui long dans un composant : les contournements iOS / Android y sont déjà réunis.
-- **Hors ligne** : les `globPatterns` du service worker (`vite.config.js`) téléchargent les 209 images de la boîte de base dès l'installation. Une boîte ajoutée à `AVAILABLE_PACKS` doit l'être aussi aux `globPatterns`. Le build `--mode artifact` n'a ni service worker ni inscription.
+- **Hors ligne** : les `globPatterns` du service worker (`vite.config.js`) téléchargent les images des boîtes proposées (boîte de base, Le Bouffon Vert, Captain America, Hulk, Thor) dès l'installation. Une boîte ajoutée à `AVAILABLE_PACKS` doit l'être aussi aux `globPatterns`. Le build `--mode artifact` n'a ni service worker ni inscription.
+- **Signaler un bug** : `components/modals/BugReportModal.vue` → `src/api/bugReport.js` → `server/public/api/bug-report.php` (+ `server/private/bug-report.php`), qui envoie le rapport par e-mail, la partie en pièce jointe ; rien n'est enregistré. Version artefact ou serveur injoignable : le même rapport par la messagerie du joueur (`buildMailUrl`). Le commit construit vient de `vite.config.js` (`__APP_COMMIT__`). Les mentions légales (`LegalNotice.vue`) décrivent ce traitement : à tenir à jour avec le script.
 - **Inscription aux nouvelles** : `components/SignupForm.vue` → `src/api/signup.js` → `server/public/api/signup.php`. `server/private/config.php` (secrets, jamais versionné — modèle dans `config.sample.php`) doit lister l'origine de l'appli dans `allowed_origins`. Voir `server/README.md` et `server/MEMO NEWSLETTER.md`.
 
 ## Ajouter une boîte, un héros ou un scénario

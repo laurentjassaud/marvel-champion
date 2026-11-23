@@ -1,9 +1,10 @@
 // Préchargement des images : celles des cartes de la partie sont chargées en tâche de fond une fois la
 // partie mise en place. Les cartes de la boîte de base sont déjà toutes dans le cache du service worker
 // depuis son installation (vite.config.js) : elles reviennent aussitôt. Les autres (decks importés, cartes
-// lues sur MarvelCDB) sont gardées par le service worker à ce moment-là (caches mc-cards et mc-marvelcdb) :
-// une carte révélée plus tard s'affiche aussitôt, même hors ligne. Sans service worker (serveur de
-// développement, version artefact), elles vont dans le cache HTTP du navigateur.
+// lues sur MarvelCDB, avec leurs scans français de cgbuilder) sont gardées par le service worker à ce
+// moment-là (caches mc-cards, mc-cgbuilder et mc-marvelcdb) : une carte révélée plus tard s'affiche aussitôt,
+// même hors ligne. Sans service worker (serveur de développement, version artefact), elles vont dans le cache
+// HTTP du navigateur.
 
 import { watch } from 'vue'
 import { isEncounterCard } from '../game/engine.js'
@@ -40,7 +41,7 @@ function imagesOfGame(game) {
 
 /** Charge une image jusqu'au bout (pour que le cache la garde) et la note comme chargée. */
 async function loadImage(url) {
-  // les images de MarvelCDB (decks importés par lien) viennent d'un autre site : demandées comme le ferait une <img>
+  // les images de cgbuilder et de MarvelCDB (cartes importées) viennent d'un autre site : demandées comme le ferait une <img>
   const fromOtherSite = new URL(url, location.href).origin !== location.origin
   const response = await fetch(url, { priority: 'low', ...(fromOtherSite ? { mode: 'no-cors' } : {}) })
   await response.blob()

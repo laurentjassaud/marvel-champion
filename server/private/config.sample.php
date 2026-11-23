@@ -54,6 +54,15 @@ return [
     // « Répondre » à cet avis écrit directement à la personne inscrite. Demande aussi le bloc « mail » rempli.
     'notify' => 'contact@gameboxheroes.fr',
 
+    // ── Rapports de bug (« Signaler un bug » de l'appli, public/api/bug-report.php) ─────────────────
+    // Chaque rapport part par e-mail, la partie en pièce jointe ; rien n'est enregistré. Demande le bloc « mail ».
+    'bug_report' => [
+        // Qui reçoit les rapports : une adresse ou une liste. Absent : les adresses de « notify ».
+        'to' => 'contact@gameboxheroes.fr',
+        // Au plus `max` rapports par connexion sur `window` secondes (même fenêtre que rate_limit, plus haut).
+        'rate_limit' => ['max' => 5, 'window' => 3600],
+    ],
+
     'mail' => [
         // 'smtp' : passe par un serveur SMTP authentifié (hébergeur, Brevo, Mailjet, Google Workspace…).
         //          C'est le choix conseillé pour la délivrabilité.

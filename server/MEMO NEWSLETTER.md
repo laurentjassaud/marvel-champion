@@ -11,6 +11,7 @@ L'essentiel pour faire tourner « Rester informé » sur gameboxheroes.fr. Le d�
 3. Une adresse déjà inscrite qui se réinscrit ne déclenche aucun mail.
 4. La **newsletter** s'envoie à la main depuis le VPS avec `bin/mailing.php` (voir plus bas).
 5. La **désinscription** se fait par le lien présent dans chaque mail, ou par le bouton « Se désabonner » de Gmail, Outlook ou Apple Mail. Le nom, l'adresse et l'historique d'envoi sont alors effacés.
+6. **« Signaler un bug »** (onglet de l'appli pendant la partie) : `api/bug-report.php` t'envoie le rapport par mail (sujet `[Bug] …`), la partie jointe. Rien n'est enregistré dans la base. Si le joueur a laissé son adresse, « Répondre » lui écrit.
 
 Les mails partent par le serveur d'envoi d'OVH (`ssl0.ovh.net`), avec le compte `contact@gameboxheroes.fr`.
 
@@ -20,7 +21,9 @@ Les mails partent par le serveur d'envoi d'OVH (`ssl0.ovh.net`), avec le compte 
 | --- | --- | --- |
 | `public/api/signup.php` | `/home/prod/WWW/base/api/` | reçoit les inscriptions |
 | `public/api/unsubscribe.php` | `/home/prod/WWW/base/api/` | page de désinscription |
+| `public/api/bug-report.php` | `/home/prod/WWW/base/api/` | reçoit les rapports de bug |
 | `private/lib.php`, `private/mail.php` | `/home/prod/gamebox-private/` | le code commun |
+| `private/bug-report.php` | `/home/prod/gamebox-private/` | rapports de bug (vérification, mail) |
 | `private/bin/mailing.php` | `/home/prod/gamebox-private/bin/` | envoi de la newsletter |
 | `private/bin/signups.php` | `/home/prod/gamebox-private/bin/` | consulter et gérer les inscrits |
 | `private/templates/*.html` | `/home/prod/gamebox-private/templates/` | mail de confirmation et newsletters |
@@ -44,6 +47,8 @@ Il n'est jamais envoyé sur GitHub, car il contient les secrets et le mot de pas
 | `site_url` | `https://gameboxheroes.fr` | sert à construire les liens de désinscription |
 | `notify` | `contact@gameboxheroes.fr` | avis de nouvelle inscription ; `''` pour ne plus en recevoir |
 | `confirmation` | *(absent)* | `false` pour couper le mail de confirmation |
+| `bug_report` → `to` | `contact@gameboxheroes.fr` | qui reçoit les rapports de bug ; absent : les adresses de `notify` |
+| `bug_report` → `rate_limit` | `5` par `3600` s | rapports par connexion ; absent : 5 par heure |
 | `mail` → `host` / `port` / `encryption` | `ssl0.ovh.net` / `465` / `ssl` | serveur d'envoi OVH |
 | `mail` → `username`, `from_email` | `contact@gameboxheroes.fr` | toujours la même adresse pour les deux |
 | `mail` → `password` | mot de passe de `contact@` | à mettre à jour si tu le changes chez OVH |
@@ -169,6 +174,7 @@ for p in 465 587; do timeout 5 bash -c "</dev/tcp/ssl0.ovh.net/$p" 2>/dev/null &
 - [ ] **DMARC** : Zone DNS de gameboxheroes.fr → ajouter une entrée TXT, sous-domaine `_dmarc`, valeur `v=DMARC1; p=none`.
 - [x] **Politique de confidentialité** : rédigée dans l'appli Marvel (fenêtre « Mentions légales », `src/components/LegalNotice.vue`) et reliée au formulaire (« Vos données et vos droits »). À tenir à jour si les données collectées, les prestataires ou la durée de conservation changent.
 - [ ] **Durée de conservation** : les mentions légales annoncent « jusqu'à la désinscription, ou 3 ans après le dernier contact ». Le script ne purge rien de lui-même : une fois par an, supprimer avec `bin/signups.php supprimer` les inscrits dont l'inscription date de plus de 3 ans.
+- [ ] **Rapports de bug** : déposer `public/api/bug-report.php` et `private/bug-report.php` sur le VPS (tableau plus haut), ajouter le bloc `bug_report` à `config.php` si besoin, puis vérifier avec `curl -s -X POST https://gameboxheroes.fr/api/bug-report.php -H 'Origin: https://gameboxheroes.fr' -H 'Content-Type: application/json' -d '{}'` (réponse attendue : `Envoi trop rapide`). Supprimer les mails de rapports une fois le bug réglé (les mentions légales annoncent qu'ils sont gardés « le temps de traiter le problème »).
 - [ ] **Un seul exemplaire de `server/`** : choisir entre le dépôt `marvel-champion` et le dépôt `home`.
 
 ## Tester le script sur ton PC
@@ -179,6 +185,7 @@ Avec Docker, depuis la racine du dépôt. Ces tests ne touchent ni à la vraie b
 docker run --rm -v "$PWD/server:/srv:ro" -w /srv php:8.3-cli php tests/confirmation-test.php
 docker run --rm -v "$PWD/server:/srv:ro" -w /srv php:8.3-cli php tests/api-test.php
 docker run --rm -v "$PWD/server:/srv:ro" -w /srv php:8.3-cli php tests/mailing-test.php
+docker run --rm -v "$PWD/server:/srv:ro" -w /srv php:8.3-cli php tests/bug-report-test.php
 ```
 
-Résultats attendus : 42, 39 et 77 vérifications réussies.
+Résultats attendus : 42, 39, 77 et 40 vérifications réussies.

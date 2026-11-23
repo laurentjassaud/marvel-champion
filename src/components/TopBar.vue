@@ -1,7 +1,8 @@
 <script setup>
 // La barre du haut (maquette) : le titre dans son bandeau rouge, l'affiche de la partie (le héros sur un
 // bandeau rouge, le logo VS, le méchant en cours sur un bandeau bleu acier, le badge Expert), puis les
-// onglets en biais : les pions (leur liste, PawnTray), recommencer, nouvelle partie, puis signaler un bug, plein écran et aide
+// onglets en biais : les pions (leur liste, PawnTray), recommencer, nouvelle partie, puis signaler un bug (sa
+// fenêtre, BugReportModal), plein écran et aide
 // (la taille des cartes se règle à la tirette du bas de l'écran, CardSizeSlider). Le titre ramène à
 // l'accueil. Sur l'accueil (intro), la barre n'a que ses liens : à propos, buy me a coffee, rester informé,
 // contact (en rouge). Quand la barre manque de place, le titre devient « MC Table » (fitTitle).
@@ -114,16 +115,16 @@ watch(() => gameStore.matchup, fitTitle, { deep: true, flush: 'post' })
           aria-controls="pawn-tray" :aria-expanded="ui.pawnTrayOpen" @click="ui.togglePawnTray()">Pions</button>
         <button type="button" class="slant tab" :disabled="!gameStore.isReady" title="Même héros, même deck, même scénario, depuis le début" @click="ui.openModal('restart')">Recommencer</button>
         <button type="button" class="slant tab red" @click="ui.openModal('setup')">Nouvelle partie</button>
-        <!-- au bout de la barre : signaler un bug (pas encore prêt), plein écran et aide -->
-        <SoonHint v-slot="{ attrs }" placement="below">
-          <button type="button" class="slant tab bug" aria-label="Signaler un bug" v-bind="attrs">
-            <!-- un insecte, au trait du bouton plein écran : la barre étroite n'a pas la place du mot -->
-            <svg class="bug-icon" viewBox="0 0 24 24" width="25" height="25" aria-hidden="true">
-              <path d="M8 10h8v5a4 4 0 0 1-8 0zM10 10V8a2 2 0 0 1 4 0v2M3.5 12.5H8M16 12.5h4.5M4.5 19l3.5-2.5M19.5 19 16 16.5" />
-            </svg>
-            <span class="bug-label" aria-hidden="true">Signaler un bug</span>
-          </button>
-        </SoonHint>
+        <!-- au bout de la barre : signaler un bug (sa fenêtre, BugReportModal : le rapport part par e-mail, avec
+             la partie), plein écran et aide -->
+        <button type="button" class="slant tab bug" aria-label="Signaler un bug" title="Signaler un bug : le rapport part avec la partie en cours"
+          @click="ui.openModal('bug')">
+          <!-- un insecte, au trait du bouton plein écran : la barre étroite n'a pas la place du mot -->
+          <svg class="bug-icon" viewBox="0 0 24 24" width="25" height="25" aria-hidden="true">
+            <path d="M8 10h8v5a4 4 0 0 1-8 0zM10 10V8a2 2 0 0 1 4 0v2M3.5 12.5H8M16 12.5h4.5M4.5 19l3.5-2.5M19.5 19 16 16.5" />
+          </svg>
+          <span class="bug-label" aria-hidden="true">Signaler un bug</span>
+        </button>
         <FullscreenButton class="slant tab" />
         <button type="button" class="slant tab" title="Raccourcis clavier (?)" aria-label="Raccourcis clavier" @click="ui.openModal('help')">?</button>
       </nav>
@@ -137,8 +138,8 @@ watch(() => gameStore.matchup, fitTitle, { deep: true, flush: 'post' })
   --title-w: 387px; /* la place du titre sur le bandeau (maquette), avant réduction ; plus courte pour « MC Table » */
   height: 48px; min-width: 0;
   background: linear-gradient(90deg, rgb(19 21 39 / .6), rgb(69 76 141 / .6));
-  /* une étiquette « Bientôt disponible » sous un onglet du bord droit (Signaler un bug), même invisible,
-     élargissait la page sur téléphone : coupée sur les côtés, elle reste visible sous la barre */
+  /* une étiquette « Bientôt disponible » sous un onglet (Buy me a coffee), même invisible, élargissait la page
+     sur téléphone : coupée sur les côtés, elle reste visible sous la barre */
   overflow-x: clip;
 }
 .bar-inner { display: flex; align-items: flex-start; height: 48px; min-width: 0; }

@@ -1,6 +1,7 @@
 // État de l'interface (et non de la partie) : taille des cartes, carte sélectionnée, survolée ou agrandie,
-// menu contextuel, fenêtre ouverte, onglet et largeur de la colonne de droite, place prise par le décor du
-// méchant sur la table, changement de scène quand une partie est lancée.
+// menu contextuel, fenêtre ouverte, onglet et largeur de la colonne de droite, sous-onglet du choix du héros
+// (Nouvelle partie), place prise par le décor du méchant sur la table, changement de scène quand une partie
+// est lancée.
 
 import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
@@ -10,6 +11,9 @@ import { villainArtUrl } from '../composables/useAssets.js'
 // privée) ou être plein : la lecture et l'écriture ne doivent jamais faire échouer l'application.
 const CARD_WIDTH_KEY = 'mc-table-card-size'
 const SIDE_TAB_KEY = 'mc-table-side-tab'
+const DECK_TAB_KEY = 'mc-table-deck-tab'
+/** Les sous-onglets du choix du héros (« Nouvelle partie », DeckTabs), dans leur ordre. */
+const DECK_TABS = ['precon', 'mine', 'load']
 const SIDE_WIDTH_KEY = 'mc-table-side-width'
 const readSetting = key => { try { return localStorage.getItem(key) } catch { return null } }
 const writeSetting = (key, value) => {
@@ -47,6 +51,11 @@ export const useUiStore = defineStore('ui', () => {
   const cardWidth = ref(Number(readSetting(CARD_WIDTH_KEY)) || defaultCardWidth())
   /** Onglet de la colonne de droite : 'card' (la carte agrandie) ou 'log' (le journal). */
   const sideTab = ref(readSetting(SIDE_TAB_KEY) === 'log' ? 'log' : 'card')
+  /**
+   * Le sous-onglet du choix du héros de « Nouvelle partie » : 0 Préconstruits, 1 Mes decks, 2 Charger un deck.
+   * Le dernier choisi est gardé : la fenêtre s'ouvre dessus.
+   */
+  const deckTab = ref(Math.max(0, DECK_TABS.indexOf(readSetting(DECK_TAB_KEY))))
   /** Largeur de la colonne de droite choisie en glissant son bord, en pixels ; null : la largeur par défaut. */
   const sideColumnWidth = ref(Number(readSetting(SIDE_WIDTH_KEY)) || null)
   /** Taille mesurée de la table, en pixels. */
@@ -69,7 +78,7 @@ export const useUiStore = defineStore('ui', () => {
   /** La liste des pions (PawnTray), ouverte par l'onglet « Pions » de la barre. */
   const pawnTrayOpen = ref(false)
   /**
-   * Fenêtre ouverte : {type: 'setup' | 'pile' | 'mulligan' | 'help' | 'signup' | 'legal' | 'about' | 'restart' | 'villain'
+   * Fenêtre ouverte : {type: 'setup' | 'pile' | 'mulligan' | 'help' | 'signup' | 'legal' | 'about' | 'thanks' | 'bug' | 'restart' | 'villain'
    * | 'scheme' | 'defeat' | 'reshuffle', zone?, result?, fromPile?}.
    */
   const modal = ref(null)
@@ -86,6 +95,7 @@ export const useUiStore = defineStore('ui', () => {
 
   watch(cardWidth, width => writeSetting(CARD_WIDTH_KEY, width))
   watch(sideTab, tab => writeSetting(SIDE_TAB_KEY, tab))
+  watch(deckTab, tab => writeSetting(DECK_TAB_KEY, DECK_TABS[tab] ?? DECK_TABS[0]))
   // la largeur change à chaque mouvement d'un glisser : elle n'est écrite qu'une fois stabilisée
   let sideWidthTimer
   watch(sideColumnWidth, width => {
@@ -159,7 +169,7 @@ export const useUiStore = defineStore('ui', () => {
   }
 
   return {
-    cardWidth, resetCardWidth, sideTab, sideColumnWidth, tableWidth, tableHeight, heroInset, selectedCardId, randomlyPickedCardId, hoveredCardId,
+    cardWidth, resetCardWidth, sideTab, deckTab, sideColumnWidth, tableWidth, tableHeight, heroInset, selectedCardId, randomlyPickedCardId, hoveredCardId,
     preview, contextMenu, pawnTrayOpen, modal, introOpen, setupCount, isDealing, scene, sceneCount, layout, setTableSize, setHeroInset, selectCard, showPreview, openContextMenu, closeContextMenu,
     openModal, closeModal, openIntro, closeIntro, launchGame, togglePawnTray, closePawnTray
   }

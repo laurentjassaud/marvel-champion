@@ -3,6 +3,7 @@
 Rubrique « Restez informé » pour l'appli Marvel Champions de Gamebox Hero.
 Le visiteur laisse son nom et son e-mail, un script PHP les enregistre dans une base SQLite sur le VPS.
 Un second script envoie ensuite la mailing list à partir d'un template HTML (voir la partie 4).
+Le même dossier reçoit aussi les rapports de bug de l'appli, envoyés par e-mail (« Signaler un bug », partie 6).
 
 Version courte, pour l'usage courant (réglages, newsletter, commandes, dépannage) : [MEMO NEWSLETTER.md](<MEMO NEWSLETTER.md>).
 
@@ -11,9 +12,11 @@ server/
   public/api/
     signup.php               → à copier dans la racine web (DocumentRoot)/api/
     unsubscribe.php          → idem : page de désinscription
+    bug-report.php           → idem : rapports de bug (« Signaler un bug », partie 6)
   private/                   → à copier HORS de la racine web
     lib.php                  validation, anti-spam, base, liens de désinscription
     mail.php                 envoi des e-mails (mailing list et mail de confirmation)
+    bug-report.php           rapports de bug : validation, envoi par e-mail avec la partie jointe
     config.sample.php        à copier en config.php
     bin/signups.php          outil d'admin (liste, export, suppression, suivi des campagnes)
     bin/mailing.php          envoi de la mailing list
@@ -25,6 +28,7 @@ server/
     api-test.php             test de l'inscription (39 vérifications)
     mailing-test.php         test de la mailing list (77 vérifications)
     confirmation-test.php    test du mail de confirmation et de l’avis (42 vérifications)
+    bug-report-test.php      test des rapports de bug (40 vérifications)
     smtp-sink.php            faux serveur SMTP utilisé par le test
 ```
 
@@ -52,7 +56,7 @@ sudo mkdir data && sudo chown www-data:www-data data && sudo chmod 770 data
 
 # Points d'entrée publics
 sudo mkdir -p /home/prod/WWW/base/api
-sudo cp server/public/api/signup.php server/public/api/unsubscribe.php /home/prod/WWW/base/api/
+sudo cp server/public/api/signup.php server/public/api/unsubscribe.php server/public/api/bug-report.php /home/prod/WWW/base/api/
 ```
 
 Adapte `/home/prod/WWW/base` à ton DocumentRoot. Si le dossier privé n'est pas `/home/prod/gamebox-private`, indique-le dans le vhost :
@@ -222,6 +226,40 @@ sudo -u www-data php bin/signups.php echecs confirmation-inscription   # adresse
 
 Comme la confirmation : rien pour une réinscription, envoi après la réponse au visiteur, et un échec ne touche pas à l'inscription (il est noté dans le journal d'erreurs, préfixé `[gamebox-signup]`). Chaque nouvelle inscription compte alors pour deux mails dans le quota horaire du fournisseur SMTP.
 
+## 6. Rapports de bug
+
+L'onglet « Signaler un bug » de l'appli (`src/components/modals/BugReportModal.vue`, `src/api/bugReport.js`) envoie le rapport à `api/bug-report.php`, qui le transmet **par e-mail**, la partie en cours en pièce jointe. Le joueur n'a besoin d'aucun compte, et **rien n'est enregistré** sur le serveur (sauf l'empreinte de l'IP, une heure, pour l'anti-spam).
+
+Le mail, en texte : sujet `[Bug] <titre du joueur>`, puis le titre, l'e-mail du joueur s'il l'a laissé (« Répondre » lui écrit alors directement), la date, la description, le contexte (partie, situation, table, écran, page, version de l'appli, navigateur), les 50 derniers messages du journal, et en pièce jointe `bug-report_mc-table_<date>_<heure>.json`, la partie telle qu'elle était enregistrée dans le navigateur. Pour la rouvrir : dans la console du navigateur, sur l'appli, `localStorage.setItem('mc-table-vue-v1', <contenu du fichier>)`, puis recharger la page. Pour en faire un ticket GitHub, le mail rappelle l'adresse du dépôt.
+
+Réglages de `config.php` (bloc facultatif, voir `config.sample.php`) :
+
+```php
+'bug_report' => [
+    'to' => 'contact@gameboxheroes.fr',               // qui reçoit les rapports (absent : les adresses de « notify »)
+    'rate_limit' => ['max' => 5, 'window' => 3600],   // par connexion ; même fenêtre que rate_limit
+],
+```
+
+Il faut aussi le bloc `mail` rempli (partie 4). Sinon, ou sans adresse de réception, le service est fermé : l'appli le dit au joueur (503) et lui propose d'envoyer le rapport depuis sa messagerie. Chaque rapport compte pour un mail dans le quota du fournisseur SMTP.
+
+**Sur une installation existante**, il suffit de copier les deux fichiers et, si besoin, d'ajouter le bloc `bug_report` :
+
+```bash
+sudo cp server/private/bug-report.php /home/prod/gamebox-private/
+sudo cp server/public/api/bug-report.php /home/prod/WWW/base/api/
+```
+
+Vérification rapide (doit répondre `Envoi trop rapide`) :
+
+```bash
+curl -s -X POST https://gameboxheroes.fr/api/bug-report.php   -H 'Origin: https://gameboxheroes.fr' -H 'Content-Type: application/json' -d '{}'
+```
+
+`L'envoi des rapports n'est pas disponible` signale un bloc `mail` incomplet ou une adresse de réception manquante. Les erreurs (dont un mail qui n'a pas pu partir) sont dans le journal d'erreurs Apache, préfixées `[gamebox-bug-report]`.
+
+Le script vérifie l'origine et le format comme l'inscription, refuse un rapport sans titre ou avec une adresse invalide, limite les envois par connexion (compteur à part de celui de l'inscription), ignore les robots (champ piège, délai minimal) et coupe les textes trop longs. Une partie illisible ou trop volumineuse (plus de 900 Ko) n'empêche pas l'envoi : le mail part sans pièce jointe, en le disant. Il envoie le mail avant de répondre : le joueur sait si son rapport est bien parti.
+
 ## Ce que fait le script d'inscription
 
 - **Validation** : nom de 1 à 80 caractères, sans lien ni balise ; e-mail valide, mis en minuscules ; domaine qui reçoit du courrier (`check_mx`) ; case de consentement cochée.
@@ -237,7 +275,8 @@ Si le site passe derrière Cloudflare ou un reverse proxy, active `mod_remoteip`
 
 ## RGPD : ce qui reste à ta charge
 
-- **Politique de confidentialité** : rédigée dans l'appli Marvel (`src/components/LegalNotice.vue`), montrée par « Mentions légales » en bas de l'accueil et par « Vos données et vos droits » sous le formulaire. La tenir à jour si ce qui est collecté, les prestataires ou la durée de conservation changent.
+- **Politique de confidentialité** : rédigée dans l'appli Marvel (`src/components/LegalNotice.vue`), montrée par « Mentions légales » en bas de l'accueil, par « Vos données et vos droits » sous le formulaire et par « Ce que devient votre rapport » dans « Signaler un bug ». La tenir à jour si ce qui est collecté, les prestataires ou la durée de conservation changent.
+- **Rapports de bug** : les mentions légales annoncent que l'éditeur garde un rapport « le temps de traiter le problème » : supprime les mails de rapports (et leur pièce jointe) une fois le bug réglé.
 - **Désinscription** : gérée par `bin/mailing.php` et `api/unsubscribe.php` (partie 4). Si tu envoies un jour depuis un autre outil, il faudra y mettre un lien de désinscription.
 - **Durée de conservation** : les mentions légales annoncent « jusqu'à la désinscription, ou 3 ans après le dernier contact », ce que recommande la CNIL pour ce type de liste. Le script ne purge rien de lui-même : supprime à la main les inscrits de plus de 3 ans avec `bin/signups.php supprimer`.
 
@@ -247,11 +286,13 @@ Si le site passe derrière Cloudflare ou un reverse proxy, active `mod_remoteip`
 php server/tests/api-test.php            # inscription
 php server/tests/mailing-test.php        # mailing list et désinscription
 php server/tests/confirmation-test.php   # mail de confirmation et avis de nouvelle inscription
+php server/tests/bug-report-test.php     # rapports de bug
 ```
 
-Sans PHP sur le poste : `docker run --rm -v "$PWD/server:/srv:ro" -w /srv php:8.3-cli php tests/confirmation-test.php` (idem pour les deux autres).
+Sans PHP sur le poste : `docker run --rm -v "$PWD/server:/srv:ro" -w /srv php:8.3-cli php tests/confirmation-test.php` (idem pour les autres).
 
 Les tests lancent des serveurs locaux sur une copie temporaire, dont un faux serveur SMTP qui garde les messages pour les inspecter. Ils ne touchent ni à ta vraie base ni à ton SMTP.
 
 - **Inscription** : cas valides et invalides, anti-spam, doublons, codes HTTP, outil en ligne de commande.
 - **Mailing list** : personnalisation, échappement, en-têtes, version texte, images jointes, reprise, échecs, cadence, verrou, panne SMTP et page de désinscription.
+- **Rapports de bug** : mail reçu (destinataires, sujet, « Répondre », texte, partie jointe), champs invalides, anti-spam, codes HTTP, service fermé, panne SMTP, limite par connexion à part de celle de l'inscription.

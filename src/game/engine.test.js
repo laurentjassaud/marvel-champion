@@ -38,11 +38,18 @@ describe('données', () => {
     expect(MODULAR_SETS.find(m => m.id === 'the_doomsday_chair').name).toBe("Le Siège de l'Apocalypse")
   })
 
-  it('mise en place : seuls les 5 héros, 3 scénarios et 5 sets modulaires de la boîte de base sont proposés', () => {
-    expect(AVAILABLE_HEROES.map(h => h.id)).toEqual(['spider_man', 'captain_marvel', 'she_hulk', 'iron_man', 'black_panther'])
-    expect(AVAILABLE_SCENARIOS.map(v => v.id)).toEqual(['rhino', 'klaw', 'ultron'])
-    expect(AVAILABLE_MODULAR_SETS.map(m => m.id)).toEqual(['bomb_scare', 'masters_of_evil', 'under_attack', 'legions_of_hydra', 'the_doomsday_chair'])
-    // the random draw stays in the core set, even for a scenario of another box
+  it('mise en place : la boîte de base, le paquet Le Bouffon Vert et les paquets héros Captain America, Hulk et Thor', () => {
+    expect(AVAILABLE_HEROES.map(h => h.id)).toEqual(['spider_man', 'captain_marvel', 'she_hulk', 'iron_man', 'black_panther', 'captain_america', 'hulk', 'thor'])
+    // chaque héros proposé a son deck préconstruit
+    for (const hero of AVAILABLE_HEROES) expect(PRECON_DECKS[hero.id], hero.id).toBeTruthy()
+    expect(AVAILABLE_SCENARIOS.map(v => v.id)).toEqual(['rhino', 'klaw', 'ultron', 'risky_business', 'mutagen_formula'])
+    expect(AVAILABLE_MODULAR_SETS.map(m => m.id)).toEqual(['bomb_scare', 'masters_of_evil', 'under_attack', 'legions_of_hydra', 'the_doomsday_chair',
+      'goblin_gimmicks', 'a_mess_of_things', 'power_drain', 'running_interference'])
+    // le set conseillé de chaque scénario proposé est proposé lui aussi
+    for (const scenario of AVAILABLE_SCENARIOS) {
+      for (const id of scenario.advisedModulars) expect(AVAILABLE_MODULAR_SETS.map(m => m.id), scenario.id).toContain(id)
+    }
+    // the random draw stays in the offered boxes, even for a scenario of another box
     for (let i = 0; i < 20; i++) {
       const s = game({ scenario: 'crossbones', modulars: 'random' })
       for (const id of s.setup.modulars) expect(AVAILABLE_MODULAR_SETS.map(m => m.id)).toContain(id)
@@ -1555,7 +1562,7 @@ describe('manigance principale achevée', () => {
 })
 
 describe('placement', () => {
-  it('une carte reçue devant l\'identité ne prend pas de place dans la rangée Rencontre', () => {
+  it('une carte reçue devant l\'identité ne prend pas de place dans la zone Rencontre', () => {
     const s = game()
     const before = E.nextEncounterSpot(s, L)
     E.dealEncounterCardToPlayer(s, L)
@@ -1564,11 +1571,14 @@ describe('placement', () => {
     expect(E.nextEncounterSpot(s, L).x).toBeGreaterThan(before.x)
   })
 
-  it('l\'identité en bas, au milieu ; vos cartes à sa gauche, puis à sa droite, puis une rangée plus haut', () => {
+  it('l\'identité en bas, au milieu de la partie libre de la table ; vos cartes à sa gauche, puis à sa droite, puis une rangée plus haut', () => {
+    // sans PV du méchant sur la table : au milieu de la table
+    expect(E.identityCard(game())).toMatchObject({ x: (L.width - L.cardWidth) / 2, y: L.height - L.cardWidth * 1.4 - 34 })
+    // les PV du méchant occupent 200 px à gauche : au milieu de ce qui reste, de 216 à 1084, soit 610
     const layout = { ...L, heroInset: 200 }
-    const s = game()
+    const s = E.newGame({ hero: 'spider_man', deckList: PRECON_DECKS.spider_man, scenario: 'rhino', modulars: ['bomb_scare'], expert: false }, layout)
     const id = E.identityCard(s)
-    expect(id).toMatchObject({ x: (L.width - L.cardWidth) / 2, y: L.height - L.cardWidth * 1.4 - 34 })
+    expect(id).toMatchObject({ x: 610, y: L.height - L.cardWidth * 1.4 - 34 })
     const step = L.cardWidth + 12
     const xs = []
     for (const card of E.cardsInZone(s, 'hand').slice(0, 5)) {
@@ -1577,13 +1587,52 @@ describe('placement', () => {
     }
     const left = id.x - 24 - L.cardWidth
     const right = id.x + L.cardWidth + 24
-    // à gauche, de 406 à 216 (après les PV du méchant, 200 px), par pas de 92 : 3 cartes ; à droite, de 614
-    // à 1004 (16 px du bord) : 5 cartes ; 8 par rangée
-    expect(xs).toEqual([left, left - step, left - 2 * step, right, right + step])
+    // à gauche, de 506 à 216 (après les PV du méchant), par pas de 92 : 4 cartes ; à droite, de 714 à 1004
+    // (16 px du bord) : 4 cartes ; 8 par rangée
+    expect(xs).toEqual([left, left - step, left - 2 * step, left - 3 * step, right])
     expect(Math.min(...E.cardsInZone(s, 'table').filter(c => !E.isEncounterCard(c)).map(c => c.x))).toBeGreaterThanOrEqual(216)
     expect(Math.max(...E.cardsInZone(s, 'table').filter(c => !E.isEncounterCard(c)).map(c => c.x))).toBeLessThanOrEqual(L.width - 16 - L.cardWidth)
     for (let n = 5; n < 9; n++) E.playToTable(s, layout, E.cardsInZone(s, 'playerDeck').at(-1))
     expect(E.nextHeroSpot(s, layout)).toEqual({ x: left - step, y: id.y - (L.cardWidth * 1.4 + 16) })
+  })
+
+  it('les cartes Rencontre révélées arrivent dans la zone Rencontre : sous la rangée du méchant, dans la colonne de l\'identité, vers la droite', () => {
+    const layout = { ...L, heroInset: 200 }
+    const s = E.newGame({ hero: 'spider_man', deckList: PRECON_DECKS.spider_man, scenario: 'rhino', modulars: ['bomb_scare'], expert: false }, layout)
+    const id = E.identityCard(s)
+    const villainRowBottom = 34 + L.cardWidth * 1.4
+    const first = E.nextEncounterSpot(s, layout)
+    // une demi-carte sous la rangée du méchant, aligné sur l'identité
+    expect(first).toEqual({ x: id.x, y: villainRowBottom + L.cardWidth * 0.5 })
+    const card = E.revealEncounterCard(s, layout)
+    expect(card).toMatchObject({ x: first.x, y: first.y })
+    // la suivante à sa droite, sur la même rangée
+    const second = E.nextEncounterSpot(s, layout)
+    expect(second.y).toBe(first.y)
+    expect(second.x).toBe(first.x + E.cardSize(card, L.cardWidth).width + 12)
+    // le méchant et la manigance principale gardent leur place, en haut
+    const villain = E.cardsInZone(s, 'table').find(c => E.definitionOf(c).type === 'villain')
+    expect(villain.y).toBe(34)
+  })
+
+  it('zone Rencontre sur une table étroite : à droite de l\'identité, puis à sa gauche, puis une rangée plus bas, sans jamais deux cartes l\'une sur l\'autre', () => {
+    const layout = { width: 700, height: 900, cardWidth: 80, villainInset: 150, heroInset: 150 }
+    const s = E.newGame({ hero: 'spider_man', deckList: PRECON_DECKS.spider_man, scenario: 'klaw', modulars: ['masters_of_evil'], expert: false }, layout)
+    for (let i = 0; i < 10; i++) E.revealEncounterCard(s, layout)
+    const placed = E.cardsInZone(s, 'table').filter(c => E.isEncounterCard(c) && !['villain', 'main_scheme'].includes(E.definitionOf(c).type))
+    const box = c => ({ ...E.cardSize(c, 80), x: c.x, y: c.y })
+    for (let i = 0; i < placed.length; i++) {
+      for (let j = i + 1; j < placed.length; j++) {
+        const [a, b] = [box(placed[i]), box(placed[j])]
+        const overlap = a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
+        expect(overlap, `${E.cardName(placed[i])} / ${E.cardName(placed[j])}`).toBe(false)
+      }
+    }
+    // la place à gauche de l'identité sert avant la rangée suivante ; rien sur l'illustration du méchant
+    const identityX = E.identityCard(s).x
+    const firstRowY = Math.min(...placed.map(c => c.y))
+    expect(placed.some(c => c.y === firstRowY && c.x < identityX)).toBe(true)
+    expect(Math.min(...placed.map(c => c.x))).toBeGreaterThanOrEqual(16 + 150)
   })
 
   it('une carte posée à la main reste entière sur la table : remontée si elle dépasse du bas ou passe sous les PV du méchant', () => {

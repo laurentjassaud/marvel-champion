@@ -6,27 +6,39 @@
 // l'affiche des choix faits (« Spider-Man vs Rhino + Alerte à la bombe »), ou le nom de la case survolée ;
 // « Lancer la partie » s'allume quand les trois étapes sont remplies.
 // Chaque étape a sa case « Au hasard » : le héros (avec son deck préconstruit) et le méchant sont tirés au
-// lancement (engine/setup.js), le set modulaire à la mise en place, gardé secret. L'import d'un deck
-// personnalisé (fichier .o8d ou .txt, lien MarvelCDB) est retiré de la fenêtre en attendant sa version 2 ; le
-// moteur sait toujours le lire (engine/deckImport.js, game/marvelcdb.js).
-// Seuls les héros, scénarios et sets modulaires des boîtes proposées (AVAILABLE_PACKS, data.js) y figurent.
+// lancement (engine/setup.js), le set modulaire à la mise en place, gardé secret.
+// Le héros se choisit avec son deck (maquette, 3e version) : sous les onglets, une bande porte trois
+// sous-onglets (DeckTabs), Préconstruits, Mes decks (les decks sauvegardés, stores/decks.js) et Charger un
+// deck (fichier .txt ou .o8d, lien MarvelCDB) ; leurs volets défilent à l'horizontale (HeroDecks). Une bande
+// symétrique ferme la grille par le bas ; les deux bandes restent aux autres étapes, sans sous-onglets.
+// Seuls les héros, scénarios et sets modulaires des boîtes proposées (AVAILABLE_PACKS, data.js) y figurent ;
+// un deck chargé peut jouer un autre héros que la table connaît.
 import { reactive, ref, computed, watch, nextTick, onMounted } from 'vue'
 import BaseModal from './BaseModal.vue'
 import SetupHex from './setup/SetupHex.vue'
 import PortraitChoice from './setup/PortraitChoice.vue'
+import DeckTabs from './setup/DeckTabs.vue'
+import HeroDecks from './setup/HeroDecks.vue'
 import { portraitOf } from './setup/portraits.js'
+import { useGridColumns } from './setup/useGridColumns.js'
+import deckBandUrl from '../../assets/setup/deck-tabs-band.png'
+import deckRuleUrl from '../../assets/setup/deck-tabs-rule.svg'
 import heroIconUrl from '../../assets/setup/icon-hero.svg'
 import villainIconUrl from '../../assets/setup/icon-villain.svg'
 import modularIconUrl from '../../assets/setup/icon-modular.svg'
 import {
-  HEROES, SCENARIOS, MODULAR_SETS, AVAILABLE_HEROES, AVAILABLE_SCENARIOS, AVAILABLE_MODULAR_SETS, heroName
+  HEROES, SCENARIOS, MODULAR_SETS, AVAILABLE_SCENARIOS, AVAILABLE_MODULAR_SETS, heroName
 } from '../../game/data.js'
 import { scenarioRules } from '../../game/rules.js'
 import { useGameStore } from '../../stores/game.js'
 import { useUiStore } from '../../stores/ui.js'
+import { useDecksStore } from '../../stores/decks.js'
 
 const gameStore = useGameStore()
 const ui = useUiStore()
+const decksStore = useDecksStore()
+/** Les deux bandes des decks (maquette) : leur fond sombre et leur filet, en variables CSS. */
+const bandStyle = { '--band': `url("${deckBandUrl}")`, '--rule': `url("${deckRuleUrl}")` }
 
 /**
  * Les trois étapes, dans l'ordre ; l'icône de leur onglet (maquette : 25,8 × 28,9, 26 × 28 et 30,4 × 33,6 px),
@@ -45,14 +57,24 @@ const DIFFICULTIES = [
 
 /** Étape affichée (0 héros, 1 méchant, 2 set modulaire). */
 const step = ref(0)
+/**
+ * Le sous-onglet du héros : 0 Préconstruits, 1 Mes decks, 2 Charger un deck. Gardé dans le navigateur
+ * (ui.deckTab) : la fenêtre s'ouvre sur le dernier choisi.
+ */
+const deckTab = computed({ get: () => ui.deckTab, set: tab => { ui.deckTab = tab } })
 /** Sens du dernier changement d'étape : 1 en avant, -1 en arrière ; le contenu glisse dans ce sens. */
 const direction = ref(1)
 
 /** La partie en cours : seule sa difficulté est reprise, les hexagones s'ouvrent vides. */
 const previousSetup = gameStore.game?.setup ?? {}
 const form = reactive({
-  /** Identifiant du héros (il joue son deck préconstruit), 'random' (tiré au lancement), ou null : à choisir. */
+  /** Identifiant du héros, 'random' (tiré au lancement, avec son deck préconstruit), ou null : à choisir. */
   hero: null,
+  /**
+   * Son deck : null pour le préconstruit, sinon un deck sauvegardé ou chargé ({key, label, hero, deckList,
+   * importedDefinitions}, stores/decks.js).
+   */
+  deck: null,
   /** Identifiant du scénario, 'random' (tiré au lancement), ou null. */
   scenario: null,
   /** null : à choisir ; 'random' ; ou les sets modulaires choisis (autant que le scénario en prend). */
@@ -101,9 +123,16 @@ function goToNextOpenStep() {
   if (open !== undefined) goTo(open)
 }
 
-function pickHero(heroId) {
-  form.hero = heroId
+/** Un héros et son deck (HeroDecks) : deck null pour le préconstruit. */
+function pickHero({ hero, deck }) {
+  form.hero = hero
+  form.deck = deck
   goToNextOpenStep()
+}
+/** Le deck choisi vient d'être retiré de Mes decks : le héros est à choisir de nouveau. */
+function forgetHero() {
+  form.hero = null
+  form.deck = null
 }
 function pickScenario(scenarioId) {
   // un autre méchant qui ne prend pas le même nombre de sets : les sets choisis ne conviennent plus
@@ -147,6 +176,7 @@ const matchup = computed(() => {
   const [hero, villain, modular] = hexes.value
   const parts = []
   if (hero.value) parts.push({ text: hero.random ? 'héros au hasard' : hero.value })
+  if (hero.value && form.deck) parts.push({ text: `(${form.deck.label})`, link: true })
   if (villain.value) parts.push({ text: 'vs', link: true }, { text: villain.random ? 'méchant au hasard' : villain.value })
   if (modular.value && !isCrew.value) parts.push({ text: '+', link: true }, { text: form.modulars === 'random' ? 'set au hasard' : modular.value })
   if (parts[0]?.link) parts.shift() // « vs Rhino » sans héros : le méchant seul
@@ -155,15 +185,18 @@ const matchup = computed(() => {
 
 /* ---------- la grille et le pied ---------- */
 
-/** Dix cases par rangée, deux rangées au moins (maquette) : des cases vides complètent la dernière. */
-const COLUMNS = 10
-/** Nombre de cases de l'étape affichée : ses choix et sa case « Au hasard ». */
+/**
+ * Deux rangées au moins (maquette), de dix cases à sa taille, moins sur un écran plus étroit (mesuré sur la
+ * grille, useGridColumns) : des cases vides complètent la dernière. (Le héros a ses propres grilles : HeroDecks.)
+ */
+const stageElement = ref(null)
+const columns = useGridColumns(stageElement)
+/** Nombre de cases de l'étape affichée (méchant, set modulaire) : ses choix et sa case « Au hasard ». */
 const cellCount = computed(() => {
-  if (step.value === 0) return AVAILABLE_HEROES.length + 1
   if (step.value === 1) return AVAILABLE_SCENARIOS.length + 1
   return isCrew.value ? 0 : AVAILABLE_MODULAR_SETS.length + 1
 })
-const fillerCount = computed(() => Math.max(2 * COLUMNS, Math.ceil(cellCount.value / COLUMNS) * COLUMNS) - cellCount.value)
+const fillerCount = computed(() => Math.max(2 * columns.value, Math.ceil(cellCount.value / columns.value) * columns.value) - cellCount.value)
 
 /**
  * La case survolée, ou qui a le focus au clavier : son nom et son détail ({label, detail}), montrés au pied à la
@@ -177,7 +210,7 @@ const pointing = (label, detail = '') => ({
   focus: event => { if (event.target.matches(':focus-visible')) pointedChoice.value = { label, detail } },
   blur: () => { pointedChoice.value = null }
 })
-watch(step, () => { pointedChoice.value = null })
+watch([step, deckTab], () => { pointedChoice.value = null })
 
 /** Les onglets au clavier (rôle tablist) : les flèches passent à l'étape voisine, Début et Fin aux extrémités. */
 let focusTabAfterStep = false
@@ -202,13 +235,16 @@ function onTabKey(event) {
 function startGame() {
   if (!isReady.value) return
   const randomHero = form.hero === 'random'
+  const { deck } = form
   const options = {
     hero: form.hero,
-    deckList: randomHero ? null : gameStore.preconDeck(form.hero),
+    deckList: randomHero ? null : deck ? deck.deckList : gameStore.preconDeck(form.hero),
     scenario: form.scenario,
     modulars: isCrew.value ? [] : form.modulars === 'random' ? 'random' : [...form.modulars],
     expert: form.difficulty === 'random' ? 'random' : form.difficulty === 'expert',
-    deckLabel: randomHero ? null : `précon ${heroOf(form.hero).aspect}`
+    deckLabel: randomHero ? null : deck ? deck.label : `précon ${heroOf(form.hero).aspect}`,
+    // les cartes lues sur MarvelCDB d'un deck chargé : la partie les garde (engine/setup.js)
+    ...(deck?.importedDefinitions?.length ? { importedDefinitions: deck.importedDefinitions } : {})
   }
   ui.launchGame(() => gameStore.newGame(options))
 }
@@ -218,9 +254,10 @@ function startGame() {
 // à l'ouverture et à chaque étape, le focus va au choix fait de l'étape, sinon à sa première case : au
 // clavier, on enchaîne les trois choix sans chercher où l'on est ; après une flèche sur les onglets, il reste
 // sur l'onglet (l'étape qui arrive : celle qui part est encore là le temps de son fondu, avec une classe « …-leave-… »)
-const stageElement = ref(null)
 function focusChoice() {
-  const panel = stageElement.value?.querySelector('.panel:not([class*="-leave-"])')
+  const stepPanel = stageElement.value?.querySelector('.panel:not([class*="-leave-"])')
+  // le héros : dans le volet de son sous-onglet (les autres sont hors du cadre)
+  const panel = stepPanel?.querySelector('.deck-panel.active') ?? stepPanel
   const choice = panel?.querySelector('button.choice[aria-pressed="true"]') ?? panel?.querySelector('button.choice')
   choice?.focus({ preventScroll: true })
 }
@@ -264,18 +301,19 @@ watch(step, async () => {
         </button>
       </div>
 
+      <!-- la bande des decks (de bord à bord de la fenêtre) : les sous-onglets du héros, rien aux autres étapes -->
+      <div class="deck-band" :style="bandStyle">
+        <Transition name="deck-tabs">
+          <DeckTabs v-if="step === 0" v-model="deckTab" class="deck-band-row" :saved-count="decksStore.decks.length" />
+        </Transition>
+      </div>
+
       <!-- le contenu de l'étape : il glisse dans le sens du changement d'étape, les cases arrivent l'une après l'autre -->
       <div ref="stageElement" class="stage">
         <Transition :name="direction > 0 ? 'step-forward' : 'step-back'" :duration="{ enter: 460, leave: 150 }">
           <section id="setup-panel" :key="step" class="panel" role="tabpanel" :aria-labelledby="`setup-tab-${step}`">
-            <div v-if="step === 0" class="choices">
-              <PortraitChoice v-for="(hero, index) in AVAILABLE_HEROES" :key="hero.id" :style="{ '--i': index }" :label="hero.name"
-                :detail="hero.aspect" v-bind="portraitOf('hero', hero.id)" :selected="form.hero === hero.id"
-                v-on="pointing(hero.name, hero.aspect)" @pick="pickHero(hero.id)" />
-              <PortraitChoice :style="{ '--i': AVAILABLE_HEROES.length }" label="Au hasard" :detail="DRAWN_AT_LAUNCH" special
-                :selected="form.hero === 'random'" v-on="pointing('Héros au hasard', DRAWN_AT_LAUNCH)" @pick="pickHero('random')" />
-              <PortraitChoice v-for="n in fillerCount" :key="`filler-${n}`" filler />
-            </div>
+            <HeroDecks v-if="step === 0" v-model:tab="deckTab" :hero="form.hero" :deck="form.deck" :pointing="pointing"
+              @pick="pickHero" @forget="forgetHero" />
 
             <div v-else-if="step === 1" class="choices">
               <PortraitChoice v-for="(scenario, index) in AVAILABLE_SCENARIOS" :key="scenario.id" :style="{ '--i': index }"
@@ -311,6 +349,8 @@ watch(step, async () => {
           </section>
         </Transition>
       </div>
+      <!-- la bande qui ferme la grille par le bas : la même, retournée -->
+      <div class="deck-band foot" :style="bandStyle" aria-hidden="true" />
     </div>
 
     <!-- le pied : l'affiche des choix faits (ou le nom de la case survolée), puis les boutons -->
@@ -368,7 +408,7 @@ watch(step, async () => {
 
 /* les onglets : trois parts égales, 64 px de haut, sur un filet ; l'onglet en cours est lavande, sur un dégradé
    qui monte du filet, souligné de 3 px, une flèche dessous ; les autres en violet */
-.tabs { position: relative; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.tabs { position: relative; z-index: 1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .tabs::before { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: #353970; }
 .tab {
   position: relative; display: flex; align-items: center; justify-content: center; gap: calc(12 * var(--su));
@@ -398,9 +438,37 @@ watch(step, async () => {
   .tab:not(.active):hover { color: #8f91ea; }
 }
 
-/* la grille, 51 px sous les onglets : des cases de 88 px, 4 px entre elles, autant par rangée que la place le
+/* la bande des decks, 18 px sous les onglets : 55 px de haut, de bord à bord de la fenêtre (100cqw : la
+   fenêtre, main.css), son fond sombre qui descend vers son filet (blanc à 15 %) ; ses sous-onglets alignés sur
+   la grille (916 px au plus, dans les 80 % que laissent les marges de la fenêtre). En bas, la même, retournée :
+   le filet en haut, le sombre dessous, coupée au pied (30 px visibles, maquette) */
+.deck-band {
+  justify-self: start; width: 100cqw; height: calc(55 * var(--su));
+  margin: calc(18 * var(--su)) calc((100% - 100cqw) / 2) 0;
+  background: var(--rule) left bottom / 100% 1px no-repeat, var(--band) center / cover no-repeat;
+}
+/* elle descend dans la marge du bas du contenu, sous l'avancée du pied (comme sur la maquette) : la grille
+   garde sa place sans faire défiler la fenêtre */
+.deck-band.foot {
+  height: calc(30 * var(--su)); margin-top: calc(21 * var(--su)); margin-bottom: calc(-1 * (var(--notch-h) + 12 * var(--su)));
+  rotate: 180deg; background-position: left bottom, center bottom; background-size: 100% 1px, 100% calc(55 * var(--su));
+}
+.deck-band-row { width: min(80cqw, calc(916 * var(--su))); margin: 0 auto; }
+/* écran bas (une tablette en paysage, dans son navigateur) : la bande plus mince et plus près, sans celle du
+   bas ; les deux rangées de cases tiennent (main.css rapproche aussi les onglets de l'en-tête) */
+@media (max-height: 800px) {
+  .deck-band { height: calc(40 * var(--su)); margin-top: calc(8 * var(--su)); }
+  .deck-band.foot { display: none; }
+}
+.deck-tabs-enter-active, .deck-tabs-leave-active { transition: opacity 180ms ease; }
+.deck-tabs-enter-from, .deck-tabs-leave-to { opacity: 0; }
+
+/* la grille, 22 px sous la bande : des cases de 88 px, 4 px entre elles, autant par rangée que la place le
    permet (dix à la taille de la maquette) ; les deux étapes se superposent le temps du fondu */
-.stage { display: grid; margin-top: calc(51 * var(--su)); }
+.stage { display: grid; margin-top: calc(22 * var(--su)); }
+@media (max-height: 800px) {
+  .stage { margin-top: calc(12 * var(--su)); }
+}
 .panel { grid-area: 1 / 1; display: grid; gap: calc(20 * var(--su)); align-content: start; min-width: 0; }
 .choices {
   display: grid; grid-template-columns: repeat(auto-fill, calc(88 * var(--su))); gap: calc(4 * var(--su));

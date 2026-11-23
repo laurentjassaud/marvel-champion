@@ -23,6 +23,8 @@ import HelpModal from './components/modals/HelpModal.vue'
 import SignupModal from './components/modals/SignupModal.vue'
 import LegalModal from './components/modals/LegalModal.vue'
 import AboutModal from './components/modals/AboutModal.vue'
+import BugReportModal from './components/modals/BugReportModal.vue'
+import ThanksModal from './components/modals/ThanksModal.vue'
 import RestartModal from './components/modals/RestartModal.vue'
 import VillainModal from './components/modals/VillainModal.vue'
 import SchemeModal from './components/modals/SchemeModal.vue'
@@ -93,6 +95,8 @@ onMounted(() => { if (!gameStore.isReady) gameStore.startExampleGame() })
     <SignupModal v-else-if="ui.modal?.type === 'signup'" />
     <LegalModal v-else-if="ui.modal?.type === 'legal'" />
     <AboutModal v-else-if="ui.modal?.type === 'about'" />
+    <BugReportModal v-else-if="ui.modal?.type === 'bug'" />
+    <ThanksModal v-else-if="ui.modal?.type === 'thanks'" />
     <RestartModal v-else-if="ui.modal?.type === 'restart' && gameStore.isReady" />
     <!-- une clé par changement présenté (la fenêtre repart de zéro pour le suivant), préfixée : deux branches
          d'un même v-if ne peuvent pas avoir la même clé -->

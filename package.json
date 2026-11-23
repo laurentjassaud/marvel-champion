@@ -1,9 +1,9 @@
 {
   "name": "marvel-champions-table",
-  "version": "0.1.0",
+  "version": "0.2.1",
   "private": true,
   "type": "module",
-  "description": "Table solo Marvel Champions (boîte de base, VF) en Vue 3 — mise en place automatique, decks préconstruits, règles assistées.",
+  "description": "Table solo Marvel Champions mise en place automatique et rapide, decks préconstruits, sets fan-made et chargement de decks directement depuis MarvelCDB. L'application ne dirige rien, ici la partie se joue comme avec des cartes réelles sans aucune assistance :)",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

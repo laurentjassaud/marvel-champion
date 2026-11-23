@@ -371,11 +371,14 @@ input, textarea { -webkit-user-select: text; user-select: text; } /* sinon iOS n
   /* ce qui transparaît derrière lui est la page déjà floutée par le fond (.modal) : pas de second flou */
   transition: opacity 240ms var(--ease-out), transform 240ms var(--ease-out);
 }
-/* grande fenêtre (Nouvelle partie) : la taille de la maquette, 1168 × 701 px sur 1920 × 1080, jamais moins de
-   820 × 560 ; le contenu à 10 % des bords, comme la grille de la maquette */
+/* grande fenêtre (Nouvelle partie) : la taille de la maquette (3e version, avec la bande des decks), 1168 × 794 px
+   sur 1920 × 1080, jamais moins de 820 × 640 (ses deux rangées de cases y tiennent sans défiler, bandes
+   comprises), sauf si l'écran est plus bas ; le contenu à 10 % des bords, comme la grille de la maquette. Un
+   conteneur : ce qui va de bord à bord de la fenêtre (la bande des decks) mesure sa largeur en cqw */
 .modal .box.wide {
   --pad: 10%;
-  width: min(100%, max(820px, calc(1168 * var(--u)))); height: min(100%, max(560px, calc(701 * var(--u))));
+  container-type: inline-size;
+  width: min(100%, max(820px, calc(1168 * var(--u)))); height: min(100%, max(640px, calc(794 * var(--u))));
 }
 /* le haut du panneau : un filet à 4 px du bord, qui plonge sous la barre rouge (le milieu, top-dip.svg, entre
    deux traits qui vont vers les côtés) ; la barre rouge, trapèze de 387 × 8 px, coiffe le milieu */
@@ -455,10 +458,14 @@ input, textarea { -webkit-user-select: text; user-select: text; } /* sinon iOS n
     calc(50% - var(--notch-out)) calc(100% - 1px), 0 calc(100% - 1px));
 }
 /* grande fenêtre : les marges de la maquette (en-tête de 259 px, son contenu à 15 px du bord ; les onglets à
-   280 px du haut du panneau, la grille à 17 px de l'avancée du pied, moins les 4 px du filet du panneau, que
-   la maquette compte dans ses 701 px : sans eux, les deux rangées de la grille défileraient de 4 px) */
+   295 px du haut du panneau, 3e version) ; en bas, la bande des decks descend sous l'avancée du pied
+   (SetupModal) */
 .modal .box.wide .box-head { padding-bottom: calc(15 * var(--su) + var(--notch-h)); }
-.modal .box.wide .box-body { padding-top: calc(var(--notch-h) + 21 * var(--su)); padding-bottom: calc(var(--notch-h) + 12 * var(--su)); }
+.modal .box.wide .box-body { padding-top: calc(var(--notch-h) + 36 * var(--su)); padding-bottom: calc(var(--notch-h) + 12 * var(--su)); }
+/* écran bas : les onglets 15 px plus près de l'en-tête (la place des deux rangées de cases, SetupModal) */
+@media (max-height: 800px) {
+  .modal .box.wide .box-body { padding-top: calc(var(--notch-h) + 21 * var(--su)); }
+}
 /* son ascenseur : fin, sans flèches, couleur du filet, en retrait du haut du panneau et de la bande du pied ;
    la zone de prise fait 10 px, le trait visible 4 px (il s'épaissit et s'éclaire au survol) */
 .modal .box-body::-webkit-scrollbar { width: 10px; }
@@ -609,6 +616,13 @@ input, textarea { -webkit-user-select: text; user-select: text; } /* sinon iOS n
   /* fenêtres : le contenu près des bords, les boutons à 16 px du bord droit */
   .modal .box, .modal .box.wide { --pad: 20px; }
   .modal .box-actions { padding-right: 16px; padding-bottom: 16px; }
+}
+/* téléphone, en portrait ou à l'horizontale (même requête que l'accueil, IntroScreen) : l'appli ne s'y joue pas
+   encore, l'accueil couvre l'écran avec son message. Tant qu'il est ouvert, la page de jeu, dessous, est
+   coupée à la hauteur visible et ne défile pas : rien ne se découvre au glissement du doigt */
+@media (max-width: 700px), (pointer: coarse) and (max-height: 500px) {
+  body:has(.app.under-intro) { overflow: hidden; }
+  .app.under-intro { height: 100dvh; min-height: 0; overflow: hidden; }
 }
 @media (prefers-reduced-motion: reduce) {
   .hand-row .card, .btn, .slant, .modal-btn, .pile .slot, .menu, .modal, .modal .box, .card .chip { transition: none; }

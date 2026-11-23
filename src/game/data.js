@@ -259,7 +259,8 @@ for (const definition of CARD_DEFINITIONS) {
 /**
  * Ajoute les cartes lues sur MarvelCDB quand un deck est importé par lien (un héros, ou des cartes d'une
  * boîte absente de la table) : identifiants "cdb-<code>", noms français, `imageUrl` / `backImageUrl` les
- * images du site (scans anglais). Elles rejoignent CARD_DEFINITIONS, DEFINITION_BY_ID et DEFINITION_BY_CODE ;
+ * images du site (scans anglais : l'appli leur préfère les scans français de cgbuilder, trouvés par le code,
+ * useAssets.js). Elles rejoignent CARD_DEFINITIONS, DEFINITION_BY_ID et DEFINITION_BY_CODE ;
  * la partie les garde (setup.importedDefinitions), si bien qu'un rechargement ou « Recommencer » les retrouve.
  * Une carte déjà connue n'est pas ajoutée deux fois ; une carte de nos boîtes (scan français) reste prioritaire
  * pour son code.
@@ -355,11 +356,14 @@ export const MODULAR_SETS = [
 ]
 
 /**
- * Boîtes proposées à la mise en place (écran Nouvelle partie, sets modulaires tirés au hasard) : pour
- * l'instant la boîte de base seule, soit 5 héros, 3 scénarios et 5 sets modulaires. Les cartes des autres
- * boîtes restent connues de la table (parties sauvegardées, decks importés).
+ * Boîtes proposées à la mise en place (écran Nouvelle partie, héros, scénarios et sets modulaires tirés au
+ * hasard) : la boîte de base (5 héros, 3 scénarios, 5 sets modulaires), le paquet de scénarios Le Bouffon
+ * Vert (2 scénarios, Entreprise à Risques et Formule Mutagène, et leurs 4 sets modulaires) et les paquets héros
+ * Captain America, Hulk et Thor (un héros chacun, avec son deck préconstruit et son set Némésis). Les cartes
+ * des autres boîtes restent connues de la table (parties sauvegardées, decks importés). Une boîte ajoutée ici
+ * l'est aussi aux globPatterns de vite.config.js (ses images, hors ligne).
  */
-export const AVAILABLE_PACKS = ['core']
+export const AVAILABLE_PACKS = ['core', 'green_goblin', 'captain_america', 'hulk', 'thor']
 /** Le set (héros, scénario, set modulaire) a des cartes dans une des boîtes proposées. */
 const isAvailableSet = setId => CARD_DEFINITIONS.some(definition => definition.set === setId && AVAILABLE_PACKS.includes(definition.pack))
 export const AVAILABLE_HEROES = HEROES.filter(hero => isAvailableSet(hero.id))

@@ -1,16 +1,17 @@
 <script setup>
-// Les mentions légales de l'appli et ce qu'elle fait des données personnelles, surtout pour l'inscription
-// « Rester informé ». Le minimum légal pour un site édité par un particulier : l'éditeur, son contact et
-// l'hébergeur (LCEN, article 6-III), puis, pour l'inscription, qui collecte quoi, pourquoi, combien de temps,
-// et comment exercer ses droits (RGPD, article 13). Montré par la fenêtre « Mentions légales » (lien en bas de
-// l'accueil, LegalModal) et dans « Rester informé », sous le formulaire (SignupModal).
+// Les mentions légales de l'appli et ce qu'elle fait des données personnelles : l'inscription « Rester
+// informé » et les rapports de « Signaler un bug ». Le minimum légal pour un site édité par un particulier :
+// l'éditeur, son contact et l'hébergeur (LCEN, article 6-III), puis, pour chacun, qui collecte quoi, pourquoi,
+// combien de temps, et comment exercer ses droits (RGPD, article 13). Montré par la fenêtre « Mentions légales »
+// (lien en bas de l'accueil, LegalModal), dans « Rester informé », sous le formulaire (SignupModal), et dans
+// « Signaler un bug » (BugReportModal).
 // À tenir à jour avec le script serveur (server/) : données enregistrées, prestataires, durée de conservation.
 const CONTACT = 'contact@gameboxheroes.fr'
 </script>
 
 <template>
   <div class="legal-notice">
-    <p class="updated">Mise à jour le 20 novembre 2026.</p>
+    <p class="updated">Mise à jour le 23 novembre 2026.</p>
 
     <section>
       <h3>Éditeur</h3>
@@ -36,13 +37,25 @@ const CONTACT = 'contact@gameboxheroes.fr'
     </section>
 
     <section>
+      <h3>Signaler un bug</h3>
+      <ul>
+        <li><strong>Responsable :</strong> Laurent Jassaud ({{ CONTACT }}).</li>
+        <li><strong>Données :</strong> Le titre et la description que vous écrivez, votre partie en cours et son journal, des informations techniques (navigateur, taille d'écran, version de l'appli) et, si vous la donnez, votre adresse e-mail.</li>
+        <li><strong>But :</strong> Comprendre et corriger le problème signalé, et vous répondre si vous avez laissé votre adresse.</li>
+        <li><strong>Base légale :</strong> Votre demande, quand vous envoyez le rapport.</li>
+        <li><strong>Accès :</strong> L'éditeur seul. Le rapport n'est pas enregistré sur le serveur&nbsp;: il part aussitôt par e-mail (OVH) à l'éditeur, qui le garde le temps de traiter le problème.</li>
+        <li><strong>Anti-spam :</strong> Comme pour l'inscription, une empreinte de votre adresse IP, pendant une heure.</li>
+      </ul>
+    </section>
+
+    <section>
       <h3>Vos droits</h3>
       <p>À tout moment, vous pouvez consulter vos données, les corriger, les faire effacer, en recevoir une copie ou retirer votre consentement : écrivez à <a :href="`mailto:${CONTACT}`">{{ CONTACT }}</a>. Si vous estimez que vos droits ne sont pas respectés, vous pouvez saisir la CNIL (<a href="https://www.cnil.fr" target="_blank" rel="noopener noreferrer">cnil.fr</a>).</p>
     </section>
 
     <section>
       <h3>Cookies</h3>
-      <p>Aucun cookie, aucune mesure d'audience, aucune publicité. L'appli garde seulement dans votre navigateur votre partie en cours, vos réglages et, après une inscription, votre nom.<br>Ces données ne quittent pas votre appareil.</p>
+      <p>Aucun cookie, aucune mesure d'audience, aucune publicité. L'appli garde seulement dans votre navigateur votre partie en cours, vos réglages et, après une inscription, votre nom.<br>Ces données ne quittent pas votre appareil, sauf la partie jointe à un rapport de bug que vous envoyez.</p>
     </section>
 
     <section>

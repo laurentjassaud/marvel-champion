@@ -123,7 +123,7 @@ export function pickRandomHandCard(game) {
 const topEncounterCard = game => encounterPile(game, 'encounterDeck').at(-1) ?? null
 
 /**
- * Révèle la carte du dessus du paquet Rencontre dans la rangée Rencontre (touche E, clic sur le paquet).
+ * Révèle la carte du dessus du paquet Rencontre dans la zone Rencontre (touche E, clic sur le paquet).
  * Paquet vide : rend null, et l'écran propose de remélanger la défausse Rencontre.
  */
 export function revealEncounterCard(game, layout) {
@@ -148,7 +148,7 @@ const nemesisMinionOf = cards => cards.find(card => definitionOf(card).type === 
 
 /**
  * L'Ombre du Passé (son menu : « Mettre en jeu la Némésis ») : le sbire Némésis du héros, mis de côté, entre
- * en jeu engagé avec vous (dans la rangée Rencontre) et sa manigance annexe Némésis avec sa menace de départ
+ * en jeu engagé avec vous (dans la zone Rencontre) et sa manigance annexe Némésis avec sa menace de départ
  * (et celle de son « Une fois révélée ») ; le reste du set Némésis est mélangé dans le paquet Rencontre.
  * Si aucun sbire n'entre en jeu ainsi, la carte gagne Renfort : le journal demande de révéler une autre carte
  * Rencontre. La traîtrise, résolue, est défaussée (sourceCard, si elle est sur la table).
@@ -254,7 +254,7 @@ export function putOwnAllyUnder(game, scheme, layout) {
   return ally
 }
 
-/** Pose la carte du dessus du paquet Rencontre face cachée dans la rangée Rencontre, comme boost (retournée, elle n'entre pas en jeu). */
+/** Pose la carte du dessus du paquet Rencontre face cachée dans la zone Rencontre, comme boost (retournée, elle n'entre pas en jeu). */
 export function dealBoostCard(game, layout) {
   const card = topEncounterCard(game)
   if (!card) return null

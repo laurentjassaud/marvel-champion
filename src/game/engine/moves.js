@@ -203,7 +203,7 @@ export function playToTable(game, layout, card, faceDown = false) {
 /**
  * Clic sur une carte dans la fenêtre d'une pile : depuis le paquet ou la défausse du joueur, elle va dans
  * la main ; depuis une autre pile, elle est mise en jeu à sa place (étape du méchant, manigance principale,
- * rangée Rencontre ou rangée du héros). Une manigance annexe prend sa menace de départ ; une étape du
+ * zone Rencontre ou rangée du héros). Une manigance annexe prend sa menace de départ ; une étape du
  * méchant posée depuis « De côté » fait son « Une fois révélée » (revealVillainStage).
  */
 export function takeFromPile(game, layout, card, zone) {
