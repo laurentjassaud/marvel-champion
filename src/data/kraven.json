@@ -9,6 +9,7 @@
   {"id": "krv-08", "code": "8", "n": "Dague Empoisonnée", "t": "attachment", "f": "encounter", "s": "kraven", "q": 1, "l": 0, "tr": ["arme"]},
   {"id": "krv-09", "code": "9", "n": "Lance de Kraven", "t": "attachment", "f": "encounter", "s": "kraven", "q": 1, "l": 0, "tr": ["arme"]},
   {"id": "krv-10", "code": "10", "n": "Fusil de Chasse", "t": "attachment", "f": "encounter", "s": "kraven", "q": 1, "l": 0, "tr": ["arme"]},
+  {"id": "krv-11", "code": "11", "n": "Collier de Dents", "t": "attachment", "f": "encounter", "s": "kraven", "q": 1, "l": 0, "tr": ["arme"]},
   {"id": "krv-12", "code": "12", "n": "Le Sérum de Calypso", "t": "side_scheme", "f": "encounter", "s": "kraven", "q": 1, "l": 1, "bth": 3, "xth": 1},
   {"id": "krv-13", "code": "13", "n": "Gaz Toxique", "t": "side_scheme", "f": "encounter", "s": "kraven", "q": 1, "l": 1, "bth": 3, "xth": 1},
   {"id": "krv-14", "code": "14", "n": "Embuscade du Prédateur", "t": "treachery", "f": "encounter", "s": "kraven", "q": 2, "l": 0},

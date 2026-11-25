@@ -1,14 +1,9 @@
 # Copie de test de Marvel Champions Table (dossier /test/ du site, npm run build:test, qui pose ce fichier dans
-# dist-test/) : réservée aux personnes qui ont un identifiant et son mot de passe. Le navigateur les demande dans
-# sa propre fenêtre (authentification HTTP de base), puis les joint à chaque demande du dossier : la page, mais
-# aussi le code, les images et les données. Le site n'est servi qu'en https (http y renvoie) : ils ne circulent
-# jamais en clair. Pas de déconnexion : le navigateur les oublie quand on le ferme.
+# dist-test/) : réservée aux personnes qui ont un identifiant et son mot de passe (authentification HTTP de base).
 #
-# Les mots de passe sont dans un fichier hors de la racine web, créé sur le serveur avec htpasswd, jamais dans le
-# dépôt : voir server/README.md, partie 8.
-#
-# Apache doit lire ce fichier (AllowOverride AuthConfig, ou All, pour la racine web) : sinon la copie reste ouverte
-# à tous, sans aucune erreur. Après chaque mise en ligne, vérifier qu'elle répond 401 sans mot de passe.
+# Seconde ligne de défense seulement : sur le VPS, ce fichier n'a pas été appliqué (oublié à l'envoi, ou .htaccess
+# non lus : AllowOverride None), et la protection est dans la configuration d'Apache (server/test/gamebox-test.conf,
+# server/README.md partie 8). Mêmes réglages que gamebox-test.conf : les changer ensemble.
 AuthType Basic
 AuthName "Marvel Champions Table - copie de test"
 AuthUserFile /home/prod/gamebox-private/test.htpasswd

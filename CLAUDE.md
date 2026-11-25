@@ -17,7 +17,7 @@ npm run test:watch
 npm run build          # PWA dans dist/
 npm run preview        # sert dist/ : seul moyen de tester le service worker et le préchargement
 npm run build:artifact # dist-artifact/page.html, page unique sans service worker
-npm run build:test     # dist-test/ : la copie de test, à servir dans /test/ à côté de la production (clés du navigateur préfixées « test- », noindex, sans service worker, .htaccess à mot de passe : server/test/.htaccess)
+npm run build:test     # dist-test/ : la copie de test, à servir dans /test/ à côté de la production (clés du navigateur préfixées « test- », noindex, sans service worker, réservée par mot de passe : server/test/gamebox-test.conf dans Apache, server/README.md partie 8)
 ```
 
 Un seul fichier ou un seul test (la configuration Vitest est dans `vite.config.js` : `environment: 'node'`, `include: src/**/*.test.js`) :

@@ -25,8 +25,8 @@ function gitCommit(command) {
 //    même site (/test/) : ses clés du navigateur sont préfixées (« test- », src/stores/storagePrefix.js), pour ne
 //    partager ni partie, ni decks, ni réglages avec la production, et la page n'est pas référencée (noindex, pas
 //    de plan du site). Elle appelle les mêmes scripts du serveur (/api/…) que la production. Elle est réservée
-//    aux personnes qui ont le mot de passe (son .htaccess, server/test/.htaccess) et n'a donc pas de service
-//    worker : il servirait la page depuis son cache sans que le navigateur redemande le mot de passe, et ses
+//    aux personnes qui ont le mot de passe (règle dans la configuration d'Apache, server/test/gamebox-test.conf ;
+//    son .htaccess en seconde ligne de défense) et n'a donc pas de service worker : il servirait la page depuis son cache sans que le navigateur redemande le mot de passe, et ses
 //    propres demandes (nouvelle version, images pas encore gardées) seraient alors refusées.
 // Les chemins sont relatifs ('./') par défaut : dist/ fonctionne où qu'il soit déposé (racine du domaine ou
 // sous-dossier). BASE_PATH impose un préfixe absolu si besoin.
@@ -69,7 +69,8 @@ function seo({ sitemap, noindex = false }) {
 
 /**
  * La copie de test : pose à côté de la page son .htaccess (server/test/.htaccess), qui la réserve aux personnes
- * qui ont l'identifiant et le mot de passe (authentification HTTP de base d'Apache).
+ * qui ont l'identifiant et le mot de passe (authentification HTTP de base d'Apache). Seconde ligne de défense : sur
+ * le VPS, la règle est dans la configuration d'Apache (server/test/gamebox-test.conf).
  */
 function testAccess() {
   return {
@@ -126,7 +127,7 @@ export default defineConfig(({ mode, command }) => {
           // les cartes des boîtes proposées (AVAILABLE_PACKS dans data.js) sont téléchargées dès l'installation :
           // la boîte de base (cards/base, 209 images, ≈16 Mo), le paquet Le Bouffon Vert (57 images, ≈4 Mo) et les
           // paquets héros Captain America, Hulk et Thor (84 images, ≈6 Mo), et le scénario fan-made Kraven le Chasseur
-          // (32 images, ≈2,5 Mo). Toute partie proposée se joue hors
+          // (33 images, ≈2,6 Mo). Toute partie proposée se joue hors
           // ligne, quels que soient le héros, le méchant et le set modulaire. Une autre boîte proposée un jour :
           // l'ajouter ici.
           // Les polices (woff2, src/styles/fonts.css) aussi : le texte garde sa police hors ligne ; et les SVG (le

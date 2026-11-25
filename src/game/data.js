@@ -120,7 +120,7 @@ export const PACKS = [
   { id: 'quicksilver', name: 'Vif-Argent', marvelCdbName: 'Quicksilver', codePrefix: '14', imageFolder: 'vif-argent', cards: QUICKSILVER_CARDS },
   { id: 'scarlet_witch', name: 'La Sorcière Rouge', marvelCdbName: 'Scarlet Witch', codePrefix: '15', imageFolder: 'sorciere rouge', cards: SCARLET_WITCH_CARDS },
   // fan-made : identifiants krv- (set Kraven le Chasseur), pge- (set Piège) et sav- (set modulaire Savage Six),
-  // suivis du numéro imprimé dans leur set ; la carte 11 du set Kraven (Collier de Dents) manque encore
+  // suivis du numéro imprimé dans leur set
   { id: 'kraven', name: 'Kraven le Chasseur', fanMade: true, imageFolder: 'kraven', cards: KRAVEN_CARDS }
 ]
 

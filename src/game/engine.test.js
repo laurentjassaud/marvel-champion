@@ -1229,8 +1229,8 @@ describe('Kraven le Chasseur (fan-made)', () => {
   const kraven = over => game({ scenario: 'kraven', modulars: ['savage_six'], ...over })
   const villain = s => E.cardsInZone(s, 'table').find(c => E.definitionOf(c).type === 'villain')
 
-  it('les sets ont le nombre de cartes imprimé (sans le Collier de Dents, qui manque), absents de MarvelCDB, marqués fan-made', () => {
-    const sizes = { kraven: 20, kraven_traps: 16, savage_six: 7 }
+  it('les sets ont le nombre de cartes imprimé, absents de MarvelCDB, marqués fan-made', () => {
+    const sizes = { kraven: 21, kraven_traps: 16, savage_six: 7 }
     for (const [set, n] of Object.entries(sizes)) expect(qty(d => d.set === set), set).toBe(n)
     expect(Object.values(DEFINITION_BY_CODE).filter(d => d.pack === 'kraven')).toEqual([])
     expect(SCENARIOS.find(v => v.id === 'kraven')).toMatchObject({ fanMade: true, advisedModulars: ['savage_six'] })

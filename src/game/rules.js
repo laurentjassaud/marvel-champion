@@ -547,14 +547,14 @@ export const SCENARIO_RULES = {
     byHand: [
       'Quand un de vos personnages attaque Kraven le Chasseur : une carte Piège pour vous, puis révélez (F) chaque carte Piège attribuée, une fois par round.',
       'Stade 1B : 2 menaces quand vous passez sous forme de héros, 1 de moins quand vous repassez en alter ego ; stade 2B : 1 menace après chaque carte Piège révélée, une fois par round.',
-      'Kraven le Chasseur (II) révélé : le Collier de Dents, qui manque encore à la table ; stade 2A révélé : Le Sérum de Calypso (le journal les rappelle).'
+      'Kraven le Chasseur (II) révélé : le Collier de Dents ; stade 2A révélé : Le Sérum de Calypso (le journal les rappelle).'
     ],
     scenarioDeck: { set: 'kraven_traps', name: 'Piège', shortName: 'Pièges', dealsToPlayer: true },
     mainSchemes: {
       'krv-05': { onRevealA: 'cherchez la manigance annexe Le Sérum de Calypso dans le paquet Rencontre ou sa défausse, révélez-la et mélangez le paquet Rencontre' } // La Grande Chasse
     },
     villainStages: {
-      'krv-02': { onRevealA: 'cherchez l\'attachement Collier de Dents dans le paquet Rencontre ou sa défausse et révélez-le (cette carte manque encore à la table : rien à faire)' }, // Kraven le Chasseur (II)
+      'krv-02': { onRevealA: 'cherchez l\'attachement Collier de Dents dans le paquet Rencontre ou sa défausse et révélez-le' }, // Kraven le Chasseur (II)
       'krv-03': { dealScenarioDeckCards: 1 } // Kraven le Chasseur (III)
     }
   }
