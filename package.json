@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "build:artifact": "vite build --mode artifact && node scripts/inline-artifact.mjs"
+    "build:artifact": "vite build --mode artifact && node scripts/inline-artifact.mjs",
+    "build:test": "vite build --mode staging"
   },
   "dependencies": {
     "pinia": "^3.0.3",

@@ -1,6 +1,7 @@
 node_modules/
 dist/
 dist-artifact/
+dist-test/
 *.log
 .DS_Store
 # script serveur (server/) : la configuration (secrets), la base et les aperçus de campagne restent sur le VPS

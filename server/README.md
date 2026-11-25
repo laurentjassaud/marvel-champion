@@ -26,6 +26,7 @@ server/
     vendor/                  PHPMailer 7.2 (déjà installé)
     composer.json / .lock
     .htaccess                filet de sécurité (Require all denied)
+  test/.htaccess             mot de passe de la copie de test de l'appli (/test/), posé dans dist-test/ par npm run build:test (partie 8)
   tests/
     api-test.php             test de l'inscription (39 vérifications)
     mailing-test.php         test de la mailing list (77 vérifications)
@@ -294,6 +295,45 @@ curl -s "https://gameboxheroes.fr/api/mc4db.php?decklist=58" | head -c 200   # l
 ```
 
 Les erreurs sont dans le journal d'erreurs Apache, préfixées `[gamebox-mc4db]`. La version artefact de l'appli, sans serveur, ne peut pas lire MC4DB.
+
+## 8. Copie de test protégée par un mot de passe
+
+La copie de test de l'appli (`npm run build:test`, envoyée dans `/home/prod/WWW/base/test/`) est réservée aux personnes qui ont un identifiant et son mot de passe. C'est Apache qui les demande (authentification HTTP de base) : le navigateur ouvre sa propre fenêtre de connexion, puis les joint à chaque demande du dossier. Tout le dossier est protégé (la page, le code, les images), pas seulement la page. Le site n'est servi qu'en https : ils ne circulent jamais en clair. Il n'y a pas de déconnexion : le navigateur les oublie quand on le ferme.
+
+La règle est dans le `.htaccess` que `npm run build:test` pose dans `dist-test/` (source : `server/test/.htaccess`). Les mots de passe sont dans `/home/prod/gamebox-private/test.htpasswd`, hors de la racine web, jamais dans le dépôt. On n'y garde que leur empreinte (bcrypt).
+
+**À faire une fois**, en SSH (`htpasswd` vient du paquet `apache2-utils`, installé avec Apache) :
+
+```bash
+# -c crée le fichier (et efface l'ancien) ; htpasswd demande le mot de passe deux fois, sans l'afficher
+sudo htpasswd -cB /home/prod/gamebox-private/test.htpasswd <identifiant>
+sudo chown prod:www-data /home/prod/gamebox-private/test.htpasswd && sudo chmod 640 /home/prod/gamebox-private/test.htpasswd
+
+sudo htpasswd -B /home/prod/gamebox-private/test.htpasswd <autre-identifiant>   # une autre personne, plus tard (sans -c)
+sudo htpasswd -D /home/prod/gamebox-private/test.htpasswd <identifiant>         # retirer quelqu'un
+```
+
+Un changement dans ce fichier vaut aussitôt, sans redémarrer Apache.
+
+**Après chaque mise en ligne**, vérifier que la protection tient :
+
+```bash
+curl -sI https://www.gameboxheroes.fr/test/ | head -1                    # attendu : HTTP/1.1 401 Unauthorized
+curl -sI -u <identifiant> https://www.gameboxheroes.fr/test/ | head -1   # demande le mot de passe ; attendu : 200 OK
+```
+
+- **200 sans mot de passe** : Apache ne lit pas le `.htaccess`. Soit il n'a pas été envoyé (fichier caché : certains clients FTP l'oublient), soit le vhost l'interdit (`AllowOverride None` sur la racine web). Dans ce dernier cas, ajouter au vhost, puis `sudo apache2ctl configtest && sudo systemctl reload apache2` :
+
+  ```apache
+  <Directory /home/prod/WWW/base/test>
+      AllowOverride AuthConfig
+  </Directory>
+  ```
+
+- **500** : `AllowOverride` n'accepte pas `AuthConfig` ; même correction. Le détail est dans `/var/log/apache2/base-error.log`.
+- **401 même avec le bon mot de passe** : Apache ne peut pas lire `test.htpasswd` (droits ci-dessus, groupe `www-data`), ou l'identifiant ne correspond pas. Les majuscules comptent.
+
+La copie de test n'a pas de service worker. Il servirait la page depuis son cache sans que le navigateur redemande le mot de passe, et ses propres demandes (nouvelle version, images) seraient alors refusées. Elle se recharge donc toujours depuis le serveur. Les scripts `/api/…` de la racine, qu'elle appelle comme la production, ne sont pas protégés : ils doivent rester ouverts pour la production.
 
 ## Ce que fait le script d'inscription
 

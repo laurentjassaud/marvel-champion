@@ -6,15 +6,17 @@
 import { defineStore, acceptHMRUpdate } from 'pinia'
 import { ref, watch } from 'vue'
 import { villainArtUrl } from '../composables/useAssets.js'
+import { STORAGE_PREFIX } from './storagePrefix.js'
 
 // Réglages gardés dans ce navigateur seulement (localStorage) ; le stockage peut manquer (navigation
-// privée) ou être plein : la lecture et l'écriture ne doivent jamais faire échouer l'application.
-const CARD_WIDTH_KEY = 'mc-table-card-size'
-const SIDE_TAB_KEY = 'mc-table-side-tab'
-const DECK_TAB_KEY = 'mc-table-deck-tab'
+// privée) ou être plein : la lecture et l'écriture ne doivent jamais faire échouer l'application. Les clés sont
+// préfixées dans la copie de test (storagePrefix.js).
+const CARD_WIDTH_KEY = `${STORAGE_PREFIX}mc-table-card-size`
+const SIDE_TAB_KEY = `${STORAGE_PREFIX}mc-table-side-tab`
+const DECK_TAB_KEY = `${STORAGE_PREFIX}mc-table-deck-tab`
 /** Les sous-onglets du choix du héros (« Nouvelle partie », DeckTabs), dans leur ordre. */
 const DECK_TABS = ['precon', 'mine', 'load']
-const SIDE_WIDTH_KEY = 'mc-table-side-width'
+const SIDE_WIDTH_KEY = `${STORAGE_PREFIX}mc-table-side-width`
 const readSetting = key => { try { return localStorage.getItem(key) } catch { return null } }
 const writeSetting = (key, value) => {
   try {

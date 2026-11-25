@@ -3,8 +3,8 @@
 // depuis son installation (vite.config.js) : elles reviennent aussitôt. Les autres (decks importés, cartes
 // lues sur MarvelCDB, avec leurs scans français de cgbuilder) sont gardées par le service worker à ce
 // moment-là (caches mc-cards, mc-cgbuilder, mc-marvelcdb et mc-mc4db) : une carte révélée plus tard s'affiche aussitôt,
-// même hors ligne. Sans service worker (serveur de développement, version artefact), elles vont dans le cache
-// HTTP du navigateur.
+// même hors ligne. Sans service worker (serveur de développement, version artefact, copie de test), elles vont
+// dans le cache HTTP du navigateur.
 
 import { watch } from 'vue'
 import { isEncounterCard } from '../game/engine.js'
@@ -51,12 +51,13 @@ async function loadImage(url) {
 /**
  * À la première visite, le service worker s'installe après le chargement de la page, puis la prend en
  * charge (clientsClaim) : on l'attend, sinon les images manqueraient son cache. Pas de service worker sur
- * le serveur de développement ni dans la version artefact ; un navigateur qui le refuse n'est pas attendu
- * longtemps (15 s).
+ * le serveur de développement, dans la version artefact ni dans la copie de test (vite.config.js) ; un
+ * navigateur qui le refuse n'est pas attendu longtemps (15 s).
  */
 function serviceWorkerReady() {
   const serviceWorker = navigator.serviceWorker
-  if (!serviceWorker || serviceWorker.controller || import.meta.env.DEV || import.meta.env.MODE === 'artifact') return Promise.resolve()
+  const hasServiceWorker = !import.meta.env.DEV && import.meta.env.MODE !== 'artifact' && import.meta.env.MODE !== 'staging'
+  if (!serviceWorker || serviceWorker.controller || !hasServiceWorker) return Promise.resolve()
   return new Promise(resolve => {
     serviceWorker.addEventListener('controllerchange', resolve, { once: true })
     setTimeout(resolve, 15000)

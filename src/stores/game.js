@@ -10,9 +10,13 @@ import { migrateSavedGame } from '../game/savedGame.js'
 import { readMissingSetAsideCards } from '../game/marvelcdb.js'
 import { useUiStore } from './ui.js'
 import { useDecksStore } from './decks.js'
+import { STORAGE_PREFIX } from './storagePrefix.js'
 
-/** Clé de la partie enregistrée dans le navigateur (gardée telle quelle pour retrouver les anciennes parties). */
-const SAVED_GAME_KEY = 'mc-table-vue-v1'
+/**
+ * Clé de la partie enregistrée dans le navigateur (gardée telle quelle pour retrouver les anciennes parties ; préfixée
+ * dans la copie de test, storagePrefix.js).
+ */
+const SAVED_GAME_KEY = `${STORAGE_PREFIX}mc-table-vue-v1`
 
 /** Relit la partie enregistrée, mise au format actuel ; null s'il n'y en a pas ou si elle est illisible. */
 function loadSavedGame() {

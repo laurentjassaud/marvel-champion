@@ -1,4 +1,5 @@
 import { execSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { VitePWA } from 'vite-plugin-pwa'
@@ -16,10 +17,17 @@ function gitCommit(command) {
   }
 }
 
-// Deux constructions possibles :
+// Trois constructions possibles :
 //  - par défaut : application installable (PWA : service worker, images des cartes gardées hors ligne) ;
 //  - `--mode artifact` : sans service worker ; scripts/inline-artifact.mjs intègre ensuite le JS et le CSS
-//    dans une seule page, pour l'hébergement en artefact Claude.
+//    dans une seule page, pour l'hébergement en artefact Claude ;
+//  - `--mode staging` (npm run build:test) : la copie de test, dans dist-test/, à servir dans un autre dossier du
+//    même site (/test/) : ses clés du navigateur sont préfixées (« test- », src/stores/storagePrefix.js), pour ne
+//    partager ni partie, ni decks, ni réglages avec la production, et la page n'est pas référencée (noindex, pas
+//    de plan du site). Elle appelle les mêmes scripts du serveur (/api/…) que la production. Elle est réservée
+//    aux personnes qui ont le mot de passe (son .htaccess, server/test/.htaccess) et n'a donc pas de service
+//    worker : il servirait la page depuis son cache sans que le navigateur redemande le mot de passe, et ses
+//    propres demandes (nouvelle version, images pas encore gardées) seraient alors refusées.
 // Les chemins sont relatifs ('./') par défaut : dist/ fonctionne où qu'il soit déposé (racine du domaine ou
 // sous-dossier). BASE_PATH impose un préfixe absolu si besoin.
 // L'inscription aux nouvelles (« Rester informé ») appelle /api/signup.php, le script PHP du site. En local
@@ -29,18 +37,24 @@ const SIGNUP_PROXY = { '/api': 'http://127.0.0.1:8000' }
 // Référencement : l'adresse publique de l'appli (SITE_URL, avec sa barre finale), dont index.html a besoin en
 // entier (adresse canonique, image de partage, données structurées) et le plan du site.
 const SITE_URL = (process.env.SITE_URL || 'https://www.gameboxheroes.fr/marvel-champions-table/').replace(/\/?$/, '/')
-const DESCRIPTION = 'Jouez à Marvel Champions en solo, gratuitement et en français, dans votre navigateur : mise en place automatique, decks préconstruits, règles assistées.'
+// La description, reprise dans les résultats de recherche, og:description, les données structurées et le manifeste
+// (espace insécable avant le point d'exclamation).
+const DESCRIPTION = 'Projet perso fan-made partagé avec la communauté : Marvel Champions dans le navigateur, sur ordinateur ou tablette, et en français, of course ! :)'
 
 /**
  * Remplit index.html (__SITE_URL__, __SITE_ORIGIN__, __DESCRIPTION__) et, à la construction du site, écrit le
  * plan du site (sitemap.xml) à côté de la page : sa seule adresse, datée du jour.
  */
-function seo({ sitemap }) {
+function seo({ sitemap, noindex = false }) {
   const origin = new URL(SITE_URL).origin
   return {
     name: 'mc-seo',
-    transformIndexHtml: html => html.replaceAll('__SITE_URL__', SITE_URL).replaceAll('__SITE_ORIGIN__', origin)
-      .replaceAll('__DESCRIPTION__', DESCRIPTION),
+    transformIndexHtml: html => {
+      const filled = html.replaceAll('__SITE_URL__', SITE_URL).replaceAll('__SITE_ORIGIN__', origin)
+        .replaceAll('__DESCRIPTION__', DESCRIPTION)
+      // la copie de test : pas référencée (sa balise robots remplacée, pas doublée)
+      return noindex ? filled.replace(/<meta name="robots" content="[^"]*">/, '<meta name="robots" content="noindex, nofollow">') : filled
+    },
     generateBundle() {
       if (!sitemap) return
       const today = new Date().toISOString().slice(0, 10)
@@ -53,15 +67,29 @@ function seo({ sitemap }) {
   }
 }
 
+/**
+ * La copie de test : pose à côté de la page son .htaccess (server/test/.htaccess), qui la réserve aux personnes
+ * qui ont l'identifiant et le mot de passe (authentification HTTP de base d'Apache).
+ */
+function testAccess() {
+  return {
+    name: 'mc-test-access',
+    generateBundle() {
+      this.emitFile({ type: 'asset', fileName: '.htaccess', source: readFileSync(new URL('./server/test/.htaccess', import.meta.url), 'utf8') })
+    }
+  }
+}
+
 export default defineConfig(({ mode, command }) => {
   const artifact = mode === 'artifact'
+  const staging = mode === 'staging'
   return {
     base: artifact ? './' : (process.env.BASE_PATH || './'),
-    define: { __APP_COMMIT__: JSON.stringify(gitCommit(command)) },
+    define: { __APP_COMMIT__: JSON.stringify(gitCommit(command)), __STORAGE_PREFIX__: JSON.stringify(staging ? 'test-' : '') },
     server: { proxy: SIGNUP_PROXY },
     preview: { proxy: SIGNUP_PROXY },
     build: {
-      outDir: artifact ? 'dist-artifact' : 'dist',
+      outDir: artifact ? 'dist-artifact' : staging ? 'dist-test' : 'dist',
       emptyOutDir: true,
       copyPublicDir: !artifact,
       // la page unique de l'artefact embarque ses polices (src/styles/fonts.css, ≈450 Ko de woff2), ses SVG (le
@@ -73,8 +101,9 @@ export default defineConfig(({ mode, command }) => {
     },
     plugins: [
       vue(),
-      seo({ sitemap: !artifact }),
-      !artifact && VitePWA({
+      seo({ sitemap: !artifact && !staging, noindex: staging }),
+      staging && testAccess(),
+      !artifact && !staging && VitePWA({
         registerType: 'autoUpdate',
         includeAssets: ['icons/*.png', 'backs/*.jpg'],
         manifest: {

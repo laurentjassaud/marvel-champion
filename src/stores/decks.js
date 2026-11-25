@@ -17,8 +17,10 @@ import { defineStore, acceptHMRUpdate } from 'pinia'
 import { ref, computed } from 'vue'
 import { CARD_DEFINITIONS, addImportedDefinitions } from '../game/data.js'
 import { heroPileCodes, unavailableHeroOf } from '../game/rules.js'
+import { STORAGE_PREFIX } from './storagePrefix.js'
 
-const DECKS_KEY = 'mc-table-decks'
+// préfixée dans la copie de test (storagePrefix.js)
+const DECKS_KEY = `${STORAGE_PREFIX}mc-table-decks`
 const readDecks = () => {
   try {
     const decks = JSON.parse(localStorage.getItem(DECKS_KEY))
