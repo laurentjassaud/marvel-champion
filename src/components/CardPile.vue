@@ -21,8 +21,10 @@ const gameStore = useGameStore()
 const { activateZone } = useZoneActions()
 const cards = computed(() => gameStore.pileOf(props.zone))
 const topCard = computed(() => cards.value.at(-1))
-// les pioches et « De côté » cachent leur carte du dessus (pas le deck Invocation : sa carte du dessus est visible)
-const showsTopFace = computed(() => !['playerDeck', 'encounterDeck', 'scenarioDeck', 'setAside'].includes(props.zone) && !!topCard.value?.faceUp)
+// les pioches et « De côté » cachent leur carte du dessus (pas le deck Invocation : sa carte du dessus est visible),
+// sauf celle qu'un héros montre (Magik : son paquet ; Faucon : le paquet Rencontre, gameStore.showsTopCardOf)
+const showsTopFace = computed(() => gameStore.showsTopCardOf(props.zone)
+  || (!['playerDeck', 'encounterDeck', 'scenarioDeck', 'setAside'].includes(props.zone) && !!topCard.value?.faceUp))
 
 function onClick(event) {
   if (!event.target.closest('.card')) activateZone(props.zone)

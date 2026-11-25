@@ -1,6 +1,6 @@
 <script setup>
 // Le cadre commun des fenêtres (maquette Figma « Préparation de la partie », 2e version) : le fond sombre (un
-// appui dessus ferme la fenêtre), puis le panneau, en trois bandes. En haut, l'en-tête, sur les couvertures de
+// appui dessus ferme la fenêtre, sauf si elle attend une réponse), puis le panneau, en trois bandes. En haut, l'en-tête, sur les couvertures de
 // comics : le titre entre ses petits traits, puis ce que la fenêtre y ajoute (slot header : les hexagones et la
 // difficulté de « Nouvelle partie »). Au milieu, le contenu, plus sombre, qui défile. En bas, le pied et ses
 // boutons (slot actions : les autres choix à gauche, puis Annuler ou Fermer, puis l'action principale, en jaune,
@@ -19,7 +19,7 @@ import { useGameStore } from '../../stores/game.js'
 import { useUiStore } from '../../stores/ui.js'
 import { swallowNextClick } from '../../composables/usePointer.js'
 
-const props = defineProps({
+defineProps({
   /** Titre de la fenêtre, aussi annoncé aux lecteurs d'écran. */
   title: { type: String, required: true },
   /** Grande fenêtre, à la taille de la maquette (Nouvelle partie) : elle ne change pas de taille d'un écran à l'autre. */
@@ -35,12 +35,6 @@ const dialogElement = ref(null)
  * null sur téléphone, sans partie, ou si le panneau n'est pas à l'écran.
  */
 const zoomPlace = ref(null)
-/**
- * La grande fenêtre (Nouvelle partie) ouverte sur l'accueil : le haut de la place laissée sous le grand logo
- * « Marvel Champions Table » (le bas du logo et 12 px d'écart, en pixels du haut de l'écran), pour qu'elle ne
- * le cache pas ; null ailleurs (les autres fenêtres restent centrées).
- */
-const titleRoom = ref(null)
 function measurePlaces() {
   const pane = document.querySelector('[data-zoom-anchor]')
   const rect = pane?.getBoundingClientRect()
@@ -49,12 +43,9 @@ function measurePlaces() {
   zoomPlace.value = gameStore.isReady && !ui.introOpen && !isPhone && rect?.width && rect.height
     ? { left: rect.left, top: rect.top, width: rect.width, height: rect.height, room: window.innerWidth - rect.left }
     : null
-  const introTitle = props.wide && ui.introOpen ? document.querySelector('.intro-screen .title') : null
-  titleRoom.value = introTitle ? Math.round(introTitle.getBoundingClientRect().bottom + 12) : null
 }
 const modalStyle = computed(() => ({
-  '--zoom-room': zoomPlace.value ? `${zoomPlace.value.room}px` : null,
-  '--title-room': titleRoom.value ? `${titleRoom.value}px` : null
+  '--zoom-room': zoomPlace.value ? `${zoomPlace.value.room}px` : null
 }))
 
 onMounted(() => {
@@ -69,15 +60,17 @@ onMounted(() => {
 })
 onBeforeUnmount(() => window.removeEventListener('resize', measurePlaces))
 
-// l'appui sur le fond ne doit pas ensuite cliquer la pile que la fenêtre découvre en se fermant
+// l'appui sur le fond ne doit pas ensuite cliquer la pile que la fenêtre découvre en se fermant ; une fenêtre
+// qui attend une réponse (ui.modal.required : le mulligan du début de partie) reste ouverte
 function closeFromBackdrop() {
+  if (ui.modal?.required) return
   swallowNextClick()
   ui.closeModal()
 }
 </script>
 
 <template>
-  <div class="modal" :class="{ 'beside-zoom': zoomPlace, 'below-title': titleRoom }" :style="modalStyle"
+  <div class="modal" :class="{ 'beside-zoom': zoomPlace }" :style="modalStyle"
     @pointerdown.self="closeFromBackdrop">
     <div ref="dialogElement" class="box" :class="{ wide }" role="dialog" aria-modal="true" :aria-label="title">
       <!-- le décor du haut : le filet qui plonge sous la barre rouge -->

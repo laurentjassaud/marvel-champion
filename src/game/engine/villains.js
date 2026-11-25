@@ -3,15 +3,15 @@
 // stades de Kang le Conquérant.
 
 import { DEFINITION_BY_ID, STATUS_CARDS, TYPE_LABELS, SCENARIOS, heroName, isFeminineHero } from '../data.js'
-import { VILLAIN_STAGE_RULES, VILLAIN_HIT_POINTS_FROM_SCHEMES } from '../rules.js'
+import { VILLAIN_STAGE_RULES, VILLAIN_HIT_POINTS_FROM_SCHEMES, heroRules } from '../rules.js'
 import {
   definitionOf, cardName, cardLabel, cardsInZone, identityCard, isAlterEgo, counterKindOf, plural, logMessage,
   randomIndex, moveToTop, shuffleZone, encounterPile, activeVillainCard, activeVillainName, sideSchemeOfSet,
   scenarioRulesOf, scenarioDeckOf, mainSchemesInPlay
 } from './state.js'
 import { SPOTS, DEFAULT_LAYOUT, nextEncounterSpot } from './layout.js'
-import { moveCard, entryTokensNote } from './moves.js'
-import { applyStartingThreat, dealEncounterCardToPlayer, dealEncounterCardsToPlayer, revealScenarioDeckCard } from './piles.js'
+import { moveCard, entryTokensNote, setIdentityForm } from './moves.js'
+import { applyStartingThreat, dealEncounterCardToPlayer, dealEncounterCardsToPlayer, dealScenarioDeckCardsToPlayer, revealScenarioDeckCard } from './piles.js'
 
 /** Ordre des étapes : "I" < "II" < "III" (et "1A" < "2A"… pour les manigances). */
 export const byStage = (first, second) => first.stage.length - second.stage.length || first.stage.localeCompare(second.stage)
@@ -58,7 +58,11 @@ export function addDamage(game, card, amount, layout = DEFAULT_LAYOUT) {
     const hitPointsBefore = heroCounter.value
     heroCounter.value = Math.max(0, heroCounter.value - amount)
     logMessage(game, `${amount > 0 ? 'Dégât' : 'Soin'} sur ${cardName(card)} : ${heroCounter.value} PV.`)
-    if (amount > 0 && hitPointsBefore > 0 && heroCounter.value === 0) return heroDefeated(game, card)
+    if (amount > 0 && hitPointsBefore > 0 && heroCounter.value === 0) {
+      // Deadpool, sous forme de héros, n'est pas battu (rules.js regeneratesAtZero)
+      const regenerates = heroRules(game.setup?.hero).regeneratesAtZero && !isAlterEgo(card)
+      return regenerates ? heroRegenerates(game, card) : heroDefeated(game, card)
+    }
     return undefined
   }
   card.damage = Math.max(0, card.damage + amount)
@@ -88,6 +92,24 @@ function heroDefeated(game, identity) {
   const text = `${heroName(hero) || cardName(identity)} a été ${isFeminineHero(hero) ? 'battue' : 'battu'} par ${winningVillainName(game)}.`
   logMessage(game, `${text.slice(0, -1)} au tour ${game.turn} : défaite.`, true)
   return { kind: 'heroDefeat', fromCardId: identity.id, text }
+}
+
+/**
+ * Deadpool, sous forme de héros, tombe à 0 PV (rules.js regeneratesAtZero, « Le Dégénéré qui Régénère ») : il
+ * n'est pas battu. Ses PV reviennent à 1, il passe en alter ego, et la manigance principale reçoit 1 pion
+ * Accélération (Kang : sur Le Maître du Temps, comme ceux du paquet Rencontre épuisé). Rend {kind:
+ * 'heroRegenerates', fromCardId, text, accelerationTokens}, que la fenêtre de défaite présente autrement.
+ */
+function heroRegenerates(game, identity) {
+  const heroLabel = cardName(identity)
+  game.counters[0].value = 1
+  setIdentityForm(game, identity, 1)
+  game.accelerationTokens += 1
+  const masterOfTime = masterOfTimeScheme(game)
+  if (masterOfTime) masterOfTime.tokens = game.accelerationTokens
+  const text = `${heroLabel} n'est pas mort !`
+  logMessage(game, `${heroLabel} tombe à 0 PV mais n'est pas battu (Le Dégénéré qui Régénère) : 1 PV, alter ego (${cardName(identity)}), pion Accélération ${game.accelerationTokens} sur la manigance principale.`, true)
+  return { kind: 'heroRegenerates', fromCardId: identity.id, text, accelerationTokens: game.accelerationTokens }
 }
 
 /**
@@ -302,7 +324,8 @@ export function defeatVillain(game, villain, layout = DEFAULT_LAYOUT) {
 /**
  * Une étape du méchant vient d'entrer en jeu (elle remplace l'étape vaincue, est posée depuis « De côté »,
  * ou commence la partie, en expert) : la table fait son « Une fois révélée » quand elle le peut (rules.js
- * villainStages : revealCardId, dealEncounterCards, revealScenarioDeckTop, stunHero) et l'écrit au journal.
+ * villainStages : revealCardId, dealEncounterCards, dealScenarioDeckCards, revealScenarioDeckTop, stunHero) et
+ * l'écrit au journal.
  * Ce qui se joue à la main (onRevealA) est rappelé par moveCard ; une étape qui arrive sur sa face B n'a
  * que des rappels. Rend la phrase du journal ('' si la table n'a rien fait).
  *   quiet  ne pas l'écrire au journal (la mise en place l'écrit à sa place parmi ses messages)
@@ -313,6 +336,7 @@ export function revealVillainStage(game, villain, layout, { quiet = false } = {}
   const effects = []
   if (stageRules.revealCardId) effects.push(revealCardFromEncounter(game, stageRules, layout))
   if (stageRules.dealEncounterCards) effects.push(dealEncounterCardsToPlayer(game, layout, stageRules.dealEncounterCards))
+  if (stageRules.dealScenarioDeckCards) effects.push(dealScenarioDeckCardsToPlayer(game, layout, stageRules.dealScenarioDeckCards))
   if (stageRules.stunHero) effects.push(stunIdentity(game))
   const scenarioDeck = stageRules.revealScenarioDeckTop && scenarioDeckOf(game)
   if (scenarioDeck) effects.push(`la carte du dessus du deck ${scenarioDeck.name} est révélée`)

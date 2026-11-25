@@ -1,15 +1,15 @@
 // Les piles : piocher dans le paquet du joueur, révéler et distribuer les cartes Rencontre, remélanger une
 // défausse dans son paquet (à la main : un paquet vide ne se reconstitue jamais tout seul, et c'est alors
-// le remélange qui applique la pénalité), révéler le deck du scénario, lancer les cartes du deck
-// Invocation de Docteur Strange.
+// le remélange qui applique la pénalité), révéler le deck du scénario ou vous en attribuer une carte, lancer
+// les cartes du deck Invocation de Docteur Strange.
 
 import { TYPE_LABELS } from '../data.js'
 import {
   definitionOf, cardName, cardsInZone, identityCard, plural, logMessage, randomIndex, moveToTop, shuffleZone,
-  encounterPile, activeVillainName, scenarioDeckOf, startingThreatOf, revealHint
+  encounterPile, activeVillainName, scenarioDeckOf, startingThreatOf, revealHint, heroPileOfZone
 } from './state.js'
 import { DEFAULT_LAYOUT, nextEncounterSpot, nextDealtSpot } from './layout.js'
-import { moveCard, entryTokensNote } from './moves.js'
+import { moveCard, takeFromPile, entryTokensNote } from './moves.js'
 import { masterOfTimeScheme, villainHitPointsGainNote } from './villains.js'
 
 /* ---------------------------------------------------------------------------------------------------- */
@@ -205,6 +205,41 @@ export function revealScenarioDeckCard(game, layout) {
   const details = applyStartingThreat(game, card, layout) + entryTokensNote(card)
   logMessage(game, `Deck ${scenarioDeck.name} : « ${cardName(card)} » révélée (${typeLabelOf(card)}${details}).`)
   return card
+}
+
+/**
+ * Vous attribue la carte du dessus du deck du scénario, face cachée devant votre identité, comme une carte
+ * Rencontre attribuée (Kraven : « attribuez-vous une carte PIÈGE du deck PIÈGE ») : elle se révèle en la
+ * retournant. Rend la carte, ou null si le deck est vide (il ne se reconstitue pas).
+ */
+/**
+ * Clic sur une pile de l'identité qui joue sa carte du dessus (rules.js heroPiles, playsTop) : la carte entre en
+ * jeu, face visible, à côté de l'identité (Travaux et Dons d'Hercule, Sens de Daredevil). Rend la carte, ou null
+ * (pile vide, ou pile qui ne joue pas sa carte du dessus).
+ */
+export function playTopOfHeroPile(game, layout, zone) {
+  const card = heroPileOfZone(game, zone)?.playsTop ? cardsInZone(game, zone).at(-1) : null
+  if (!card) return null
+  takeFromPile(game, layout, card, zone)
+  return card
+}
+
+export function dealScenarioDeckCardToPlayer(game, layout) {
+  const card = scenarioDeckOf(game) && cardsInZone(game, 'scenarioDeck').at(-1)
+  if (!card) return null
+  moveCard(game, card, 'table', { ...nextDealtSpot(game, layout), faceDown: true }, true)
+  card.dealtToPlayer = true
+  return card
+}
+
+/** Vous attribue `count` cartes du deck du scénario ; rend la phrase du journal ("vous recevez une carte Piège…"). */
+export function dealScenarioDeckCardsToPlayer(game, layout, count) {
+  const scenarioDeck = scenarioDeckOf(game)
+  let dealtCount = 0
+  for (let i = 0; i < count; i++) if (dealScenarioDeckCardToPlayer(game, layout)) dealtCount++
+  if (!dealtCount) return `le deck ${scenarioDeck?.name ?? 'du scénario'} est vide`
+  const cards = dealtCount > 1 ? `${dealtCount} cartes ${scenarioDeck.name}` : `une carte ${scenarioDeck.name}`
+  return `vous recevez ${cards} face cachée, posée${dealtCount > 1 ? 's' : ''} devant votre identité`
 }
 
 /**

@@ -226,8 +226,10 @@ export function usePointer() {
       const tableRect = zoneElement.getBoundingClientRect()
       const x = event.clientX - tableRect.left - finished.offsetX
       const y = event.clientY - tableRect.top - finished.offsetY
-      // une carte tirée d'une pioche arrive face cachée (une carte Invocation est alors glissée sous une manigance)
-      gameStore.moveCard(card.id, 'table', { x, y, faceDown: DECK_PILES.includes(card.zone) })
+      // une carte tirée d'une pioche arrive face cachée (une carte Invocation est alors glissée sous une manigance),
+      // sauf la carte du dessus qu'un héros montre (Magik la joue depuis son paquet)
+      const faceDown = DECK_PILES.includes(card.zone) && !gameStore.showsTopCardOf(card.zone)
+      gameStore.moveCard(card.id, 'table', { x, y, faceDown })
     } else if (zone === 'hand' && card.zone === 'hand') {
       const otherCards = [...zoneElement.querySelectorAll('.card[data-id]')].filter(element => element.dataset.id !== card.id)
       const nextCard = otherCards.find(element => {
@@ -311,11 +313,15 @@ export function usePointer() {
     }
   }
 
-  /** Survol : la carte sous la souris devient la cible des raccourcis et s'affiche en grand. */
+  /**
+   * Survol : la carte sous la souris devient la cible des raccourcis et s'affiche en grand, sa face comprise
+   * si c'est une carte face cachée dont le joueur connaît la face (les formes d'énergie de Spectrum :
+   * gameStore.previewsFaceDownCard ; au doigt, le toucher qui la sélectionne fait de même, activateCard).
+   */
   function onMouseOver(event) {
     const hit = cardUnder(event.target)
     ui.hoveredCardId = hit ? hit.card.id : null
-    if (hit && !hit.card.isPawn) ui.showPreview(hit.card.id)
+    if (hit && !hit.card.isPawn) ui.showPreview(hit.card.id, gameStore.previewsFaceDownCard(hit.card.id))
   }
 
   // une pile du plateau (sa carte du dessus comprise) ouvre le menu de la pile ; une carte dans une

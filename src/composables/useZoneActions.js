@@ -4,7 +4,10 @@ import { useGameStore } from '../stores/game.js'
 import { useUiStore } from '../stores/ui.js'
 
 /** Les zones montrées comme des piles (un clic sur une défausse ou « De côté » l'ouvre en fenêtre). */
-const PILE_ZONES = ['playerDeck', 'encounterDeck', 'playerDiscard', 'encounterDiscard', 'setAside', 'invocationDeck', 'invocationDiscard', 'scenarioDeck']
+const PILE_ZONES = [
+  'playerDeck', 'encounterDeck', 'playerDiscard', 'encounterDiscard', 'setAside', 'heroSetAside', 'heroSetAside2', 'invocationDeck',
+  'invocationDiscard', 'scenarioDeck'
+]
 
 export function useZoneActions() {
   const gameStore = useGameStore()
@@ -12,24 +15,30 @@ export function useZoneActions() {
 
   /**
    * Clic sur une pile : le paquet pioche, le paquet Rencontre révèle, le deck Invocation lance sa carte, le
-   * deck du scénario révèle la sienne ; une autre pile s'ouvre dans une fenêtre.
+   * deck du scénario révèle la sienne, un deck de l'identité qui joue sa carte du dessus la met en jeu (Travaux
+   * et Dons d'Hercule, Sens de Daredevil) ; une autre pile s'ouvre dans une fenêtre.
    */
   function activateZone(zone) {
     if (zone === 'playerDeck') gameStore.drawCard()
     else if (zone === 'encounterDeck') gameStore.revealEncounterCard()
     else if (zone === 'invocationDeck') gameStore.castInvocation()
     else if (zone === 'scenarioDeck') gameStore.revealScenarioDeckCard()
+    else if (gameStore.heroPiles.find(pile => pile.zone === zone)?.playsTop) gameStore.playTopOfHeroPile(zone)
     else if (PILE_ZONES.includes(zone)) ui.openModal('pile', { zone })
   }
 
-  /** Clic sur une carte : celle du dessus d'une pile agit comme la pile ; une autre est sélectionnée et montrée en grand. */
+  /**
+   * Clic (ou toucher) sur une carte : celle du dessus d'une pile agit comme la pile ; une autre est sélectionnée
+   * et montrée en grand, sa face comprise si c'est une carte face cachée dont le joueur connaît la face (les
+   * formes d'énergie de Spectrum : gameStore.previewsFaceDownCard).
+   */
   function activateCard(card) {
     if (PILE_ZONES.includes(card.zone)) {
       activateZone(card.zone)
       return
     }
     ui.selectCard(card.id)
-    ui.showPreview(card.id)
+    ui.showPreview(card.id, gameStore.previewsFaceDownCard(card.id))
   }
 
   return { activateZone, activateCard }

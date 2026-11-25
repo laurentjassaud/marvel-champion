@@ -3,7 +3,7 @@
 // (Nouvelle partie), place prise par le décor du méchant sur la table, changement de scène quand une partie
 // est lancée.
 
-import { defineStore } from 'pinia'
+import { defineStore, acceptHMRUpdate } from 'pinia'
 import { ref, watch } from 'vue'
 import { villainArtUrl } from '../composables/useAssets.js'
 
@@ -31,6 +31,8 @@ const writeSetting = (key, value) => {
  */
 const SCENE_TIMES = { out: 800, in: 450 }
 const SCENE_TIMES_REDUCED = { out: 300, in: 250 }
+/** Durée du filet bleu électrique d'une carte ajoutée à la main (flashCard), en ms : la même que card-flash dans main.css. */
+const CARD_FLASH_TIME = 1200
 
 /** Échelle de la maquette (1920 × 1080 px) à l'écran : la même que --u dans main.css. */
 const screenScale = () => Math.min((globalThis.innerWidth ?? 1920) / 1920, (globalThis.innerHeight ?? 1080) / 1080)
@@ -69,6 +71,14 @@ export const useUiStore = defineStore('ui', () => {
   const selectedCardId = ref(null)
   /** Carte de la main tirée au hasard, entourée de rouge jusqu'à ce qu'on la touche. */
   const randomlyPickedCardId = ref(null)
+  /**
+   * Cartes que la mise en place de l'identité vient de mettre en jeu (Griffes de Wolverine…, une fois
+   * distribuées) ou en main (Bouclier de Captain America, après le mulligan) : un filet bleu électrique les
+   * entoure 0,6 s puis s'efface en 0,6 s (main.css, card-flash).
+   */
+  const flashedCardIds = ref([])
+  /** Cartes à allumer à la fin de la distribution de la mise en place (flashAfterDeal), hors de l'état réactif. */
+  let cardIdsToFlashAfterDeal = []
   /** Carte sous le pointeur. */
   const hoveredCardId = ref(null)
   /** Carte montrée en grand : {cardId, showFace} ; showFace : montrer sa face même si elle est cachée (sa propre main…). */
@@ -79,7 +89,8 @@ export const useUiStore = defineStore('ui', () => {
   const pawnTrayOpen = ref(false)
   /**
    * Fenêtre ouverte : {type: 'setup' | 'pile' | 'mulligan' | 'help' | 'signup' | 'legal' | 'about' | 'thanks' | 'bug' | 'restart' | 'villain'
-   * | 'scheme' | 'defeat' | 'reshuffle', zone?, result?, fromPile?}.
+   * | 'scheme' | 'defeat' | 'reshuffle', zone?, result?, fromPile?, required?}. required : elle attend une
+   * réponse, ni le fond ni Échap ne la ferment (le mulligan du début de partie).
    */
   const modal = ref(null)
   /** La page d'accueil est affichée, par-dessus la table : au lancement, puis par le titre de la barre. */
@@ -132,6 +143,23 @@ export const useUiStore = defineStore('ui', () => {
     villainHudTop.value = top
   }
   const selectCard = cardId => { selectedCardId.value = cardId }
+  /** Allume ces cartes (flashedCardIds) le temps de l'animation card-flash de main.css : 0,6 s, puis 0,6 s pour s'effacer. */
+  let flashTimer
+  const flashCards = cardIds => {
+    clearTimeout(flashTimer)
+    flashedCardIds.value = cardIds
+    if (cardIds.length) flashTimer = setTimeout(() => { flashedCardIds.value = [] }, CARD_FLASH_TIME)
+  }
+  const flashCard = cardId => flashCards([cardId])
+  /**
+   * Ces cartes s'allumeront à la fin de la distribution de la mise en place (useDealAnimation, flushFlashAfterDeal) :
+   * avant, elles sont encore en route depuis le paquet. Une nouvelle mise en place remplace les précédentes.
+   */
+  const flashAfterDeal = cardIds => { cardIdsToFlashAfterDeal = cardIds }
+  const flushFlashAfterDeal = () => {
+    if (cardIdsToFlashAfterDeal.length) flashCards(cardIdsToFlashAfterDeal)
+    cardIdsToFlashAfterDeal = []
+  }
   const showPreview = (cardId, showFace = false) => { preview.value = { cardId, showFace } }
   const openContextMenu = menu => { contextMenu.value = menu }
   const closeContextMenu = () => { contextMenu.value = null }
@@ -169,8 +197,14 @@ export const useUiStore = defineStore('ui', () => {
   }
 
   return {
-    cardWidth, resetCardWidth, sideTab, deckTab, sideColumnWidth, tableWidth, tableHeight, heroInset, selectedCardId, randomlyPickedCardId, hoveredCardId,
-    preview, contextMenu, pawnTrayOpen, modal, introOpen, setupCount, isDealing, scene, sceneCount, layout, setTableSize, setHeroInset, selectCard, showPreview, openContextMenu, closeContextMenu,
+    cardWidth, resetCardWidth, sideTab, deckTab, sideColumnWidth, tableWidth, tableHeight, heroInset, selectedCardId, randomlyPickedCardId, flashedCardIds, hoveredCardId,
+    preview, contextMenu, pawnTrayOpen, modal, introOpen, setupCount, isDealing, scene, sceneCount, layout, setTableSize, setHeroInset, selectCard,
+    flashCard, flashCards, flashAfterDeal, flushFlashAfterDeal, showPreview, openContextMenu, closeContextMenu,
     openModal, closeModal, openIntro, closeIntro, launchGame, togglePawnTray, closePawnTray
   }
 })
+
+// En développement, une modification de ce store met à jour celui de la page ouverte (Pinia, acceptHMRUpdate) :
+// sans cela, Vite relit le module mais Pinia garde le store déjà créé, et une action ajoutée y manque jusqu'au
+// rechargement de la page (« gameStore.nextIdentityVersion is not a function »). Sans effet en production.
+if (import.meta.hot) import.meta.hot.accept(acceptHMRUpdate(useUiStore, import.meta.hot))

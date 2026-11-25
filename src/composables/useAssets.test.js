@@ -21,6 +21,26 @@ describe('scans français de cgbuilder', () => {
     expect(cgbuilderImageUrl('54010', 'b')).toBeNull()
   })
 
+  it('les faces A et B que cgbuilder inverse par rapport à MarvelCDB sont échangées (Tornade : 1A imprimé est Ororo Munroe)', () => {
+    // MarvelCDB 36001a est Tornade (héros) ; cgbuilder suit la carte imprimée, où 1A est l'alter ego
+    expect(cgbuilderImageUrl('36001a')).toBe(`${CGBUILDER_IMAGES_URL}/35/1B.jpg`)
+    expect(cgbuilderImageUrl('36001a', 'b')).toBe(`${CGBUILDER_IMAGES_URL}/35/1A.jpg`)
+    // de même pour Gambit, Wolverine, Phénix, Cyclope, Colossus, Shadowcat, Groot, Rocket Raccoon
+    expect(cgbuilderImageUrl('37001a')).toBe(`${CGBUILDER_IMAGES_URL}/39/1B.jpg`)
+    expect(cgbuilderImageUrl('16001a', 'b')).toBe(`${CGBUILDER_IMAGES_URL}/16/1A.jpg`)
+    // un héros dans le bon sens ne bouge pas
+    expect(cgbuilderImageUrl('38001a')).toMatch(/\/1A\.jpg$/)
+  })
+
+  it('les faces A et B d\'un même numéro : le verso d\'une carte recto verso, ou des variantes d\'une même carte', () => {
+    // Intangible / Dense (Vision) : une carte recto verso sous un seul code, 2A et 2B chez cgbuilder
+    expect(cgbuilderImageUrl('26002')).toBe(`${CGBUILDER_IMAGES_URL}/26/2A.jpg`)
+    expect(cgbuilderImageUrl('26002', 'b')).toBe(`${CGBUILDER_IMAGES_URL}/26/2B.jpg`)
+    // Feux d'Artifices (Jubilé) : deux exemplaires que MarvelCDB distingue (47007a, 47007b), une seule image chez cgbuilder
+    expect(cgbuilderImageUrl('47007a')).toBe(`${CGBUILDER_IMAGES_URL}/47/7.jpg`)
+    expect(cgbuilderImageUrl('47007b')).toBe(`${CGBUILDER_IMAGES_URL}/47/7.jpg`)
+  })
+
   it('rien pour une carte que cgbuilder n\'a pas (une boîte pas encore traduite) ni pour un code inconnu', () => {
     expect(cgbuilderImageUrl('63001a')).toBeNull()
     expect(cgbuilderImageUrl('sans-code')).toBeNull()

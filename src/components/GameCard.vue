@@ -112,7 +112,8 @@ const classes = computed(() => ({
   land: !isPawn.value && isFaceShown.value && !!definitionOf(props.card).landscape,
   tapped: props.positioned && props.card.exhausted,
   sel: !props.inert && ui.selectedCardId === props.card.id,
-  rand: !props.inert && ui.randomlyPickedCardId === props.card.id
+  rand: !props.inert && ui.randomlyPickedCardId === props.card.id,
+  flash: !props.inert && ui.flashedCardIds.includes(props.card.id)
 }))
 const style = computed(() => {
   const cardStyle = {}

@@ -3,7 +3,8 @@
 //
 // Boîtes présentes : la boîte de base, les paquets scénario Le Bouffon Vert, Les Démolisseurs et Kang le
 // Conquérant, la grosse boîte L'Avènement de Crâne Rouge, et les paquets héros Black Widow, Docteur Strange,
-// Captain America, Hulk, Miss Marvel, Thor, Ant-Man, La Guêpe, Vif-Argent et La Sorcière Rouge.
+// Captain America, Hulk, Miss Marvel, Thor, Ant-Man, La Guêpe, Vif-Argent et La Sorcière Rouge ; et un scénario
+// fan-made, Kraven le Chasseur (ses sets Kraven le Chasseur et Piège, et le set modulaire Savage Six).
 //
 // Les cartes sont rangées dans src/data/*.json : cards.json et precons.json sont produits par le script
 // scripts/build-data.py (boîte de base) ; les autres fichiers sont écrits à la main d'après les cartes
@@ -28,6 +29,7 @@ import QUICKSILVER_CARDS from '../data/vif-argent.json'
 import SCARLET_WITCH_CARDS from '../data/sorciere-rouge.json'
 import ANT_MAN_CARDS from '../data/ant-man.json'
 import WASP_CARDS from '../data/guepe.json'
+import KRAVEN_CARDS from '../data/kraven.json'
 import CORE_SET_PRECON_DECKS from '../data/precons.json'
 
 /* ---------------------------------------------------------------------------------------------------- */
@@ -99,6 +101,7 @@ export function readDefinition(rawDefinition) {
  *   codePrefix     numéro de la boîte qui commence les codes MarvelCDB ("08" + carte 1 face A = "08001a")
  *   imageFolder    dossier des images sous public/cards/
  *   cards          fiches des cartes (clés courtes, telles que dans le JSON)
+ *   fanMade        boîte faite par des fans : absente de MarvelCDB, elle n'a ni marvelCdbName ni codePrefix
  */
 export const PACKS = [
   { id: 'core', name: 'Boîte de base', marvelCdbName: 'Core Set', codePrefix: '01', imageFolder: 'base', cards: CORE_SET_CARDS },
@@ -115,7 +118,10 @@ export const PACKS = [
   { id: 'ant_man', name: 'Ant-Man', marvelCdbName: 'Ant-Man', codePrefix: '12', imageFolder: 'ant-man', cards: ANT_MAN_CARDS },
   { id: 'wasp', name: 'La Guêpe', marvelCdbName: 'Wasp', codePrefix: '13', imageFolder: 'guepe', cards: WASP_CARDS },
   { id: 'quicksilver', name: 'Vif-Argent', marvelCdbName: 'Quicksilver', codePrefix: '14', imageFolder: 'vif-argent', cards: QUICKSILVER_CARDS },
-  { id: 'scarlet_witch', name: 'La Sorcière Rouge', marvelCdbName: 'Scarlet Witch', codePrefix: '15', imageFolder: 'sorciere rouge', cards: SCARLET_WITCH_CARDS }
+  { id: 'scarlet_witch', name: 'La Sorcière Rouge', marvelCdbName: 'Scarlet Witch', codePrefix: '15', imageFolder: 'sorciere rouge', cards: SCARLET_WITCH_CARDS },
+  // fan-made : identifiants krv- (set Kraven le Chasseur), pge- (set Piège) et sav- (set modulaire Savage Six),
+  // suivis du numéro imprimé dans leur set ; la carte 11 du set Kraven (Collier de Dents) manque encore
+  { id: 'kraven', name: 'Kraven le Chasseur', fanMade: true, imageFolder: 'kraven', cards: KRAVEN_CARDS }
 ]
 
 /** Identifiant (GUID OCTGN) de la carte de la boîte de base qui porte ce code MarvelCDB ("01064"). */
@@ -248,9 +254,10 @@ const marvelCdbCodeOf = (pack, rawDefinition) => (/^\d{5}/.test(rawDefinition.co
 
 /**
  * Code MarvelCDB ("01043a", "08012") → fiche. Une réimpression gardée ici répond aussi au code de sa
- * première impression (Tactique d'Essaim : wsp-20 est aussi 12020, l'impression du paquet Ant-Man).
+ * première impression (Tactique d'Essaim : wsp-20 est aussi 12020, l'impression du paquet Ant-Man). Les
+ * boîtes fan-made, absentes de MarvelCDB, n'y sont pas.
  */
-export const DEFINITION_BY_CODE = Object.fromEntries(PACKS.flatMap(pack =>
+export const DEFINITION_BY_CODE = Object.fromEntries(PACKS.filter(pack => pack.codePrefix).flatMap(pack =>
   pack.cards.map(rawDefinition => [marvelCdbCodeOf(pack, rawDefinition), DEFINITION_BY_ID[rawDefinition.id]])))
 for (const definition of CARD_DEFINITIONS) {
   if (definition.originalCode) DEFINITION_BY_CODE[definition.originalCode] ??= definition
@@ -262,12 +269,20 @@ for (const definition of CARD_DEFINITIONS) {
  * images du site (scans anglais : l'appli leur préfère les scans français de cgbuilder, trouvés par le code,
  * useAssets.js). Elles rejoignent CARD_DEFINITIONS, DEFINITION_BY_ID et DEFINITION_BY_CODE ;
  * la partie les garde (setup.importedDefinitions), si bien qu'un rechargement ou « Recommencer » les retrouve.
- * Une carte déjà connue n'est pas ajoutée deux fois ; une carte de nos boîtes (scan français) reste prioritaire
- * pour son code.
+ * Une carte déjà connue n'est pas ajoutée deux fois, sauf pour remplacer une fiche plus ancienne (`revision`,
+ * marvelcdb.js IMPORT_REVISION) ; une carte de nos boîtes (scan français) reste prioritaire pour son code.
  */
 export function addImportedDefinitions(importedDefinitions = []) {
   for (const imported of importedDefinitions) {
-    if (DEFINITION_BY_ID[imported.id]) continue
+    const known = DEFINITION_BY_ID[imported.id]
+    // une fiche lue sur MarvelCDB par une version plus ancienne de l'import (champ `revision`, marvelcdb.js) est
+    // mise à jour sur place : les cartes de la partie, les index et les autres decks voient la nouvelle
+    if (known?.pack === 'marvelcdb' && (known.revision ?? 1) < (imported.revision ?? 1)) {
+      for (const key of Object.keys(known)) delete known[key]
+      Object.assign(known, readDefinition(imported), { pack: 'marvelcdb', imageFolder: null })
+      continue
+    }
+    if (known) continue
     const definition = { ...readDefinition(imported), pack: 'marvelcdb', imageFolder: null }
     CARD_DEFINITIONS.push(definition)
     DEFINITION_BY_ID[definition.id] = definition
@@ -318,6 +333,7 @@ export const isFeminineHero = heroId => !!HEROES.find(hero => hero.id === heroId
  *   title            titre du scénario, quand il diffère du nom du méchant
  *   advisedModulars  sets modulaires conseillés (un, plusieurs, ou aucun pour Les Démolisseurs)
  *   level            difficulté indiquée sur l'écran de choix (boîte de base)
+ *   fanMade          scénario fait par des fans : l'écran de choix le marque d'un badge « Fan-made »
  * Leurs règles spéciales (mise en place, decks à part, rappels…) sont dans rules.js.
  */
 export const SCENARIOS = [
@@ -333,10 +349,12 @@ export const SCENARIOS = [
   { id: 'taskmaster', villainName: 'Taskmaster', title: 'Traquer les Héros', advisedModulars: ['weapon_master'] },
   { id: 'zola', villainName: 'Zola', title: "L'Île du Dr Zola", advisedModulars: ['under_attack'] },
   { id: 'red_skull', villainName: 'Crâne Rouge', title: "L'Avènement de Crâne Rouge", advisedModulars: ['hydra_assault', 'hydra_patrol'] },
-  { id: 'kang', villainName: 'Kang', title: 'Kang le Conquérant', advisedModulars: ['temporal'] }
+  { id: 'kang', villainName: 'Kang', title: 'Kang le Conquérant', advisedModulars: ['temporal'] },
+  // fan-made
+  { id: 'kraven', villainName: 'Kraven le Chasseur', advisedModulars: ['savage_six'], fanMade: true }
 ]
 
-/** Sets modulaires de la table : identifiant (le `set` de leurs cartes) et nom français. */
+/** Sets modulaires de la table : identifiant (le `set` de leurs cartes), nom français, et `fanMade` comme pour un scénario. */
 export const MODULAR_SETS = [
   { id: 'bomb_scare', name: 'Alerte à la Bombe' },
   { id: 'masters_of_evil', name: 'Les Maîtres du Mal' },
@@ -352,18 +370,20 @@ export const MODULAR_SETS = [
   { id: 'hydra_patrol', name: "Patrouille d'Hydra" },
   { id: 'temporal', name: 'Temporel' },
   { id: 'anachronauts', name: 'Les Anachronautes' },
-  { id: 'master_of_time', name: 'Le Maître du Temps' }
+  { id: 'master_of_time', name: 'Le Maître du Temps' },
+  { id: 'savage_six', name: 'Savage Six', fanMade: true }
 ]
 
 /**
  * Boîtes proposées à la mise en place (écran Nouvelle partie, héros, scénarios et sets modulaires tirés au
  * hasard) : la boîte de base (5 héros, 3 scénarios, 5 sets modulaires), le paquet de scénarios Le Bouffon
  * Vert (2 scénarios, Entreprise à Risques et Formule Mutagène, et leurs 4 sets modulaires) et les paquets héros
- * Captain America, Hulk et Thor (un héros chacun, avec son deck préconstruit et son set Némésis). Les cartes
- * des autres boîtes restent connues de la table (parties sauvegardées, decks importés). Une boîte ajoutée ici
- * l'est aussi aux globPatterns de vite.config.js (ses images, hors ligne).
+ * Captain America, Hulk et Thor (un héros chacun, avec son deck préconstruit et son set Némésis), et le
+ * scénario fan-made Kraven le Chasseur (et son set modulaire Savage Six). Les cartes des autres boîtes restent
+ * connues de la table (parties sauvegardées, decks importés). Une boîte ajoutée ici l'est aussi aux
+ * globPatterns de vite.config.js (ses images, hors ligne).
  */
-export const AVAILABLE_PACKS = ['core', 'green_goblin', 'captain_america', 'hulk', 'thor']
+export const AVAILABLE_PACKS = ['core', 'green_goblin', 'captain_america', 'hulk', 'thor', 'kraven']
 /** Le set (héros, scénario, set modulaire) a des cartes dans une des boîtes proposées. */
 const isAvailableSet = setId => CARD_DEFINITIONS.some(definition => definition.set === setId && AVAILABLE_PACKS.includes(definition.pack))
 export const AVAILABLE_HEROES = HEROES.filter(hero => isAvailableSet(hero.id))
@@ -413,7 +433,9 @@ export const VICTORY_TEXTS = {
   'kng-10': 'Le destin n\'était pas inéluctable : Iron Lad ne deviendra pas Kang.', // Destin Inéluctable
   'kng-11': 'Le royaume de Rama-Tut retourne aux sables : l\'Égypte n\'aura pas de pharaon venu du futur.', // Le Royaume de Rama-Tut
   'kng-12': 'La guerre du présent et du futur est gagnée : le Centurion Écarlate est renvoyé dans son siècle.', // La Guerre Présent-Futur
-  'kng-13': 'La colère de Kang retombe : la Terre ne sera pas une province de son empire.' // La Colère de Kang
+  'kng-13': 'La colère de Kang retombe : la Terre ne sera pas une province de son empire.', // La Colère de Kang
+  'krv-04': 'Le chasseur devient la proie : Kraven n\'ajoutera pas votre tête à ses trophées.', // Cibles en Acquisition
+  'krv-05': 'La grande chasse est finie : c\'est Kraven qui est tombé dans le dernier piège.' // La Grande Chasse
 }
 
 /**
@@ -429,6 +451,8 @@ export const ZONE_LABELS = {
   encounterDeck: 'paquet Rencontre',
   encounterDiscard: 'défausse Rencontre',
   setAside: 'de côté', // cartes mises de côté, hors jeu (étapes suivantes du méchant, Némésis…)
+  heroSetAside: 'de côté (héros)', // les piles de l'identité (rules.js heroPiles) : zoneLabel leur donne leur nom
+  heroSetAside2: 'de côté (héros)',
   invocationDeck: 'deck Invocation', // Docteur Strange
   invocationDiscard: 'défausse Invocation',
   scenarioDeck: 'deck du scénario', // Armes Expérimentales, Manigance Annexe : le moteur précise son nom

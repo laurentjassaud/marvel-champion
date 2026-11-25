@@ -2,7 +2,7 @@
 // partie mise en place. Les cartes de la boîte de base sont déjà toutes dans le cache du service worker
 // depuis son installation (vite.config.js) : elles reviennent aussitôt. Les autres (decks importés, cartes
 // lues sur MarvelCDB, avec leurs scans français de cgbuilder) sont gardées par le service worker à ce
-// moment-là (caches mc-cards, mc-cgbuilder et mc-marvelcdb) : une carte révélée plus tard s'affiche aussitôt,
+// moment-là (caches mc-cards, mc-cgbuilder, mc-marvelcdb et mc-mc4db) : une carte révélée plus tard s'affiche aussitôt,
 // même hors ligne. Sans service worker (serveur de développement, version artefact), elles vont dans le cache
 // HTTP du navigateur.
 

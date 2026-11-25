@@ -15,15 +15,74 @@
 /* Héros                                                                                                 */
 /* ---------------------------------------------------------------------------------------------------- */
 // Une entrée par héros de HEROES (data.js). Champs lus par le moteur :
-//   setupCardId            carte que la « Mise en place » de l'identité ajoute à la main : cherchée dans le
-//                          paquet ou la défausse après le mulligan, puis le paquet est mélangé
-//                          (le Bouclier de Captain America)
-//   setupNote              « Mise en place » de l'identité quand elle se joue à la main : écrite au journal
-//                          au début de la partie (T'Challa)
+//   setupCard              carte que la « Mise en place » de l'identité ajoute à la main, ou met en jeu, après le
+//                          mulligan ; le paquet est mélangé ensuite (engine/setup.js, identitySetupOf). La carte
+//                          cherchée :
+//                            {id}           cette carte (le Bouclier de Captain America : 'cap-09')
+//                            {code}         cette carte, par son code MarvelCDB : un héros lu sur MarvelCDB
+//                                           (le Pistolet Élémentaire de Star-Lord : '17007')
+//                            {type, trait?, label}  une carte de ce type (qui a ce trait), au choix du joueur
+//                                           s'il en a plusieurs différentes (fenêtre du mulligan) ; label la
+//                                           nomme dans cette fenêtre (T'Challa : une amélioration Black Panther)
+//                          fromDiscard : elle est cherchée dans le paquet et la défausse (sinon le paquet seul)
+//                          zones, fromText : elle est cherchée dans ces zones, que fromText nomme dans la fenêtre
+//                          (Tornade : sa pile heroSetAside, « du deck Climat ») ; le paquet n'est mélangé que s'il
+//                          a été fouillé
+//                          intoPlay : elle entre en jeu au lieu de rejoindre la main ; une manigance annexe avec
+//                          sa menace de départ, dans la zone Rencontre (Cable : une manigance annexe de joueur),
+//                          une autre carte à côté de l'identité (Tornade : un soutien Climat)
 //   discardsHandAtTurnEnd  sous forme de héros, la main est défaussée à la fin du tour (Hulk, « Enragé »)
 //   handSizeBonus          sous forme de héros, la taille de main augmente de 1 par amélioration contrôlée
 //                          qui a un trait donné : {trait, label: [singulier, pluriel] pour le journal, max}
 //                          (Iron Man : Tech, 7 au plus)
+//   startsInPlay           cartes du deck qui commencent en jeu : tous leurs exemplaires, posés sur la table,
+//                          face A, avant la main de départ ; par leur code MarvelCDB, pour servir aussi aux héros
+//                          lus sur MarvelCDB, dont les cartes s'appellent "cdb-<code>". Une entrée est un code
+//                          (Intangible de Vision : '26002'), ou {code | codes, faceDown?, previewFace?, tokens?,
+//                          tokenName?} : face cachée (les formes d'énergie de Spectrum), face cachée mais montrée
+//                          au joueur par l'aperçu, au survol ou au toucher (Spectrum choisit laquelle retourner),
+//                          jetons posés dessus (les 4 jetons Pouvoir de la Force Phénix). Ces cartes s'allument
+//                          un instant une fois distribuées.
+//   heroPiles              les piles de l'identité, hors jeu, dans le bandeau du joueur entre le paquet et la
+//                          défausse (deux au plus : zones heroSetAside et heroSetAside2, engine/state.js
+//                          HERO_PILE_ZONES) : cartes qu'elle met de côté, ou decks à part. Chaque pile :
+//                            cards          ses cartes, par leur code MarvelCDB : un code (tous les exemplaires
+//                                           du deck : Aura de la Mort de Valkyrie, '25002'), ou {code, copies}
+//                                           quand le deck ne les contient pas : la mise en place crée les
+//                                           exemplaires (les 6 Pris Dans la Glace d'Iceberg, le deck Climat de
+//                                           Tornade), que l'import de MarvelCDB lit dans la boîte du héros
+//                            label          son nom (« De côté » par défaut ; « Climat », « Travaux », « Sens »)
+//                            faceDown       ses cartes sont face cachée (les decks d'Hercule)
+//                            shuffled       elle est mélangée à la mise en place (Hercule, Daredevil)
+//                            playsTop       un clic met en jeu sa carte du dessus, à côté de l'identité (Travaux
+//                                           et Dons d'Hercule, Sens de Daredevil) ; sinon il ouvre la pile
+//                            returnsUnder   une de ses cartes qui quitte le jeu y retourne, dessous (Daredevil :
+//                                           une amélioration Sens)
+//                            deck           false : une pile et non un deck, dans le journal et sa fenêtre
+//                                           (les « Versions » d'Ironheart)
+//                          « Mettre de côté » (X) range une de ses cartes dans sa pile. Elles s'allument un instant
+//                          une fois les cartes distribuées.
+//   identity               l'identité d'un héros lu sur MarvelCDB, assemblée à l'import avec d'autres cartes de sa
+//                          boîte (marvelcdb.js assembleIdentity) :
+//                            thirdFace      sa troisième face, une autre forme héros (Archangel d'Angel : '42001c'),
+//                                           avec forms : les noms de ses deux formes héros, comme Ant-Man
+//                            alterEgo       son alter ego est cette carte, et non le dos de sa carte héros (Peni
+//                                           Parker de SP//dr : '31002a' ; le dos de la carte héros est la combinaison)
+//                            companion      {code, backCode} : la carte qui l'accompagne, recto (en héros) et verso
+//                                           (en alter ego) pris sur deux cartes ; en jeu dès la mise en place, à côté
+//                                           de l'identité, elle se retourne avec elle (SP//dr : la carte « SP//dr »
+//                                           de Peni en héros, la combinaison face Inactive en alter ego)
+//   showsTopCard           [{zone, phase?}] : sous forme de héros (et pendant cette phase), la carte du dessus de
+//                          cette pioche se montre face visible ; seul l'affichage change (Magik : son paquet ;
+//                          Faucon : le paquet Rencontre, pendant la phase du joueur, 'hero'). Glissée sur la table,
+//                          elle y arrive face visible
+//   regeneratesAtZero      sous forme de héros, tombé à 0 PV, il n'est pas battu (Deadpool, « Le Dégénéré qui
+//                          Régénère ») : ses PV reviennent à 1, il passe en alter ego et la manigance principale
+//                          reçoit 1 pion Accélération ; une fenêtre l'explique (moteur : villains.js addDamage)
+//   levelUp                les codes des identités suivantes, dans l'ordre (Ironheart : ses versions 2 et 3, qui
+//                          attendent dans sa pile « Versions ») : « Level Up! », au menu de l'identité, la remplace
+//                          par la suivante, à sa place, sur sa face héros, redressée, avec ses jetons et ses cartes
+//                          d'état
 // Le deck Invocation (Docteur Strange) vient du set "<héros>_invocation" de ses cartes ; la troisième face
 // (Ant-Man, La Guêpe) des champs thirdName / thirdHandSize / forms de sa carte d'identité.
 
@@ -36,8 +95,8 @@ export const HERO_RULES = {
     handSizeBonus: { trait: 'tech', label: ['amélioration Tech', 'améliorations Tech'], max: 7 }
   },
   black_panther: {
-    byHand: ['Mise en place de T\'Challa : cherchez une amélioration Black Panther dans votre paquet, ajoutez-la à votre main et mélangez le paquet.'],
-    setupNote: 'Mise en place de T\'Challa, après le mulligan : cherchez une amélioration Black Panther dans votre paquet (clic droit sur le paquet → Chercher dans le paquet…) et prenez-la en main ; le paquet est mélangé ensuite.'
+    automated: ['Mise en place de T\'Challa : après le mulligan, vous choisissez une amélioration Black Panther de votre paquet, qui rejoint votre main ; le paquet est mélangé.'],
+    setupCard: { type: 'upgrade', trait: 'black panther', label: 'une amélioration Black Panther' }
   },
   black_widow: {},
   doctor_strange: {
@@ -46,7 +105,7 @@ export const HERO_RULES = {
   captain_america: {
     automated: ['Mise en place de Steve Rogers : le Bouclier de Captain America, cherché dans le paquet ou la défausse, rejoint la main après le mulligan ; le paquet est mélangé.'],
     byHand: ['Légende vivante : le premier allié joué à chaque round coûte 1 de moins.'],
-    setupCardId: 'cap-09'
+    setupCard: { id: 'cap-09', fromDiscard: true }
   },
   hulk: {
     automated: ['Enragé : sous forme de héros, la main est défaussée à la fin de votre tour (avant de piocher).'],
@@ -68,8 +127,155 @@ export const HERO_RULES = {
   }
 }
 
-/** Règles spéciales d'un héros ; {} pour un héros sans règle particulière ou lu sur MarvelCDB. */
-export const heroRules = heroId => HERO_RULES[heroId] ?? {}
+/**
+ * Héros lus sur MarvelCDB que la table refuse pour l'instant, leurs règles n'y étant pas encore gérées (Elektra : son
+ * deck Ninja, mélangé dans le paquet Rencontre ; Iron Fist : ses compteurs chi et ses cartes Technique) : un deck de
+ * l'un d'eux ne se charge pas (« héros non disponible sur cette plateforme »), et un deck déjà gardé n'est plus
+ * proposé. Par le set de leur identité sur MarvelCDB et son code (sans la lettre de la face).
+ */
+export const UNAVAILABLE_HEROES = [
+  { set: 'elektra', code: '63001', name: 'Elektra' },
+  { set: 'iron_fist', code: '64001', name: 'Iron Fist' }
+]
+/** Le héros refusé pour ce set ou ce code d'identité MarvelCDB (« 63001a »), ou null. */
+export const unavailableHeroOf = ({ set, code } = {}) => UNAVAILABLE_HEROES
+  .find(hero => hero.set === set || (code && String(code).startsWith(hero.code))) ?? null
+
+/**
+ * Héros lus sur MarvelCDB (leur boîte n'est pas sur la table : un deck importé les amène), par le set de leur
+ * identité sur MarvelCDB ('vision', 'stld' pour Star-Lord) ; mêmes champs que HERO_RULES. Leurs cartes ne sont connues qu'une fois le
+ * deck importé : elles sont citées par leur code MarvelCDB.
+ */
+export const IMPORTED_HERO_RULES = {
+  vision: {
+    automated: ['Mise en place de Vision : Intangible commence en jeu, sur sa face A ; « retourner » (F) la fait passer sur Dense, et inversement.'],
+    startsInPlay: ['26002']
+  },
+  wolverine: {
+    automated: ['Mise en place de Logan : les Griffes de Wolverine commencent en jeu.'],
+    startsInPlay: ['35002']
+  },
+  x23: {
+    automated: ['Mise en place de Laura Kinney : les Griffes de X-23 commencent en jeu.'],
+    startsInPlay: ['43002']
+  },
+  wonder_man: {
+    automated: ['Mise en place de Simon Williams : Ionic Physiology commence en jeu.'],
+    startsInPlay: ['58002']
+  },
+  jessica_jones: {
+    automated: ['Mise en place de Jessica Jones : son soutien Alias Investigations commence en jeu.'],
+    startsInPlay: ['61002']
+  },
+  shadowcat: {
+    automated: ['Mise en place de Kitty Pryde : sa forme de masse commence en jeu, face Corporelle ; « retourner » (F) la fait passer sur Phased, et inversement.'],
+    startsInPlay: ['32031a']
+  },
+  nick_fury: {
+    automated: ['Mise en place de Nick Fury : sa tenue commence en jeu, face Assault ; « retourner » (F) la fait passer sur Stealth, et inversement.'],
+    startsInPlay: ['50035a']
+  },
+  psylocke: {
+    automated: ['Mise en place de Betsy Braddock : ses 2 améliorations Énergie-Psi commencent en jeu, face Psi-Couteau ; « retourner » (F) en fait passer une sur Psi-Katana, et inversement.'],
+    startsInPlay: ['41002a']
+  },
+  phoenix: {
+    automated: ['Mise en place de Jean Grey : la Force Phénix commence en jeu, face Contenue, avec 4 jetons Pouvoir.'],
+    startsInPlay: [{ code: '34002a', tokens: 4, tokenName: 'Pouvoir' }]
+  },
+  spectrum: {
+    automated: ['Mise en place de Monica Rambeau : ses 3 formes d\'énergie (Gamma, Photon, Pulsar) commencent en jeu, face cachée ; la souris sur l\'une d\'elles, ou le toucher qui la sélectionne, montre sa face dans l\'aperçu ; « retourner » (F) la révèle.'],
+    startsInPlay: [{ codes: ['21002', '21003', '21004'], faceDown: true, previewFace: true }]
+  },
+  // Star-Lord
+  stld: {
+    automated: ['Mise en place de Peter Quill : après le mulligan, un exemplaire du Pistolet Élémentaire, cherché dans le paquet ou la défausse, rejoint la main ; le paquet est mélangé.'],
+    setupCard: { code: '17007', fromDiscard: true }
+  },
+  colossus: {
+    automated: ['Mise en place de Piotr Rasputin : après le mulligan, un exemplaire d\'Acier Organique, cherché dans le paquet, rejoint la main ; le paquet est mélangé.'],
+    setupCard: { code: '32006' }
+  },
+  valk: {
+    automated: ['Mise en place de Brunnhilde : l\'Aura de la Mort commence de côté, dans la pile « De côté » du bandeau du joueur ; glissez-la sur la table pour la jouer, « Mettre de côté » (X) l\'y range.'],
+    heroPiles: [{ cards: ['25002'] }]
+  },
+  rogue: {
+    automated: ['Mise en place d\'Anna Marie : Touché commence de côté, dans la pile « De côté » du bandeau du joueur ; glissez-la sur la table pour l\'attacher, « Mettre de côté » (X) l\'y range.'],
+    heroPiles: [{ cards: ['38002'] }]
+  },
+  iceman: {
+    automated: ['Mise en place de Bobby Drake : 6 Pris Dans la Glace commencent de côté, dans la pile « De côté » du bandeau du joueur ; glissez-en un sur la table pour l\'attacher, « Mettre de côté » (X) l\'y range.'],
+    heroPiles: [{ cards: [{ code: '46002', copies: 6 }] }]
+  },
+  // Tornade : son deck Climat (4 soutiens, hors de la liste du deck sur MarvelCDB, que l'import lit dans sa boîte)
+  // est sa pile du bandeau ; après le mulligan, elle en met un en jeu, au choix
+  storm: {
+    automated: ['Mise en place d\'Ororo Munroe : son deck Climat (Ciel Dégagé, Ouragan, Orage, Blizzard) est la pile « Climat » du bandeau du joueur ; après le mulligan, vous choisissez le soutien Climat qui entre en jeu. Contrôle Climatique : glissez un autre soutien de la pile sur la table, « Mettre de côté » (X) y range l\'ancien.'],
+    heroPiles: [{ label: 'Climat', cards: [{ code: '36002', copies: 1 }, { code: '36003', copies: 1 }, { code: '36004', copies: 1 }, { code: '36005', copies: 1 }] }],
+    setupCard: { type: 'support', zones: ['heroSetAside'], fromText: 'du deck Climat', label: 'un soutien Climat', intoPlay: true }
+  },
+  angel: {
+    automated: ['Angel : trois faces, Angel (héros), Warren Worthington III (alter ego) et Archangel (héros), comme Ant-Man ; le menu de l\'identité passe de l\'une à l\'autre.'],
+    identity: { thirdFace: '42001c', forms: ['Angel', 'Archangel'] }
+  },
+  ironheart: {
+    automated: ['Ironheart : la partie commence avec la version 1 (Riri Williams) ; les versions 2 et 3 attendent dans la pile « Versions » du bandeau. Level Up! (menu de l\'identité) : la version suivante la remplace, sur sa face héros, redressée, avec ses jetons et ses cartes d\'état.'],
+    heroPiles: [{ label: 'Versions', deck: false, cards: [{ code: '29002a', copies: 1 }, { code: '29003a', copies: 1 }] }],
+    levelUp: ['29002a', '29003a']
+  },
+  spdr: {
+    automated: ['SP//dr : l\'identité est SP//dr Suit (héros, main de 3) et Peni Parker (alter ego, main de 4) ; la combinaison est en jeu dès la mise en place, face Inactive, et se retourne avec l\'identité (face « SP//dr » en héros).'],
+    identity: { alterEgo: '31002a', companion: { code: '31002b', backCode: '31001b' } }
+  },
+  deadpool: {
+    automated: ['Le Dégénéré qui Régénère : Deadpool, sous forme de héros, n\'est jamais battu ; tombé à 0 PV, il revient à 1 PV, passe en alter ego (Wade Wilson) et la manigance principale reçoit 1 pion Accélération. Une fenêtre l\'explique.'],
+    regeneratesAtZero: true
+  },
+  magik: {
+    automated: ['Magik (héros) : la carte du dessus de votre paquet est face visible ; glissée sur la table, elle y arrive face visible.'],
+    showsTopCard: [{ zone: 'playerDeck' }]
+  },
+  falcon: {
+    automated: ['Faucon (héros), pendant la phase du joueur : la carte du dessus du paquet Rencontre est face visible.'],
+    showsTopCard: [{ zone: 'encounterDeck', phase: 'hero' }]
+  },
+  // Hercule : ses decks Travaux et Dons (3 cartes chacun, hors de la liste du deck sur MarvelCDB), mélangés, face
+  // cachée ; un clic sur l'un met en jeu sa carte du dessus
+  hercules: {
+    automated: ['Mise en place d\'Hercule : ses decks Travaux et Dons, mélangés et face cachée, sont les piles « Travaux » et « Dons » du bandeau du joueur. Nouveaux Travaux d\'Hercule (clic sur « Travaux ») : révèle la carte du dessus ; Expiation (clic sur « Dons ») : met en jeu la carte du dessus.'],
+    heroPiles: [
+      { label: 'Travaux', cards: [{ code: '59002', copies: 1 }, { code: '59003', copies: 1 }, { code: '59004', copies: 1 }], faceDown: true, shuffled: true, playsTop: true },
+      { label: 'Dons', cards: [{ code: '59005', copies: 1 }, { code: '59006', copies: 1 }, { code: '59007', copies: 1 }], faceDown: true, shuffled: true, playsTop: true }
+    ]
+  },
+  // Daredevil : son deck Sens (5 améliorations, hors de la liste du deck sur MarvelCDB), mélangé, face visible
+  // (on peut le consulter, pas changer l'ordre) ; une amélioration Sens qui quitte le jeu retourne dessous
+  daredevil: {
+    automated: ['Mise en place de Matt Murdock : son deck Sens, mélangé et face visible, est la pile « Sens » du bandeau du joueur. Sens Surhumains (clic sur la pile) : met en jeu la carte du dessus (payez son coût) ; une amélioration Sens qui quitte le jeu retourne sous le deck.'],
+    heroPiles: [
+      { label: 'Sens', cards: [{ code: '60002', copies: 1 }, { code: '60003', copies: 1 }, { code: '60004', copies: 1 }, { code: '60005', copies: 1 }, { code: '60006', copies: 1 }], shuffled: true, playsTop: true, returnsUnder: true }
+    ]
+  },
+  // une manigance annexe de joueur est lue sur MarvelCDB comme une manigance annexe (type side_scheme) ; dans le
+  // paquet du joueur, il n'y a que les siennes
+  cable: {
+    automated: ['Mise en place de Nathan Summers : après le mulligan, vous choisissez une manigance annexe de joueur de votre paquet ou de votre défausse, qui entre en jeu avec sa menace de départ ; le paquet est mélangé.'],
+    setupCard: { type: 'side_scheme', label: 'une manigance annexe de joueur', fromDiscard: true, intoPlay: true }
+  }
+}
+
+/** Règles spéciales d'un héros ; {} pour un héros sans règle particulière. */
+export const heroRules = heroId => HERO_RULES[heroId] ?? IMPORTED_HERO_RULES[heroId] ?? {}
+
+/**
+ * Les codes MarvelCDB des cartes des piles d'un héros (heroPiles) ; outsideDeck : seulement celles que la mise en
+ * place crée, hors de la liste du deck (`copies` : le deck Climat de Tornade, les Pris Dans la Glace d'Iceberg).
+ */
+export const heroPileCodes = (heroId, { outsideDeck = false } = {}) => (heroRules(heroId).heroPiles ?? [])
+  .flatMap(pile => pile.cards ?? [])
+  .filter(entry => !outsideDeck || (typeof entry !== 'string' && entry.copies))
+  .map(entry => (typeof entry === 'string' ? entry : entry.code))
 
 /* ---------------------------------------------------------------------------------------------------- */
 /* Scénarios                                                                                             */
@@ -86,7 +292,8 @@ export const heroRules = heroId => HERO_RULES[heroId] ?? {}
 //                                           cachée (Prison d'Hydra)
 //   setAside           cartes du set du méchant mises de côté, hors jeu (Le Dormeur, les Empire de Kang)
 //   scenarioDeck       deck propre au scénario, à côté du paquet Rencontre, fait d'un set (ou de ses cartes
-//                      d'un type) : {set, type?, name, shortName}
+//                      d'un type) : {set, type?, name, shortName, dealsToPlayer?} ; dealsToPlayer : son menu
+//                      attribue aussi sa carte du dessus au joueur, face cachée (Kraven : deck Piège)
 //   oneEnvironment     un environnement qui entre en jeu défausse les autres (Personne ne Passe)
 //   expertSet          en expert, les cartes du méchant forment un set à part (Kang Expert), toutes ses étapes servent
 //   removesObligation  l'obligation du héros est retirée de la partie (Kang)
@@ -107,6 +314,8 @@ export const heroRules = heroId => HERO_RULES[heroId] ?? {}
 //                        dealIfAlreadyInPlay    si cette carte est déjà en jeu, une carte Rencontre pour vous
 //                        dealEncounterCards     ce nombre de cartes Rencontre pour vous, face cachée devant
 //                                               votre identité
+//                        dealScenarioDeckCards  ce nombre de cartes du deck du scénario pour vous, de même
+//                                               (Kraven III : une carte Piège)
 //                        revealScenarioDeckTop  la carte du dessus du deck du scénario est révélée
 //                        stunHero               votre identité est sonnée, si elle est sous forme de héros
 //                      À jouer à la main, rappelé au journal : onRevealA, ou onRevealB quand la carte est
@@ -327,6 +536,26 @@ export const SCENARIO_RULES = {
     mainSchemes: {
       'kng-07': { onRevealB: DEAL_YOURSELF }, // L'Arrivée de Kang
       'kng-13': { onRevealB: 'cherchez votre sbire Némésis (De côté, paquet ou défausse Rencontre), mettez-le en jeu engagé avec vous et mélangez le paquet Rencontre' } // La Colère de Kang
+    }
+  },
+  // fan-made : le deck Piège attend à côté du paquet Rencontre ; ses cartes s'attribuent face cachée au joueur
+  kraven: {
+    automated: [
+      'Mise en place : le deck Piège à côté du paquet Rencontre (pile Pièges) ; « attribuez-vous une carte PIÈGE » : clic droit sur la pile → Carte face cachée pour vous.',
+      'Kraven le Chasseur (III) révélé : une carte Piège pour vous, face cachée devant votre identité.'
+    ],
+    byHand: [
+      'Quand un de vos personnages attaque Kraven le Chasseur : une carte Piège pour vous, puis révélez (F) chaque carte Piège attribuée, une fois par round.',
+      'Stade 1B : 2 menaces quand vous passez sous forme de héros, 1 de moins quand vous repassez en alter ego ; stade 2B : 1 menace après chaque carte Piège révélée, une fois par round.',
+      'Kraven le Chasseur (II) révélé : le Collier de Dents, qui manque encore à la table ; stade 2A révélé : Le Sérum de Calypso (le journal les rappelle).'
+    ],
+    scenarioDeck: { set: 'kraven_traps', name: 'Piège', shortName: 'Pièges', dealsToPlayer: true },
+    mainSchemes: {
+      'krv-05': { onRevealA: 'cherchez la manigance annexe Le Sérum de Calypso dans le paquet Rencontre ou sa défausse, révélez-la et mélangez le paquet Rencontre' } // La Grande Chasse
+    },
+    villainStages: {
+      'krv-02': { onRevealA: 'cherchez l\'attachement Collier de Dents dans le paquet Rencontre ou sa défausse et révélez-le (cette carte manque encore à la table : rien à faire)' }, // Kraven le Chasseur (II)
+      'krv-03': { dealScenarioDeckCards: 1 } // Kraven le Chasseur (III)
     }
   }
 }

@@ -96,13 +96,14 @@ export default defineConfig(({ mode, command }) => {
         workbox: {
           // les cartes des boîtes proposées (AVAILABLE_PACKS dans data.js) sont téléchargées dès l'installation :
           // la boîte de base (cards/base, 209 images, ≈16 Mo), le paquet Le Bouffon Vert (57 images, ≈4 Mo) et les
-          // paquets héros Captain America, Hulk et Thor (84 images, ≈6 Mo). Toute partie proposée se joue hors
+          // paquets héros Captain America, Hulk et Thor (84 images, ≈6 Mo), et le scénario fan-made Kraven le Chasseur
+          // (32 images, ≈2,5 Mo). Toute partie proposée se joue hors
           // ligne, quels que soient le héros, le méchant et le set modulaire. Une autre boîte proposée un jour :
           // l'ajouter ici.
           // Les polices (woff2, src/styles/fonts.css) aussi : le texte garde sa police hors ligne ; et les SVG (le
           // grand logo de l'accueil)
           globPatterns: ['**/*.{js,css,html,png,webp,woff2,svg}', 'backs/*.jpg', 'cards/base/*.jpg', 'cards/bouffon vert/*.jpg',
-            'cards/captain america/*.jpg', 'cards/hulk/*.jpg', 'cards/thor/*.jpg'],
+            'cards/captain america/*.jpg', 'cards/hulk/*.jpg', 'cards/thor/*.jpg', 'cards/kraven/*.jpg'],
           // les pages du script d'inscription (api/unsubscribe.php, ouverte depuis le lien d'un e-mail) ne sont pas
           // l'appli : le service worker ne les remplace pas par index.html
           navigateFallbackDenylist: [/\/api\//],
@@ -124,6 +125,13 @@ export default defineConfig(({ mode, command }) => {
               urlPattern: /^https:\/\/mc-src\.cgbuilder\.fr\/images\/carte\//,
               handler: 'CacheFirst',
               options: { cacheName: 'mc-cgbuilder', expiration: { maxEntries: 600 }, cacheableResponse: { statuses: [0, 200] } }
+            },
+            {
+              // les images des cartes de fans lues sur MC4DB (src/game/mc4db.js), par le relais du site
+              // (/api/mc4db.php?image=…), ou directement depuis MC4DB sans relais : gardées de même
+              urlPattern: /\/api\/mc4db\.php\?image=|^https:\/\/mc4db\.merlindumesnil\.net\/bundles\/cards\//,
+              handler: 'CacheFirst',
+              options: { cacheName: 'mc-mc4db', expiration: { maxEntries: 600 }, cacheableResponse: { statuses: [0, 200] } }
             },
             {
               // la vidéo du ciel de l'accueil (11 Mo) : la balise <video> ne la demande que par morceaux (réponses

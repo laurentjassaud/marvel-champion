@@ -1,17 +1,20 @@
-// Mise en place d'une partie : le héros et son deck, le scénario (méchant, manigances, paquet Rencontre,
-// mise en place de la manigance 1A), la main de départ, puis le mulligan.
+// Mise en place d'une partie : le héros et son deck (et les cartes qui commencent en jeu, rules.js
+// startsInPlay, ou dans les piles de l'identité du bandeau du joueur, heroPiles : cartes de côté, decks à part), le scénario (méchant, manigances, paquet Rencontre, mise en place de la manigance 1A), la main
+// de départ, puis le mulligan, première décision de la partie, et seulement ensuite la mise en place de
+// l'identité qui ajoute une carte à la main (Bouclier de Captain America ; au choix du joueur pour T'Challa) ou
+// la met en jeu (la manigance annexe de joueur de Cable, au choix).
 
 import {
-  CARD_DEFINITIONS, DEFINITION_BY_ID, addImportedDefinitions, SCENARIOS, MODULAR_SETS, PRECON_DECKS,
+  CARD_DEFINITIONS, DEFINITION_BY_ID, DEFINITION_BY_CODE, addImportedDefinitions, SCENARIOS, MODULAR_SETS, PRECON_DECKS,
   AVAILABLE_HEROES, AVAILABLE_SCENARIOS, AVAILABLE_MODULAR_SETS
 } from '../data.js'
 import { heroRules, scenarioRules } from '../rules.js'
 import { SAVED_GAME_VERSION } from '../savedGame.js'
 import {
   definitionOf, cardName, cardsInZone, isInScenarioDeck, plural, listInFrench, logMessage, random, randomIndex,
-  uniqueId, shuffleZone, activeVillainCard, startingThreatOf
+  uniqueId, shuffleZone, activeVillainCard, startingThreatOf, identityCard, heroPilesOf, ofName
 } from './state.js'
-import { SPOTS, nextEncounterSpot } from './layout.js'
+import { SPOTS, nextEncounterSpot, nextHeroSpot } from './layout.js'
 import { moveCard, entryTokensText } from './moves.js'
 import { drawCard, putOwnAllyUnder } from './piles.js'
 import { handSize } from './turns.js'
@@ -91,7 +94,10 @@ export function drawRandomHeroAndScenario(options) {
 export function newGame(options, layout) {
   options = drawRandomHeroAndScenario(options)
   addImportedDefinitions(options.importedDefinitions)
-  const heroDefinition = CARD_DEFINITIONS.find(definition => definition.type === 'hero' && definition.set === options.hero)
+  // l'identité du deck (Ironheart a trois identités du même set : la version 1 est celle du deck), sinon celle du set
+  const deckIdentity = (options.deckList ?? []).map(([definitionId]) => DEFINITION_BY_ID[definitionId])
+    .find(definition => definition?.type === 'hero' && definition.set === options.hero)
+  const heroDefinition = deckIdentity ?? CARD_DEFINITIONS.find(definition => definition.type === 'hero' && definition.set === options.hero)
   const scenario = SCENARIOS.find(candidate => candidate.id === options.scenario)
   if (!heroDefinition) throw new Error(`Héros inconnu : ${options.hero}`)
   if (!scenario) throw new Error(`Scénario inconnu : ${options.scenario}`)
@@ -121,6 +127,9 @@ export function newGame(options, layout) {
 
   // l'identité commence sous forme d'alter ego (face B)
   addCard(heroDefinition.id, 'player', 'table', { side: 1, isIdentity: true, zIndex: 1, ...SPOTS.identity(layout) })
+  // la carte qui l'accompagne (rules.js identity.companion : la combinaison de SP//dr), sur sa face d'alter ego
+  const companionDefinition = DEFINITION_BY_CODE[heroRules(options.hero).identity?.companion?.code]
+  if (companionDefinition) addCard(companionDefinition.id, 'player', 'table', { side: 1, zIndex: 1, ...nextHeroSpot(game, layout) })
 
   // le paquet du joueur (l'identité, l'obligation et les cartes Invocation sont mises en place à part)
   for (const [definitionId, copies] of options.deckList) {
@@ -164,6 +173,13 @@ export function newGame(options, layout) {
   }
 
   for (const zone of ['playerDeck', 'encounterDeck', 'invocationDeck', 'scenarioDeck']) shuffleZone(game, zone)
+  // les cartes du deck qui commencent en jeu (rules.js startsInPlay : Intangible de Vision, Griffes de
+  // Wolverine…), avant la main de départ
+  const cardsInPlayAtStart = putStartingCardsInPlay(game, layout, heroRules(options.hero).startsInPlay)
+  if (companionDefinition) cardsInPlayAtStart.unshift(`« ${companionDefinition.backName ?? companionDefinition.name} »`)
+  // les piles de l'identité (rules.js heroPiles : Aura de la Mort de Valkyrie, deck Climat de Tornade, decks
+  // Travaux et Dons d'Hercule, deck Sens de Daredevil…), dans le bandeau du joueur
+  const { texts: cardsAsideAtStart, missing: cardsAsideMissing } = putStartingCardsAside(game, addCard)
   // l'« Une fois révélé » de la première étape du méchant, une fois le paquet Rencontre prêt : en expert,
   // Rhino (II) commence la partie et révèle Casser et Emporter (rules.js villainStages)
   const firstVillainCard = !rules.crew && cardsInZone(game, 'table').find(card => definitionOf(card).type === 'villain')
@@ -173,15 +189,111 @@ export function newGame(options, layout) {
     .map(definitionId => DEFINITION_BY_ID[definitionId]).filter(definition => definition?.pack === 'marvelcdb')
   if (importedDefinitions.length) game.setup.importedDefinitions = importedDefinitions.map(({ pack, imageFolder, ...definition }) => definition)
 
-  // main de départ : la taille de main de l'alter ego ; puis la mise en place de l'identité (Bouclier)
+  // main de départ : la taille de main de l'alter ego. La mise en place de l'identité (Bouclier) attend le
+  // mulligan, qui est à faire
   const startingHandSize = heroDefinition.backHandSize ?? 6
   for (let i = 0; i < startingHandSize; i++) drawCard(game, layout, true)
-  const setupCard = applyIdentitySetup(game)
-  // la mise en place a posé ses cartes sur la table (moveCard ferme alors le mulligan) : il reste à faire
+  // la mise en place a pu poser sur la table des cartes du paquet du joueur (moveCard ferme alors le
+  // mulligan) : il reste à faire
   game.mulliganTaken = false
 
-  logStartOfGame(game, { heroDefinition, scenario, firstVillain, startingHandSize, setupCard, setupReport, villainRevealNote, deckLabel: options.deckLabel })
+  logStartOfGame(game, {
+    heroDefinition, scenario, firstVillain, startingHandSize, cardsInPlayAtStart, cardsAsideAtStart, cardsAsideMissing, setupReport,
+    villainRevealNote, deckLabel: options.deckLabel
+  })
   return game
+}
+
+/**
+ * Les entrées de rules.js startsInPlay, sous une seule forme : {codes, faceDown, previewFace, tokens,
+ * tokenName}. Une entrée y est un code MarvelCDB ('26002'), ou {code | codes, faceDown?, previewFace?,
+ * tokens?, tokenName?}.
+ */
+const startingEntries = (entries = []) => entries.map(entry => (typeof entry === 'string'
+  ? { codes: [entry], faceDown: false, previewFace: false, tokens: 0 }
+  : {
+      codes: entry.codes ?? [entry.code], faceDown: !!entry.faceDown, previewFace: !!entry.previewFace,
+      tokens: entry.tokens ?? 0, tokenName: entry.tokenName
+    }))
+
+/**
+ * La carte, face cachée sur la table, est de celles que la mise en place pose face cachée en laissant le
+ * joueur voir leur face (rules.js startsInPlay, previewFace : les formes d'énergie de Spectrum, dont il choisit
+ * laquelle retourner) : l'aperçu la montre, au survol de la souris comme au toucher qui la sélectionne.
+ */
+export function previewsFaceDownCard(game, card) {
+  if (card.zone !== 'table' || card.faceUp) return false
+  return startingEntries(heroRules(game.setup.hero).startsInPlay).filter(entry => entry.previewFace)
+    .some(entry => entry.codes.some(code => DEFINITION_BY_CODE[code]?.id === card.definitionId))
+}
+
+/**
+ * Pose sur la table les cartes du paquet qui commencent en jeu (rules.js startsInPlay) : chaque exemplaire du
+ * deck, sur sa face A, face cachée si l'entrée le demande (les formes d'énergie de Spectrum), avec ses jetons
+ * de départ (les 4 jetons Pouvoir de la Force Phénix) ; une carte absente du deck est ignorée. Rend, pour le
+ * message de début de partie, ce qui a été posé : « « Force Phénix » avec 4 jetons Pouvoir », « 2 « Psi-Couteau » »…
+ */
+function putStartingCardsInPlay(game, layout, entries) {
+  const placedTexts = []
+  for (const { codes, faceDown, tokens, tokenName } of startingEntries(entries)) {
+    const names = []
+    for (const code of codes) {
+      const definition = DEFINITION_BY_CODE[code]
+      const copies = definition ? cardsInZone(game, 'playerDeck').filter(candidate => candidate.definitionId === definition.id) : []
+      for (const card of copies) {
+        moveCard(game, card, 'table', { ...nextHeroSpot(game, layout), layout, faceDown }, true)
+        card.side = 0
+        if (tokens) card.tokens = tokens
+      }
+      if (copies.length) names.push(`${copies.length > 1 ? `${copies.length} ` : ''}« ${definition.name} »`)
+    }
+    if (!names.length) continue
+    const tokensText = tokens ? ` avec ${plural(tokens, 'jeton')}${tokenName ? ` ${tokenName}` : ''}` : ''
+    placedTexts.push(`${listInFrench(names)}${faceDown ? ' (face cachée)' : ''}${tokensText}`)
+  }
+  return placedTexts
+}
+
+/**
+ * Remplit les piles de l'identité (rules.js heroPiles, heroPilesOf) : chaque exemplaire du deck, plus ceux qui
+ * manquent pour en avoir `copies` (les 6 Pris Dans la Glace d'Iceberg, les decks Climat, Travaux, Dons et Sens,
+ * hors du deck sur MarvelCDB) ; face cachée ou visible selon la pile, mélangée si elle l'est. Une carte hors du
+ * deck que la table ne connaît pas (sa fiche n'a pas pu être lue sur MarvelCDB : stores/game.js,
+ * ensureHeroSetAsideCards) est comptée dans `missing`. Rend {texts, missing} ; texts, pour le message de début
+ * de partie : « « Aura de la Mort » de côté », « 6 « Pris Dans la Glace » de côté », « le deck Travaux (3 cartes) ».
+ */
+function putStartingCardsAside(game, addCard) {
+  const texts = []
+  let missing = 0
+  for (const pile of heroPilesOf(game)) {
+    const names = []
+    for (const { code, copies } of pile.entries) {
+      const definition = DEFINITION_BY_CODE[code]
+      if (!definition) {
+        missing += copies
+        continue
+      }
+      const inDeck = cardsInZone(game, 'playerDeck').filter(card => card.definitionId === definition.id)
+      for (const card of inDeck) moveCard(game, card, pile.zone, {}, true)
+      for (let copy = inDeck.length; copy < copies; copy++) addCard(definition.id, 'player', pile.zone)
+      const count = Math.max(inDeck.length, copies)
+      if (count) names.push(`${count > 1 ? `${count} ` : ''}« ${definition.name} »`)
+    }
+    const cards = cardsInZone(game, pile.zone)
+    for (const card of cards) card.faceUp = !pile.faceDown
+    if (pile.shuffled) shuffleZone(game, pile.zone)
+    if (!cards.length) continue
+    const pileName = `${pile.isDeck ? 'le deck' : 'la pile'} ${pile.label}`
+    texts.push(pile.label === 'De côté' ? `${listInFrench(names)} de côté` : `${pileName} (${plural(cards.length, 'carte')})`)
+  }
+  return { texts, missing }
+}
+
+/** Les cartes que la mise en place a posées sur la table (rules.js startsInPlay) : la table les allume un instant. */
+export function startingCardsInPlay(game) {
+  const definitionIds = startingEntries(heroRules(game.setup.hero).startsInPlay)
+    .flatMap(entry => entry.codes).map(code => DEFINITION_BY_CODE[code]?.id).filter(Boolean)
+  return cardsInZone(game, 'table').filter(card => definitionIds.includes(card.definitionId))
 }
 
 /**
@@ -301,16 +413,24 @@ function applyScenarioSetup(game, layout, rules, addCard, setupReport) {
   setupReport.push(`deck ${scenarioDeck.name} de ${plural(cardsInZone(game, 'scenarioDeck').length, 'carte')} à côté du paquet Rencontre`)
 }
 
-/** Les messages du début de partie : le résumé, les paquets, l'« Une fois révélé » du méchant, la main de départ, ce qui reste à faire. */
-function logStartOfGame(game, { heroDefinition, scenario, firstVillain, startingHandSize, setupCard, setupReport, villainRevealNote, deckLabel }) {
+/**
+ * Les messages du début de partie : le résumé, les paquets, l'« Une fois révélé » du méchant, la main de
+ * départ, ce qui reste à faire. La mise en place de l'identité vient après le mulligan (applyIdentitySetup).
+ */
+function logStartOfGame(game, {
+  heroDefinition, scenario, firstVillain, startingHandSize, cardsInPlayAtStart = [], cardsAsideAtStart = [], cardsAsideMissing = 0, setupReport,
+  villainRevealNote, deckLabel
+}) {
   const title = scenario.title ? ` (${scenario.title})` : ''
   logMessage(game, `Partie : ${heroDefinition.name} (${deckLabel}) contre ${scenario.villainName}${title}${setupSummary(game.setup)}.`, true)
   const invocationCount = cardsInZone(game, 'invocationDeck').length
   if (invocationCount) logMessage(game, `Deck Invocation : ${invocationCount} cartes mélangées, celle du dessus est visible. Clic sur le deck (ou I) : la lancer.`)
 
   const deckSize = cardsInZone(game, 'playerDeck').length + cardsInZone(game, 'hand').length
-  const setupCardNote = setupCard ? `, plus « ${cardName(setupCard)} » (mise en place de ${heroDefinition.backName})` : ''
-  const start = `Vous commencez en alter ego (${heroDefinition.backName}) avec ${startingHandSize} cartes${setupCardNote}.`
+  // la mise en place de l'identité : « et « Intangible » en jeu », « et « Aura de la Mort » de côté »
+  const placed = [cardsInPlayAtStart.length ? `${listInFrench(cardsInPlayAtStart)} en jeu` : '', ...cardsAsideAtStart].filter(Boolean)
+  const placedNote = placed.length ? `, et ${placed.join(', ')} (mise en place ${ofName(heroDefinition.name)})` : ''
+  const start = `Vous commencez en alter ego (${heroDefinition.backName}) avec ${startingHandSize} cartes${placedNote}.`
   if (game.crew) {
     logMessage(game, `Paquet : ${deckSize} cartes · un paquet Rencontre de 15 cartes par méchant, ni obligation ni Némésis.`)
     logMessage(game, `${start} Les quatre méchants et leurs manigances annexes sont en jeu, jeton Actif sur « ${firstVillain.name} » : les piles Rencontre affichées sont les siennes. Retournez la manigance (F) pour passer au stade 1B.`, true)
@@ -320,55 +440,119 @@ function logStartOfGame(game, { heroDefinition, scenario, firstVillain, starting
     if (setupReport.length) logMessage(game, `${start} Mise en place de la manigance faite (${setupReport.join(', ')}) : retournez-la (F) pour passer au stade 1B.`, true)
     else logMessage(game, `${start} Lisez la face A de la manigance, appliquez sa mise en place puis retournez-la (F).`, true)
   }
-  // la mise en place de l'identité quand elle se joue à la main (rules.js : T'Challa), rappelée en dernier
-  const heroSetupNote = heroRules(game.setup.hero).setupNote
-  if (heroSetupNote) logMessage(game, heroSetupNote, true)
+  // les cartes que l'identité met de côté hors du deck, que la table n'a pas pu lire sur MarvelCDB (sans réseau)
+  if (cardsAsideMissing) {
+    const verb = cardsAsideMissing > 1 ? 'manquent' : 'manque'
+    logMessage(game, `Mise en place ${ofName(heroDefinition.name)} : ${plural(cardsAsideMissing, 'carte')} à mettre de côté ${verb} (MarvelCDB injoignable) ; relancez la partie une fois en ligne, ou rechargez le deck depuis son lien.`, true)
+  }
 }
 
 /* ---------------------------------------------------------------------------------------------------- */
 /* Mise en place de l'identité, mulligan                                                                 */
 /* ---------------------------------------------------------------------------------------------------- */
 
+/** La fiche est une carte que cherche la mise en place de l'identité (rules.js setupCard). */
+function matchesSetupCard(setupCard, definition) {
+  if (setupCard.id) return definition.id === setupCard.id
+  if (setupCard.code) return DEFINITION_BY_CODE[setupCard.code] === definition
+  return definition.type === setupCard.type && (!setupCard.trait || !!definition.traits?.includes(setupCard.trait))
+}
+
 /**
- * « Mise en place » de l'identité qui ajoute une carte à la main (rules.js setupCardId : le Bouclier de
- * Captain America) : cherchée dans le paquet ou la défausse, puis le paquet est mélangé. Rien si elle est
- * déjà en main. Rend la carte prise, ou null.
- *   announce  écrire au journal (après un mulligan ; au début de partie, le message de départ la nomme)
+ * La mise en place de l'identité qui ajoute une carte à la main, ou la met en jeu, après le mulligan
+ * (rules.js setupCard : Bouclier de Captain America, amélioration Black Panther de T'Challa, Pistolet
+ * Élémentaire de Star-Lord, Acier Organique de Colossus ; manigance annexe de joueur de Cable, mise en jeu) :
+ * {alterEgoName, label, candidates, fromDiscard, intoPlay}. candidates : les cartes qu'elle peut prendre, une
+ * par fiche, dans le paquet (et la défausse si elle y cherche aussi : fromDiscard) ; label : ce qu'elle cherche
+ * quand le joueur choisit (« une amélioration Black Panther ») ; intoPlay : la carte entre en jeu au lieu de
+ * rejoindre la main. null pour un héros sans cette mise en place.
  */
-function applyIdentitySetup(game, announce = false) {
-  const setupCardId = heroRules(game.setup.hero).setupCardId
-  if (!setupCardId || cardsInZone(game, 'hand').some(card => card.definitionId === setupCardId)) return null
-  const card = [...cardsInZone(game, 'playerDeck'), ...cardsInZone(game, 'playerDiscard')].find(candidate => candidate.definitionId === setupCardId)
-  if (!card) return null
-  moveCard(game, card, 'hand', {}, true)
-  shuffleZone(game, 'playerDeck')
+export function identitySetupOf(game) {
+  const setupCard = heroRules(game.setup.hero).setupCard
+  if (!setupCard) return null
+  const zones = setupCard.zones ?? (setupCard.fromDiscard ? ['playerDeck', 'playerDiscard'] : ['playerDeck'])
+  const candidates = []
+  for (const card of zones.flatMap(zone => cardsInZone(game, zone))) {
+    const isNewDefinition = !candidates.some(candidate => candidate.definitionId === card.definitionId)
+    if (isNewDefinition && matchesSetupCard(setupCard, definitionOf(card))) candidates.push(card)
+  }
+  return {
+    alterEgoName: definitionOf(identityCard(game))?.backName ?? '', label: setupCard.label ?? '', candidates,
+    fromDiscard: !!setupCard.fromDiscard, intoPlay: !!setupCard.intoPlay,
+    fromText: setupCard.fromText ?? (setupCard.fromDiscard ? 'de votre paquet ou de votre défausse' : 'de votre paquet'),
+    shufflesDeck: zones.includes('playerDeck')
+  }
+}
+
+/**
+ * La carte de la mise en place de l'identité rejoint la main, ou entre en jeu (setup.intoPlay) : une manigance
+ * annexe de joueur (Cable) dans la zone Rencontre, avec sa menace de départ, une autre carte (le soutien Climat
+ * de Tornade) à côté de l'identité ; le paquet est mélangé s'il a été fouillé (setup.shufflesDeck). Rend la carte.
+ */
+function takeIdentitySetupCard(game, layout, card, setup) {
+  let outcome = 'rejoint votre main'
+  if (setup.intoPlay) {
+    const isSideScheme = definitionOf(card).type === 'side_scheme'
+    moveCard(game, card, 'table', isSideScheme ? nextEncounterSpot(game, layout) : { ...nextHeroSpot(game, layout), layout }, true)
+    card.side = 0
+    if (isSideScheme) card.threat = startingThreatOf(card)
+    outcome = `entre en jeu${card.threat ? ` avec ${plural(card.threat, 'menace')}` : ''}`
+  } else moveCard(game, card, 'hand', {}, true)
+  if (setup.shufflesDeck) shuffleZone(game, 'playerDeck')
   game.setupCardId = card.id
-  if (announce) logMessage(game, `Mise en place de l'identité : « ${cardName(card)} » revient dans votre main.`, true)
+  delete game.identitySetupChoice
+  const of = setup.alterEgoName ? ` ${ofName(setup.alterEgoName)}` : ''
+  logMessage(game, `Mise en place${of} : « ${cardName(card)} » ${outcome}${setup.shufflesDeck ? ' ; le paquet est mélangé' : ''}.`, true)
   return card
 }
 
 /**
- * Mulligan officiel : défausse les cartes choisies, puis complète la main jusqu'à la taille de main. Les
- * mises en place d'identité viennent après le mulligan : la carte qu'elles ont mise en main ne compte pas
- * dans la main de départ, et elle est reprise si elle a été défaussée. Garder sa main est aussi un choix
- * de mulligan : il ne se fait qu'une fois. Rend le nombre de cartes défaussées.
+ * « Mise en place » de l'identité, après le mulligan (identitySetupOf) : la seule carte possible rejoint la
+ * main ou entre en jeu ; s'il y en a plusieurs (T'Challa, Cable), le joueur choisit (identitySetupChoice, puis
+ * chooseIdentitySetupCard) ; aucune (le Bouclier pioché et gardé) : rien. Rend la carte prise, ou null.
+ */
+function applyIdentitySetup(game, layout) {
+  const setup = identitySetupOf(game)
+  if (!setup?.candidates.length) return null
+  if (setup.candidates.length === 1) return takeIdentitySetupCard(game, layout, setup.candidates[0], setup)
+  game.identitySetupChoice = true
+  return null
+}
+
+/**
+ * Le choix du joueur pour la mise en place de l'identité (identitySetupChoice : l'amélioration Black Panther
+ * que T'Challa prend en main, la manigance annexe de joueur que Cable met en jeu) : `cardId`, une des cartes
+ * proposées (identitySetupOf). Rend la carte prise, ou null (pas de choix en attente, ou carte qui n'est pas
+ * proposée).
+ */
+export function chooseIdentitySetupCard(game, layout, cardId) {
+  if (!game.identitySetupChoice) return null
+  const setup = identitySetupOf(game)
+  const card = setup?.candidates.find(candidate => candidate.id === cardId)
+  if (!setup?.candidates.length) delete game.identitySetupChoice // plus rien à prendre : le choix tombe
+  return card ? takeIdentitySetupCard(game, layout, card, setup) : null
+}
+
+/**
+ * Mulligan officiel, la première décision de la partie : défausse les cartes choisies, puis complète la main
+ * jusqu'à la taille de main ; garder sa main est aussi un choix de mulligan, il ne se fait qu'une fois. La
+ * mise en place de l'identité vient ensuite (applyIdentitySetup) : la carte qu'elle met en main ne compte
+ * pas dans la main de départ. Rend le nombre de cartes défaussées.
  */
 export function mulligan(game, layout, cardIds) {
   const discarded = cardsInZone(game, 'hand').filter(card => cardIds.includes(card.id))
-  if (!discarded.length) {
-    logMessage(game, 'Main de départ conservée.')
-    game.mulliganTaken = true
-    return 0
-  }
-  for (const card of discarded) moveCard(game, card, 'discard', {}, true)
-  const setupCardStillInHand = cardsInZone(game, 'hand').some(card => card.id === game.setupCardId)
-  const targetHandSize = handSize(game) + (setupCardStillInHand ? 1 : 0)
-  let drawnCount = 0
-  while (cardsInZone(game, 'hand').length < targetHandSize && drawCard(game, layout, true)) drawnCount++
-  const plural1 = discarded.length > 1 ? 's' : ''
-  const plural2 = drawnCount > 1 ? 's' : ''
-  logMessage(game, `Mulligan : ${plural(discarded.length, 'carte')} défaussée${plural1}, ${drawnCount} piochée${plural2}.`, true)
-  applyIdentitySetup(game, true)
+  if (discarded.length) {
+    for (const card of discarded) moveCard(game, card, 'discard', {}, true)
+    // une partie enregistrée avant que la mise en place ne passe après le mulligan a déjà sa carte en main
+    const setupCardStillInHand = cardsInZone(game, 'hand').some(card => card.id === game.setupCardId)
+    const targetHandSize = handSize(game) + (setupCardStillInHand ? 1 : 0)
+    let drawnCount = 0
+    while (cardsInZone(game, 'hand').length < targetHandSize && drawCard(game, layout, true)) drawnCount++
+    const plural1 = discarded.length > 1 ? 's' : ''
+    const plural2 = drawnCount > 1 ? 's' : ''
+    logMessage(game, `Mulligan : ${plural(discarded.length, 'carte')} défaussée${plural1}, ${drawnCount} piochée${plural2}.`, true)
+  } else logMessage(game, 'Main de départ conservée.')
   game.mulliganTaken = true
+  applyIdentitySetup(game, layout)
   return discarded.length
 }

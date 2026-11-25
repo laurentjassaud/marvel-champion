@@ -1,10 +1,12 @@
 // Adresses des images : la face d'une carte (et ses faces B et C), le dos des cartes, les cartes d'état,
 // le décor de la table (la ville de nuit, l'illustration du méchant). Les cartes de nos boîtes ont leurs scans
 // dans public/cards/ ; celles lues sur MarvelCDB, les scans français de cgbuilder quand il les a (liste
-// src/data/cgbuilder.json), sinon les scans anglais de MarvelCDB.
+// src/data/cgbuilder.json), sinon les scans anglais de MarvelCDB ; les cartes de fans lues sur MC4DB, ses scans
+// anglais.
 
 import { definitionOf, isEncounterCard } from '../game/engine.js'
 import { DEFINITION_BY_ID, PAWN_KIND_BY_ID } from '../game/data.js'
+import { mc4dbDisplayUrl } from '../game/mc4db.js'
 import cgbuilderData from '../data/cgbuilder.json'
 
 /** Racine du site : './' par défaut (version installable et version artefact), ou le chemin de déploiement. */
@@ -13,8 +15,21 @@ const BASE_URL = import.meta.env.BASE_URL
 /** Dossier des images d'une boîte, sous cards/ (encodé : « bouffon vert » contient une espace). */
 const imageFolderUrl = definition => `${BASE_URL}cards/${encodeURIComponent(definition?.imageFolder ?? 'base')}`
 
-/** Carte lue sur MarvelCDB (une boîte absente de la table) : son image vient de cgbuilder, sinon de MarvelCDB. */
+/** Carte lue en ligne (une boîte absente de la table) : son image vient de cgbuilder, sinon du site qui l'a donnée. */
 const isImportedDefinition = definition => definition?.pack === 'marvelcdb'
+/**
+ * L'image d'une carte lue en ligne, pour sa face A ('') ou B ('b') : le scan français de cgbuilder, sinon celui du
+ * site qui l'a donnée. Une carte de fans lue sur MC4DB (source 'mc4db', game/mc4db.js) n'est jamais cherchée chez
+ * cgbuilder (il ne l'a pas, et son code pourrait y désigner une carte officielle) : son image anglaise, par le
+ * relais du site (mc4dbDisplayUrl).
+ */
+function onlineImageUrl(definition, side = '') {
+  const siteUrl = { b: definition.backImageUrl, c: definition.thirdImageUrl }[side] ?? definition.imageUrl
+  if (definition.source === 'mc4db') return mc4dbDisplayUrl(siteUrl) ?? null
+  // une face prise sur une autre carte (rules.js identity : Archangel d'Angel, Peni Parker de SP//dr) a son code
+  const faceCode = { b: definition.backCode, c: definition.thirdCode }[side]
+  return (faceCode ? cgbuilderImageUrl(faceCode) : cgbuilderImageUrl(definition.code, side)) ?? siteUrl ?? null
+}
 
 /** Les scans français de cgbuilder (CardGame Builder) : images/carte/<dossier>/<numéro><face>.jpg. */
 export const CGBUILDER_IMAGES_URL = 'https://mc-src.cgbuilder.fr/images/carte'
@@ -36,12 +51,11 @@ for (const [prefix, { folder, cards }] of Object.entries(cgbuilderData.packs)) {
 
 /**
  * Le scan français d'une carte sur cgbuilder, d'après son code MarvelCDB ; null si cgbuilder ne l'a pas.
- *   side  '' (face A, ou la seule), 'b' ou 'c' : la face de même numéro ("06001a", face 'b' → 6/1B.jpg)
+ *   side  '' (face A, ou la seule), 'b' ou 'c' : l'autre face, de même numéro ("06001a", face 'b' → 6/1B.jpg ;
+ *         "26002", recto verso sous un seul code, face 'b' → 26/2B.jpg, rangée sous "26002b")
  */
 export function cgbuilderImageUrl(code, side = '') {
-  // une autre face : le même code, d'une autre lettre ; un code sans lettre n'a pas d'autre face connue
-  if (side && !/[a-z]$/.test(code ?? '')) return null
-  const path = CGBUILDER_PATHS.get(side ? code.slice(0, -1) + side : code)
+  const path = CGBUILDER_PATHS.get(side ? (code ?? '').replace(/[a-z]?$/, side) : code)
   return path ? `${CGBUILDER_IMAGES_URL}/${path}.jpg` : null
 }
 
@@ -51,17 +65,14 @@ export function cgbuilderImageUrl(code, side = '') {
  * n'y en a pas. Une face que la carte n'a pas donne l'image de sa face A.
  * Une carte lue sur MarvelCDB prend le scan français de cgbuilder (cgbuilderImageUrl), trouvé depuis son code
  * (les decks et parties déjà sauvegardés en profitent aussi) ; si cgbuilder ne l'a pas, le scan anglais de
- * MarvelCDB.
+ * MarvelCDB. Une carte de fans lue sur MC4DB a directement le scan anglais de MC4DB.
  */
 export function cardImageUrl(card) {
   const definition = definitionOf(card)
   let sideSuffix = ''
   if (card.side === 2 && definition.thirdName) sideSuffix = 'c'
   else if (card.side && definition.backName) sideSuffix = 'b'
-  if (isImportedDefinition(definition)) {
-    const marvelCdbUrl = sideSuffix === 'b' ? definition.backImageUrl : definition.imageUrl
-    return cgbuilderImageUrl(definition.code, sideSuffix) ?? marvelCdbUrl ?? null
-  }
+  if (isImportedDefinition(definition)) return onlineImageUrl(definition, sideSuffix)
   return `${imageFolderUrl(definition)}/${card.definitionId}${sideSuffix ? `.${sideSuffix}` : ''}.jpg`
 }
 
@@ -118,6 +129,6 @@ export const pawnImageUrl = pawnId => `${BASE_URL}pawns/${PAWN_KIND_BY_ID[pawnId
 /** Image de la face A d'une carte, par l'identifiant de sa fiche (miniatures de l'écran Nouvelle partie). */
 export function imageUrlOfDefinition(definitionId) {
   const definition = DEFINITION_BY_ID[definitionId]
-  if (isImportedDefinition(definition)) return cgbuilderImageUrl(definition.code) ?? definition.imageUrl ?? ''
+  if (isImportedDefinition(definition)) return onlineImageUrl(definition) ?? ''
   return `${imageFolderUrl(definition)}/${definitionId}.jpg`
 }

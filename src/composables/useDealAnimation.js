@@ -2,7 +2,8 @@
 // part de son paquet et se pose à sa place, une à une. Le méchant, la manigance principale et les autres
 // cartes Rencontre de la table sortent du paquet Rencontre, de haut en bas ; puis l'identité et les autres
 // cartes du joueur, puis la main, de gauche à droite, sortent du paquet du joueur. Une carte couchée (une
-// manigance) se couche en arrivant.
+// manigance) se couche en arrivant. Une fois tout posé, les cartes que la mise en place de l'identité a mises en
+// jeu (Griffes de Wolverine…) s'entourent un instant d'un filet bleu (ui.flashAfterDeal).
 //
 // Animations Web (element.animate) des propriétés translate, scale et rotate : elles s'ajoutent au transform
 // des cartes (carte inclinée, éventail de la main) sans le remplacer. Elles ne bloquent rien : une carte prise
@@ -60,12 +61,16 @@ export function useDealAnimation() {
   function deal() {
     const tableCards = [...document.querySelectorAll('.table > .card[data-id]')]
     const handCards = [...document.querySelectorAll('.hand-row .card[data-id]')]
-    if (!tableCards.length && !handCards.length) return
+    if (!tableCards.length && !handCards.length) {
+      ui.flushFlashAfterDeal()
+      return
+    }
 
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       for (const element of [...tableCards, ...handCards]) {
         running.push(element.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, easing: 'ease', fill: 'backwards' }))
       }
+      ui.flushFlashAfterDeal()
       return
     }
 
@@ -96,10 +101,13 @@ export function useDealAnimation() {
     dealGroup(player, playerDeck, TABLE_STAGGER, TABLE_FLIGHT)
     dealGroup(hand, playerDeck, HAND_STAGGER, HAND_FLIGHT)
 
-    // tout est posé (ou arrêté) : la table recoupe ce qui dépasse
+    // tout est posé (ou arrêté) : la table recoupe ce qui dépasse, et les cartes que la mise en place de
+    // l'identité a mises en jeu s'allument (ui.flashAfterDeal)
     const dealt = running
     Promise.allSettled(dealt.map(animation => animation.finished)).then(() => {
-      if (running === dealt) ui.isDealing = false
+      if (running !== dealt) return
+      ui.isDealing = false
+      ui.flushFlashAfterDeal()
     })
   }
 }

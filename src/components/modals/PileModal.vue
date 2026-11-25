@@ -27,6 +27,8 @@ const TITLES = {
   playerDiscard: 'Défausse',
   encounterDiscard: 'Défausse Rencontre',
   setAside: 'Cartes mises de côté',
+  heroSetAside: 'Cartes mises de côté par votre identité',
+  heroSetAside2: 'Cartes mises de côté par votre identité',
   invocationDeck: 'Chercher dans le deck Invocation',
   invocationDiscard: 'Défausse Invocation'
 }
@@ -37,6 +39,8 @@ const MENU_HINTS = {
   playerDiscard: 'la reprendre en main',
   encounterDiscard: 'la remettre en jeu',
   setAside: 'la mettre en jeu (les compteurs se mettent à jour)',
+  heroSetAside: 'la poser sur la table',
+  heroSetAside2: 'la poser sur la table',
   invocationDeck: 'la poser sur la table',
   invocationDiscard: 'la poser sur la table, la remettre sur le deck',
   scenarioDeck: 'la mettre en jeu'
@@ -46,6 +50,8 @@ const HELP_START = {
   playerDeck: 'Du dessus vers le dessous.',
   encounterDeck: 'Du dessus vers le dessous.',
   setAside: 'Étapes suivantes du méchant et de la manigance, set Némésis, cartes mises de côté par le scénario.',
+  heroSetAside: "Hors jeu, jusqu'à ce qu'une capacité de votre identité les joue ; « Mettre de côté » (X) les y range.",
+  heroSetAside2: "Hors jeu, jusqu'à ce qu'une capacité de votre identité les joue ; « Mettre de côté » (X) les y range.",
   invocationDeck: 'Du dessus vers le dessous.',
   invocationDiscard: 'Invocations déjà lancées.',
   scenarioDeck: 'Du dessus vers le dessous.'
@@ -58,9 +64,15 @@ const helpText = computed(() => {
 
 /** Les cartes de la pile, du dessus vers le dessous. */
 const cards = computed(() => gameStore.pileOf(props.zone).slice().reverse())
-// le deck propre au scénario prend le nom du scénario (Armes Expérimentales, Manigance Annexe)
+// le deck propre au scénario prend le nom du scénario (Armes Expérimentales, Manigance Annexe) ; la pile du
+// héros, celui de son deck quand elle en a un (« Deck Climat » de Tornade)
 const title = computed(() => {
-  const name = props.zone === 'scenarioDeck' ? `Chercher dans le deck ${gameStore.scenarioDeck?.name ?? ''}` : TITLES[props.zone]
+  let name = TITLES[props.zone]
+  if (props.zone === 'scenarioDeck') name = `Chercher dans le deck ${gameStore.scenarioDeck?.name ?? ''}`
+  else {
+    const heroPile = gameStore.heroPiles.find(pile => pile.zone === props.zone)
+    if (heroPile && heroPile.label !== 'De côté') name = `${heroPile.isDeck ? 'Deck' : 'Pile'} ${heroPile.label}`
+  }
   return `${name} · ${cards.value.length}`
 })
 /** La carte sélectionnée, si elle est dans cette pile : montrée en grand au-dessus des cartes, sur téléphone. */

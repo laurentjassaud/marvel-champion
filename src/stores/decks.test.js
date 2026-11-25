@@ -37,6 +37,15 @@ describe('decks sauvegardés', () => {
     expect(importedDefinitionsOf('spider_man', PRECON_DECKS.spider_man)).toEqual([])
   })
 
+  it("« Mes decks » ne propose pas les héros que la table refuse pour l'instant (Elektra, Iron Fist), sans les oublier", () => {
+    const decks = useDecksStore()
+    decks.saveDeck({ key: 'marvelcdb:deck:1:spider_man', label: 'Toile', hero: 'spider_man', deckList: PRECON_DECKS.spider_man, importedDefinitions: [] })
+    decks.saveDeck({ key: 'marvelcdb:deck:2:elektra', label: 'Ninja', hero: 'elektra', deckList: [], importedDefinitions: [] })
+    decks.saveDeck({ key: 'marvelcdb:deck:3:iron_fist', label: 'Poing', hero: 'iron_fist', deckList: [], importedDefinitions: [] })
+    expect(decks.playableDecks.map(deck => deck.label)).toEqual(['Toile'])
+    expect(decks.decks).toHaveLength(3)
+  })
+
   it('un deck sauvegardé passe en tête ; rechargé (même clé), il remplace l\'ancien ; la croix le retire', () => {
     const decks = useDecksStore()
     expect(decks.decks).toEqual([])

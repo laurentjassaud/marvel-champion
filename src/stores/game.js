@@ -2,12 +2,14 @@
 // des écrans. Chaque action est une mince enveloppe autour d'une fonction du moteur de règles
 // (src/game/engine.js), à qui elle passe l'état et la disposition actuelle de la table.
 
-import { defineStore } from 'pinia'
+import { defineStore, acceptHMRUpdate } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import * as Engine from '../game/engine.js'
 import { PRECON_DECKS, SCENARIOS, DEFINITION_BY_ID, addImportedDefinitions, heroName } from '../game/data.js'
 import { migrateSavedGame } from '../game/savedGame.js'
+import { readMissingSetAsideCards } from '../game/marvelcdb.js'
 import { useUiStore } from './ui.js'
+import { useDecksStore } from './decks.js'
 
 /** Clé de la partie enregistrée dans le navigateur (gardée telle quelle pour retrouver les anciennes parties). */
 const SAVED_GAME_KEY = 'mc-table-vue-v1'
@@ -50,6 +52,11 @@ export const useGameStore = defineStore('game', () => {
   const cardById = cardId => (game.value && cardId ? Engine.cardById(game.value, cardId) : null)
   /** Docteur Strange : le deck Invocation et sa défausse s'affichent à côté des piles du joueur. */
   const hasInvocationDeck = computed(() => !!game.value?.cards.some(Engine.isInvocationCard))
+  /**
+   * Les piles de l'identité, entre le paquet et la défausse (engine/state.js heroPilesOf) : « De côté » de
+   * Valkyrie, Malicia et Iceberg, « Climat » de Tornade, « Travaux » et « Dons » d'Hercule, « Sens » de Daredevil.
+   */
+  const heroPiles = computed(() => (game.value ? Engine.heroPilesOf(game.value) : []))
   /** Le deck propre au scénario (Armes Expérimentales, Manigance Annexe), à côté des piles Rencontre, ou null. */
   const scenarioDeck = computed(() => (game.value ? Engine.scenarioDeckOf(game.value) : null))
   const turn = computed(() => game.value?.turn ?? 1)
@@ -75,8 +82,13 @@ export const useGameStore = defineStore('game', () => {
   })
   /** La manigance principale qui porte le compteur de menace (son pion de menace en montre la valeur), ou null. */
   const threatSchemeId = computed(() => (game.value ? Engine.threatCounterScheme(game.value)?.id ?? null : null))
-  /** Le mulligan se fait une seule fois, pendant la phase du héros du round 1. */
+  /**
+   * Le mulligan reste à faire : une seule fois, pendant la phase du héros du round 1 ; sa fenêtre s'ouvre alors
+   * d'elle-même (App.vue).
+   */
   const canMulligan = computed(() => !!game.value && !game.value.mulliganTaken && turn.value === 1 && phase.value === 'hero')
+  /** Après le mulligan, la mise en place de l'identité attend le choix du joueur (T'Challa) : la même fenêtre le demande. */
+  const identitySetupChoice = computed(() => !!game.value?.identitySetupChoice)
 
   /* ---------- outils ---------- */
 
@@ -106,11 +118,11 @@ export const useGameStore = defineStore('game', () => {
     const result = action()
     if (result && result !== true) {
       stateBeforeChange = before
-      // la manigance principale achevée et le héros battu ont leur propre fenêtre ; le reste (étapes, Kang,
-      // victoire) celle du méchant
+      // la manigance principale achevée et le héros battu ont leur propre fenêtre (Deadpool qui n'est pas battu
+      // aussi : elle l'explique) ; le reste (étapes, Kang, victoire) celle du méchant
       let modalType = 'villain'
       if (String(result.kind).startsWith('scheme')) modalType = 'scheme'
-      else if (result.kind === 'heroDefeat') modalType = 'defeat'
+      else if (['heroDefeat', 'heroRegenerates'].includes(result.kind)) modalType = 'defeat'
       ui.openModal(modalType, { result })
     }
     return result
@@ -138,14 +150,34 @@ export const useGameStore = defineStore('game', () => {
     ui.selectCard(null)
     ui.preview = null
     ui.randomlyPickedCardId = null
-    ui.setupCount++ // les cartes sont distribuées depuis leur paquet (useDealAnimation)
+    // les cartes sont distribuées depuis leur paquet (useDealAnimation) ; celles que la mise en place de
+    // l'identité a mises en jeu, ou dans ses piles, s'allument ensuite
+    const placedBySetup = [
+      ...Engine.startingCardsInPlay(game.value),
+      ...Engine.HERO_PILE_ZONES.flatMap(zone => Engine.cardsInZone(game.value, zone))
+    ]
+    ui.flashAfterDeal(placedBySetup.map(card => card.id))
+    ui.setupCount++
+  }
+
+  /**
+   * Les fiches des cartes qu'un héros lu sur MarvelCDB met de côté hors de son deck (deck Climat de Tornade,
+   * Pris Dans la Glace d'Iceberg), lues sur MarvelCDB si la table ne les connaît pas encore : un deck
+   * sauvegardé, ou une partie, d'avant que l'import ne les lise avec lui. Ses decks sauvegardés les gardent
+   * ensuite. Sans réseau, la partie se lance sans elles, et le journal le dit (engine/setup.js).
+   */
+  async function ensureHeroSetAsideCards(hero) {
+    const read = await readMissingSetAsideCards(hero)
+    if (read.length) useDecksStore().refreshImportedDefinitions(hero)
   }
 
   /**
    * Recommence avec la même mise en place : même héros et même deck, même scénario (un set modulaire ou une
-   * difficulté tirés au hasard restent ceux qui ont été tirés), paquets mélangés à nouveau.
+   * difficulté tirés au hasard restent ceux qui ont été tirés), paquets mélangés à nouveau. Les cartes que le
+   * héros met de côté hors du deck sont lues d'abord si elles manquent (ensureHeroSetAsideCards).
    */
-  function restartGame() {
+  async function restartGame() {
+    await ensureHeroSetAsideCards(game.value.setup.hero)
     const setup = game.value.setup
     newGame({
       hero: setup.hero, deckList: setup.deckList, scenario: setup.scenario, modulars: setup.modulars, expert: setup.expert,
@@ -172,12 +204,25 @@ export const useGameStore = defineStore('game', () => {
   }
 
   return {
-    game, isReady, cardsIn, pileOf, cardById, hasInvocationDeck, scenarioDeck, turn, phase, matchup, subtitle, canMulligan, threatSchemeId,
-    newGame, startExampleGame, restartGame,
+    game, isReady, cardsIn, pileOf, cardById, hasInvocationDeck, heroPiles, scenarioDeck, turn, phase, matchup, subtitle, canMulligan, identitySetupChoice, threatSchemeId,
+    newGame, startExampleGame, restartGame, ensureHeroSetAsideCards,
     preconDeck: heroId => PRECON_DECKS[heroId],
-    parseDeckFile: Engine.parseDeckFile,
     /** La carte fait partie des boîtes de la table (ou a déjà été lue sur MarvelCDB). */
     isKnownCard: definitionId => !!DEFINITION_BY_ID[definitionId],
+    /** Met en jeu la carte du dessus d'une pile de l'identité qui le fait au clic (Travaux et Dons d'Hercule, Sens de Daredevil). */
+    playTopOfHeroPile: zone => run(Engine.playTopOfHeroPile, layout(), zone),
+    /**
+     * Carte face cachée dont l'aperçu au survol montre la face : les formes d'énergie de Spectrum, et la carte du
+     * dessus d'une pioche que le héros montre (Magik, Faucon : showsTopCardOf).
+     */
+    previewsFaceDownCard: cardId => {
+      const card = cardById(cardId)
+      if (!card) return false
+      const isShownTopCard = Engine.showsTopCardOf(game.value, card.zone) && pileOf(card.zone).at(-1)?.id === card.id
+      return isShownTopCard || Engine.previewsFaceDownCard(game.value, card)
+    },
+    /** La carte du dessus de cette pioche se montre face visible (Magik : son paquet ; Faucon : le paquet Rencontre). */
+    showsTopCardOf: zone => !!game.value && Engine.showsTopCardOf(game.value, zone),
 
     /* ---------- pioches et piles ---------- */
     // paquet vide : la fenêtre « Remélanger » s'ouvre, puis la pioche se fait
@@ -220,6 +265,12 @@ export const useGameStore = defineStore('game', () => {
       return card
     },
     revealScenarioDeckCard: () => run(Engine.revealScenarioDeckCard, layout()),
+    /** « Attribuez-vous une carte PIÈGE du deck PIÈGE » (Kraven) : face cachée devant l'identité, comme une carte Rencontre. */
+    dealScenarioDeckCardToPlayer: () => {
+      const deckName = scenarioDeck.value?.name ?? ''
+      if (run(Engine.dealScenarioDeckCardToPlayer, layout())) run(Engine.logMessage, `Vous recevez une carte du deck ${deckName} face cachée, posée devant votre identité.`)
+      else run(Engine.logMessage, `Deck ${deckName} vide.`)
+    },
     dealBoostCard: () => {
       if (run(Engine.dealBoostCard, layout())) run(Engine.logMessage, 'Carte Rencontre posée face cachée (boost).')
       else offerReshuffle('encounterDiscard', { thenEncounter: 'dealBoostCard' })
@@ -241,7 +292,17 @@ export const useGameStore = defineStore('game', () => {
       return changed
     },
     startHeroPhase: () => !!runAndPresentChange(() => run(Engine.startHeroPhase, layout())),
-    mulligan: cardIds => run(Engine.mulligan, layout(), cardIds),
+    // la carte que la mise en place de l'identité ajoute ensuite à la main, ou met en jeu (Cable), s'allume un
+    // instant (ui.flashCard)
+    mulligan: cardIds => {
+      const setupCardBefore = game.value?.setupCardId
+      run(Engine.mulligan, layout(), cardIds)
+      if (game.value?.setupCardId && game.value.setupCardId !== setupCardBefore) ui.flashCard(game.value.setupCardId)
+    },
+    chooseIdentitySetupCard: cardId => {
+      const card = run(Engine.chooseIdentitySetupCard, layout(), cardId)
+      if (card) ui.flashCard(card.id)
+    },
 
     /* ---------- table ---------- */
     /** Pose un pion de cette sorte (PAWN_KINDS) : à `spot` ({x, y} sur la table), sinon au milieu ; rend le pion. */
@@ -265,6 +326,13 @@ export const useGameStore = defineStore('game', () => {
     /** L'Ombre du Passé : le sbire et la manigance Némésis entrent en jeu, le reste du set rejoint le paquet Rencontre. */
     putNemesisIntoPlay: cardId => withCard(cardId, card => run(Engine.putNemesisIntoPlay, layout(), card)),
     setIdentityForm: (cardId, side) => withCard(cardId, card => run(Engine.setIdentityForm, card, side)),
+    /** La version suivante de l'identité (Ironheart) : {card, version}, ou null. */
+    nextIdentityVersion: () => (game.value ? Engine.nextIdentityVersion(game.value) : null),
+    /** Level Up! (Ironheart) : la version suivante remplace l'identité ; elle s'allume un instant. */
+    levelUpIdentity: () => {
+      const card = run(Engine.levelUpIdentity)
+      if (card) ui.flashCard(card.id)
+    },
     toggleStatus: (cardId, statusId) => withCard(cardId, card => run(Engine.toggleStatus, card, statusId)),
     /** Redresse toutes les cartes du joueur sur la table. */
     readyPlayerCards: () => { for (const card of cardsIn('table')) if (!Engine.isEncounterCard(card)) card.exhausted = false },
@@ -302,3 +370,8 @@ export const useGameStore = defineStore('game', () => {
     renameCounter(index, label) { if (label) game.value.counters[index].label = label }
   }
 })
+
+// En développement, une modification de ce store met à jour celui de la page ouverte (Pinia, acceptHMRUpdate) :
+// sans cela, Vite relit le module mais Pinia garde le store déjà créé, et une action ajoutée y manque jusqu'au
+// rechargement de la page (« gameStore.nextIdentityVersion is not a function »). Sans effet en production.
+if (import.meta.hot) import.meta.hot.accept(acceptHMRUpdate(useGameStore, import.meta.hot))

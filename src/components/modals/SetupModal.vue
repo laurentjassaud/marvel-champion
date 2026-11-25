@@ -9,7 +9,7 @@
 // lancement (engine/setup.js), le set modulaire à la mise en place, gardé secret.
 // Le héros se choisit avec son deck (maquette, 3e version) : sous les onglets, une bande porte trois
 // sous-onglets (DeckTabs), Préconstruits, Mes decks (les decks sauvegardés, stores/decks.js) et Charger un
-// deck (fichier .txt ou .o8d, lien MarvelCDB) ; leurs volets défilent à l'horizontale (HeroDecks). Une bande
+// deck (par un lien MarvelCDB) ; leurs volets défilent à l'horizontale (HeroDecks). Une bande
 // symétrique ferme la grille par le bas ; les deux bandes restent aux autres étapes, sans sous-onglets.
 // Seuls les héros, scénarios et sets modulaires des boîtes proposées (AVAILABLE_PACKS, data.js) y figurent ;
 // un deck chargé peut jouer un autre héros que la table connaît.
@@ -50,7 +50,7 @@ const STEPS = [
   { id: 'modular', name: 'Set modulaire', icon: { mask: `url("${modularIconUrl}")`, width: 30.441, height: 33.609 } }
 ]
 const DIFFICULTIES = [
-  { id: 'standard', label: 'Normal', title: 'Mode standard : étapes I et II du méchant, set Standard' },
+  { id: 'standard', label: 'Standard', title: 'Mode standard : étapes I et II du méchant, set Standard' },
   { id: 'expert', label: 'Expert', title: 'Étapes II et III du méchant, set Expert' },
   { id: 'random', label: 'Hasard', title: 'Standard ou expert, tiré à la mise en place' }
 ]
@@ -101,6 +101,11 @@ const isCrew = computed(() => !!chosenScenario.value && !!scenarioRules(chosenSc
 const modularsNeeded = computed(() => modularsNeededBy(form.scenario))
 const pickedModulars = computed(() => (Array.isArray(form.modulars) ? form.modulars : []))
 const modularName = modularId => MODULAR_SETS.find(modular => modular.id === modularId)?.name ?? ''
+/** Le détail d'un scénario, au pied quand on le survole : son titre ou sa difficulté, et « fan-made ». */
+const scenarioDetail = scenario => [scenario.title ?? scenario.level, scenario.fanMade ? 'fan-made' : ''].filter(Boolean).join(' · ')
+/** Le détail d'un set modulaire : « conseillé », et « fan-made ». */
+const modularDetail = modular => [advisedModularsOf(form.scenario).includes(modular.id) ? 'conseillé' : '', modular.fanMade ? 'fan-made' : '']
+  .filter(Boolean).join(' · ')
 
 /* ---------- les étapes ---------- */
 
@@ -229,11 +234,14 @@ function onTabKey(event) {
 /**
  * « Lancer la partie » : la nouvelle partie, avec les trois choix et la difficulté. Un héros ou un méchant
  * « au hasard » est passé tel quel : le moteur le tire (engine/setup.js, drawRandomHeroAndScenario).
+ * Un héros lu sur MarvelCDB a d'abord les fiches des cartes qu'il met de côté hors de son deck, si elles
+ * manquent (gameStore.ensureHeroSetAsideCards : le deck Climat de Tornade d'un deck sauvegardé avant).
  * La fenêtre et l'accueil (ou la partie en cours) s'en vont d'abord ; la partie est mise en place sur l'écran
  * vide, puis la table entre (ui.launchGame).
  */
-function startGame() {
+async function startGame() {
   if (!isReady.value) return
+  if (form.hero !== 'random') await gameStore.ensureHeroSetAsideCards(form.hero)
   const randomHero = form.hero === 'random'
   const { deck } = form
   const options = {
@@ -304,7 +312,7 @@ watch(step, async () => {
       <!-- la bande des decks (de bord à bord de la fenêtre) : les sous-onglets du héros, rien aux autres étapes -->
       <div class="deck-band" :style="bandStyle">
         <Transition name="deck-tabs">
-          <DeckTabs v-if="step === 0" v-model="deckTab" class="deck-band-row" :saved-count="decksStore.decks.length" />
+          <DeckTabs v-if="step === 0" v-model="deckTab" class="deck-band-row" :saved-count="decksStore.playableDecks.length" />
         </Transition>
       </div>
 
@@ -318,7 +326,7 @@ watch(step, async () => {
             <div v-else-if="step === 1" class="choices">
               <PortraitChoice v-for="(scenario, index) in AVAILABLE_SCENARIOS" :key="scenario.id" :style="{ '--i': index }"
                 :label="scenario.villainName" :detail="scenario.title ?? scenario.level" v-bind="portraitOf('villain', scenario.id)"
-                :selected="form.scenario === scenario.id" v-on="pointing(scenario.villainName, scenario.title ?? scenario.level)"
+                :fan-made="!!scenario.fanMade" :selected="form.scenario === scenario.id" v-on="pointing(scenario.villainName, scenarioDetail(scenario))"
                 @pick="pickScenario(scenario.id)" />
               <PortraitChoice :style="{ '--i': AVAILABLE_SCENARIOS.length }" label="Au hasard" :detail="DRAWN_AT_LAUNCH" special
                 :selected="form.scenario === 'random'" v-on="pointing('Méchant au hasard', DRAWN_AT_LAUNCH)" @pick="pickScenario('random')" />
@@ -332,8 +340,8 @@ watch(step, async () => {
                 <div class="choices">
                   <PortraitChoice v-for="(modular, index) in AVAILABLE_MODULAR_SETS" :key="modular.id" :style="{ '--i': index }"
                     :label="modular.name" v-bind="portraitOf('modular', modular.id)" :selected="pickedModulars.includes(modular.id)"
-                    :advised="advisedModularsOf(form.scenario).includes(modular.id)"
-                    v-on="pointing(modular.name, advisedModularsOf(form.scenario).includes(modular.id) ? 'conseillé' : '')"
+                    :advised="advisedModularsOf(form.scenario).includes(modular.id)" :fan-made="!!modular.fanMade"
+                    v-on="pointing(modular.name, modularDetail(modular))"
                     @pick="pickModular(modular.id)" />
                   <PortraitChoice :style="{ '--i': AVAILABLE_MODULAR_SETS.length }" label="Au hasard" special
                     :detail="modularsNeeded > 1 ? `${modularsNeeded} sets tirés` : 'tiré en secret'" :selected="form.modulars === 'random'"
@@ -381,7 +389,7 @@ watch(step, async () => {
 .hexes { grid-column: 2; display: flex; margin: 0; padding: 0; list-style: none; }
 .difficulty { grid-column: 3; justify-self: end; display: flex; margin-bottom: calc(1 * var(--su)); }
 
-/* la difficulté : un sélecteur en trois parts (maquette : « Normal | Expert »), filet fin, texte en capitales ;
+/* la difficulté : un sélecteur en trois parts (Standard | Expert | Hasard ; la maquette disait « Normal »), filet fin, texte en capitales ;
    le choix fait est plein */
 .difficulty label { position: relative; cursor: pointer; }
 .difficulty input { position: absolute; opacity: 0; pointer-events: none; }

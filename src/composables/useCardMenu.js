@@ -68,6 +68,9 @@ export function useCardMenu() {
     if (card.isIdentity) flipLabel = isAlterEgo(card) ? `Passer en héros${heroForms ? ` (${heroForms[0]})` : ''}` : 'Passer en alter ego'
     else if (definition.backName && card.faceUp) flipLabel = `Retourner (face ${card.side ? 'A' : 'B'})`
     let otherFormItem = null
+    // Ironheart : Level Up!, une action de sa face héros, remplace l'identité par sa version suivante (rules.js levelUp)
+    const nextVersion = card.isIdentity && !isAlterEgo(card) ? gameStore.nextIdentityVersion() : null
+    if (nextVersion) otherFormItem = menuItem(`Level Up! (version ${nextVersion.version})`, () => gameStore.levelUpIdentity())
     if (heroForms && isAlterEgo(card)) otherFormItem = menuItem(`Passer en héros (${heroForms[1]})`, () => gameStore.setIdentityForm(cardId, 2))
     else if (heroForms) {
       const [targetName, targetSide] = card.side === 2 ? [heroForms[0], 0] : [heroForms[1], 2]
@@ -130,10 +133,15 @@ export function useCardMenu() {
   function pileItems(card) {
     const takeLabels = {
       encounterDeck: 'Mettre en jeu', scenarioDeck: 'Mettre en jeu', setAside: 'Mettre en jeu', encounterDiscard: 'Remettre en jeu',
-      invocationDeck: 'Poser sur la table', invocationDiscard: 'Poser sur la table'
+      invocationDeck: 'Poser sur la table', invocationDiscard: 'Poser sur la table', heroSetAside: 'Poser sur la table',
+      heroSetAside2: 'Poser sur la table'
     }
     const label = takeLabels[card.zone]
-    return label ? [menuItem(label, () => gameStore.takeFromPile(card.id, card.zone)), null] : []
+    const items = label ? [menuItem(label, () => gameStore.takeFromPile(card.id, card.zone))] : []
+    // un deck de l'identité face visible qu'un clic joue (Sens de Daredevil) : on peut le consulter, sans changer l'ordre
+    const heroPile = gameStore.heroPiles.find(pile => pile.zone === card.zone)
+    if (heroPile?.playsTop && !heroPile.faceDown) items.push(menuItem(`Voir le deck ${heroPile.label}`, () => ui.openModal('pile', { zone: card.zone })))
+    return items.length ? [...items, null] : []
   }
 
   /**
@@ -146,7 +154,8 @@ export function useCardMenu() {
     const items = []
     if (card.zone !== 'hand') items.push(menuItem('Prendre en main', () => gameStore.moveCard(card.id, 'hand'), 'H'))
     if (card.zone !== discardZoneOf(card)) items.push(menuItem('Défausser', () => gameStore.moveCard(card.id, 'discard'), 'Suppr'))
-    if (card.zone !== 'setAside') items.push(menuItem('Mettre de côté', () => gameStore.moveCard(card.id, 'setAside'), 'X'))
+    // une carte que l'identité met de côté va dans sa pile « De côté » (moteur, moveCard)
+    if (!['setAside', 'heroSetAside', 'heroSetAside2'].includes(card.zone)) items.push(menuItem('Mettre de côté', () => gameStore.moveCard(card.id, 'setAside'), 'X'))
     if (!DECK_PILES.includes(card.zone)) {
       items.push(
         menuItem('Sur le paquet', () => gameStore.moveCard(card.id, 'deck')),
@@ -181,9 +190,11 @@ export function useCardMenu() {
         menuItem('Mélanger', () => gameStore.shuffle('invocationDeck')),
         menuItem('Chercher dans le deck…', () => ui.openModal('pile', { zone: 'invocationDeck' }))
       ]],
-      // le deck propre au scénario : Armes Expérimentales (Crossbones), Manigance Annexe (Crâne Rouge)
+      // le deck propre au scénario : Armes Expérimentales (Crossbones), Manigance Annexe (Crâne Rouge), Piège
+      // (Kraven, dont les cartes s'attribuent aussi au joueur, face cachée)
       scenarioDeck: [`Deck ${gameStore.scenarioDeck?.name ?? ''}`, [
         menuItem('Révéler la carte du dessus', () => gameStore.revealScenarioDeckCard()),
+        gameStore.scenarioDeck?.dealsToPlayer ? menuItem('Carte face cachée pour vous', () => gameStore.dealScenarioDeckCardToPlayer()) : null,
         menuItem('Mélanger', () => gameStore.shuffle('scenarioDeck')),
         menuItem('Chercher dans le deck…', () => ui.openModal('pile', { zone: 'scenarioDeck' }))
       ]],

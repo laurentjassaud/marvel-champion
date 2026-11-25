@@ -51,7 +51,8 @@ export function parseMarvelCdbText(text) {
     if (!match) continue
     const [, copiesText, cardName, packName] = match
     const copies = Number(copiesText)
-    const namedPack = PACKS.find(pack => packName && simplifiedName(pack.marvelCdbName) === simplifiedName(packName))
+    // une boîte fan-made n'a pas de nom MarvelCDB
+    const namedPack = PACKS.find(pack => packName && pack.marvelCdbName && simplifiedName(pack.marvelCdbName) === simplifiedName(packName))
     const sameName = playableDefinitions.filter(definition => simplifiedName(definition.englishName) === simplifiedName(cardName))
     const definition = sameName.find(candidate => candidate.pack === namedPack?.id) ?? sameName[0]
     if (!definition) {

@@ -6,9 +6,11 @@
 //                    la dernière case (maquette)
 //   Mes decks        les decks sauvegardés (stores/decks.js), en vignettes du héros, comme les préconstruits ;
 //                    leur croix les retire
-//   Charger un deck  un fichier (export texte MarvelCDB .txt, deck OCTGN .o8d) ou un lien MarvelCDB (deck
-//                    publié, ou deck personnel si son auteur partage ses decks) ; dessous, la case « Ajouter
-//                    ce deck à ma sélection », cochée d'avance, le garde dans Mes decks
+//   Charger un deck  un lien MarvelCDB (deck publié, ou deck personnel si son auteur partage ses decks), ou le
+//                    lien d'une decklist MC4DB (héros de fans compris, par le relais du site : game/mc4db.js) ;
+//                    dessous, la case « Ajouter ce deck à ma sélection », cochée d'avance, le garde dans Mes
+//                    decks. Le chargement d'un fichier (.txt de MarvelCDB, .o8d d'OCTGN) n'est plus proposé : il
+//                    ne marchait pas (la lecture reste dans le moteur, engine/deckImport.js)
 // Un choix est rendu à la fenêtre (pick) : {hero, deck}, deck null pour un préconstruit. Les cases n'ont pas
 // de légende : `pointing` (de la fenêtre) montre leur nom au pied quand on les survole.
 import { ref, computed } from 'vue'
@@ -17,8 +19,8 @@ import { portraitOf } from './portraits.js'
 import { useGridColumns } from './useGridColumns.js'
 import { AVAILABLE_HEROES, DEFINITION_BY_ID, heroName } from '../../../game/data.js'
 import { fetchMarvelCdbDeck, parseMarvelCdbLink } from '../../../game/marvelcdb.js'
+import { fetchMc4dbDeck, parseMc4dbLink, HAS_MC4DB_RELAY } from '../../../game/mc4db.js'
 import { cgbuilderImageUrl } from '../../../composables/useAssets.js'
-import { useGameStore } from '../../../stores/game.js'
 import { useDecksStore, importedDefinitionsOf } from '../../../stores/decks.js'
 
 const props = defineProps({
@@ -32,7 +34,6 @@ const props = defineProps({
 })
 const emit = defineEmits(['pick', 'forget', 'update:tab'])
 
-const gameStore = useGameStore()
 const decksStore = useDecksStore()
 
 /**
@@ -46,7 +47,7 @@ const DRAWN_AT_LAUNCH = 'tiré au lancement'
 
 /* ---------- Mes decks ---------- */
 
-const savedDecks = computed(() => decksStore.decks)
+const savedDecks = computed(() => decksStore.playableDecks)
 /** Retire un deck sauvegardé ; s'il était le choix fait, le héros est à choisir de nouveau. */
 function removeSavedDeck(deck) {
   decksStore.removeDeck(deck.key)
@@ -64,16 +65,16 @@ const errorMessage = ref('')
 const loadedSummary = ref('')
 
 /**
- * Un deck lu (fichier ou MarvelCDB) devient le choix du héros, gardé dans Mes decks si la case est cochée ;
- * un chargement raté laisse le choix fait et dit pourquoi. Rend true si le deck a été pris.
+ * Un deck lu en ligne (MarvelCDB ou MC4DB) devient le choix du héros, gardé dans Mes decks si la case est
+ * cochée ; un chargement raté laisse le choix fait et dit pourquoi. Rend true si le deck a été pris.
  *   key           ce qui reconnaît le deck dans Mes decks (stores/decks.js)
- *   fallbackName  son nom s'il n'a pas de titre (nom du fichier, « Deck MarvelCDB »)
+ *   fallbackName  son nom s'il n'a pas de titre (« Deck MarvelCDB », « Deck MC4DB »)
  */
 function takeDeck({ deckList, hero, unknownCount, missing, title, heroName: marvelCdbHeroName }, key, fallbackName) {
   if (!hero) {
     errorMessage.value = marvelCdbHeroName
       ? `Deck de ${marvelCdbHeroName} : ce héros n'est pas encore disponible sur la table.`
-      : 'Aucune identité reconnue dans ce deck. Choisissez un export texte MarvelCDB (.txt) ou un fichier OCTGN (.o8d).'
+      : 'Aucune identité reconnue dans ce deck.'
     return false
   }
   // nombre d'exemplaires du deck (hors identité et obligation) qui remplissent la condition
@@ -86,15 +87,19 @@ function takeDeck({ deckList, hero, unknownCount, missing, title, heroName: marv
   const chosen = keepDeck.value ? decksStore.saveDeck(deck) : deck
 
   const parts = [`${countCopies(() => true)} cartes`]
-  const importedCount = countCopies(definition => definition.pack === 'marvelcdb')
+  const isOfficialImport = definition => definition.pack === 'marvelcdb' && definition.source !== 'mc4db'
+  const importedCount = countCopies(isOfficialImport)
   if (importedCount) {
     // leurs images : les scans français de cgbuilder, sinon ceux, anglais, de MarvelCDB (useAssets.js)
-    const englishCount = countCopies(definition => definition.pack === 'marvelcdb' && !cgbuilderImageUrl(definition.code))
+    const englishCount = countCopies(definition => isOfficialImport(definition) && !cgbuilderImageUrl(definition.code))
     let images = 'images françaises de cgbuilder'
     if (englishCount === importedCount) images = 'images en anglais'
     else if (englishCount) images = `${englishCount} image${englishCount > 1 ? 's' : ''} en anglais`
     parts.push(`dont ${importedCount} lue${importedCount > 1 ? 's' : ''} sur MarvelCDB (${images})`)
   }
+  // les cartes créées par des fans, lues sur MC4DB (game/mc4db.js) : images anglaises
+  const fanCount = countCopies(definition => definition.source === 'mc4db')
+  if (fanCount) parts.push(`${fanCount} carte${fanCount > 1 ? 's' : ''} de fans lue${fanCount > 1 ? 's' : ''} sur MC4DB (images en anglais)`)
   if (unknownCount) {
     const plural = unknownCount > 1 ? 's' : ''
     const names = missing.slice(0, 4).join(', ') + (missing.length > 4 ? '…' : '')
@@ -106,24 +111,26 @@ function takeDeck({ deckList, hero, unknownCount, missing, title, heroName: marv
   return true
 }
 
-// fichier .o8d d'OCTGN ou export texte de MarvelCDB (.txt)
-async function loadDeckFile(event) {
-  const file = event.target.files[0]
-  event.target.value = '' // le même fichier peut être choisi à nouveau après une correction
-  if (!file) return
-  const name = file.name.replace(/\.[^.]+$/, '')
-  takeDeck(gameStore.parseDeckFile(await file.text()), `fichier:${name}`, name)
-}
-
-// un deck MarvelCDB par son lien ou son numéro, lu dans l'API publique du site
-async function loadMarvelCdbDeck() {
-  if (isLoading.value || !marvelCdbLink.value.trim()) return
+// un deck par son lien : une decklist de MC4DB (game/mc4db.js, par le relais du site), sinon un deck MarvelCDB, par
+// son lien ou son numéro, lu dans l'API publique du site
+async function loadOnlineDeck() {
+  const input = marvelCdbLink.value
+  if (isLoading.value || !input.trim()) return
   isLoading.value = true
   errorMessage.value = ''
   try {
-    const link = parseMarvelCdbLink(marvelCdbLink.value)
-    const key = link ? `marvelcdb:${link.kind ?? 'numero'}:${link.id}` : 'marvelcdb'
-    if (takeDeck(await fetchMarvelCdbDeck(marvelCdbLink.value), key, 'Deck MarvelCDB')) marvelCdbLink.value = ''
+    const mc4dbId = parseMc4dbLink(input)
+    let taken
+    if (mc4dbId) {
+      // le relais de MC4DB est un script du site : la version artefact, sans serveur, ne l'a pas
+      if (!HAS_MC4DB_RELAY) throw new Error('Les decks MC4DB ne se chargent pas dans cette version de l\'appli.')
+      taken = takeDeck(await fetchMc4dbDeck(input), `mc4db:decklist:${mc4dbId}`, 'Deck MC4DB')
+    } else {
+      const link = parseMarvelCdbLink(input)
+      const key = link ? `marvelcdb:${link.kind ?? 'numero'}:${link.id}` : 'marvelcdb'
+      taken = takeDeck(await fetchMarvelCdbDeck(input), key, 'Deck MarvelCDB')
+    }
+    if (taken) marvelCdbLink.value = ''
   } catch (error) {
     errorMessage.value = error.message
   } finally {
@@ -174,18 +181,15 @@ async function loadMarvelCdbDeck() {
         aria-labelledby="deck-tab-load" :inert="tab !== 2">
         <div class="load">
           <div class="load-row">
-            <label class="btn file-btn">Fichier .txt ou .o8d<input type="file" accept=".o8d,.xml,.txt"
-                aria-label="Charger un fichier de deck (.txt MarvelCDB ou .o8d OCTGN)" @change="loadDeckFile"></label>
-            <span class="or">ou</span>
-            <form class="cdb" :aria-busy="isLoading" @submit.prevent="loadMarvelCdbDeck">
+            <form class="cdb" :aria-busy="isLoading" @submit.prevent="loadOnlineDeck">
               <input v-model="marvelCdbLink" class="input" type="text" inputmode="url" enterkeyhint="go" autocomplete="off"
-                autocapitalize="off" spellcheck="false" aria-label="Lien d'un deck MarvelCDB" placeholder="Lien MarvelCDB ou numéro de decklist">
+                autocapitalize="off" spellcheck="false" aria-label="Lien d'un deck MarvelCDB ou MC4DB" placeholder="Lien MarvelCDB ou MC4DB, ou numéro MarvelCDB">
               <button type="submit" class="btn primary" :disabled="isLoading || !marvelCdbLink.trim()">{{ isLoading ? 'Chargement…' : 'Charger' }}</button>
             </form>
           </div>
-          <p class="note">Export texte MarvelCDB (.txt) ou deck OCTGN (.o8d). Par lien : un deck publié, ou personnel si son
-            auteur partage ses decks ; les cartes absentes de la table sont lues sur MarvelCDB (images françaises de
-            cgbuilder, ou anglaises à défaut).</p>
+          <p class="note">Un deck MarvelCDB publié (ou personnel, si son auteur partage ses decks), ou une decklist MC4DB,
+            héros de fans compris ; les cartes absentes de la table sont lues en ligne (images françaises de cgbuilder,
+            ou anglaises à défaut).</p>
           <div class="check">
             <input id="keep-deck" v-model="keepDeck" class="checkbox" type="checkbox">
             <label for="keep-deck" class="check-label">Ajouter ce deck à ma sélection</label>
@@ -251,7 +255,6 @@ async function loadMarvelCdbDeck() {
 .load { display: grid; gap: 10px; align-content: start; max-width: calc(760 * var(--su)); margin: 0 auto; padding-top: 4px; }
 .load .note { font-size: 13px; line-height: 1.4; }
 .load-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
-.or { font: italic 500 16px/1 var(--font-display); text-transform: uppercase; color: #6567c6; }
 .cdb { flex: 1 1 320px; display: flex; gap: 8px; min-width: 0; }
 .cdb .input { flex: 1; min-width: 0; }
 .input {

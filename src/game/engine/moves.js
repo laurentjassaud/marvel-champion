@@ -2,12 +2,12 @@
 // exceptions près signalées), l'entrée en jeu (jetons, Tenace), jouer une carte, la prendre dans une pile,
 // la retourner, l'incliner, lui donner une carte d'état, changer la forme de l'identité, poser un pion.
 
-import { STATUS_CARDS, PAWN_KIND_BY_ID } from '../data.js'
-import { MAIN_SCHEME_NOTES, VILLAIN_STAGE_RULES } from '../rules.js'
+import { STATUS_CARDS, PAWN_KIND_BY_ID, DEFINITION_BY_CODE } from '../data.js'
+import { MAIN_SCHEME_NOTES, VILLAIN_STAGE_RULES, heroRules } from '../rules.js'
 import {
   definitionOf, cardName, cardLabel, cardsInZone, cardById, isEncounterCard, isCharacter, isAlterEgo, plural,
   logMessage, uniqueId, moveToTop, moveToBottom, DECK_ZONES, DISCARD_ZONES, deckZoneOf, discardZoneOf, zoneLabel,
-  scenarioRulesOf, startingThreatOf, revealHint
+  scenarioRulesOf, startingThreatOf, revealHint, HERO_PILE_ZONES, heroPileOfZone, heroPileOfCard, companionCards, identityCard
 } from './state.js'
 import { SPOTS, DEFAULT_LAYOUT, nextEncounterSpot, nextHeroSpot, keepCardOnTable } from './layout.js'
 import { refillInvocationDeck } from './piles.js'
@@ -18,6 +18,9 @@ import {
 /* ---------------------------------------------------------------------------------------------------- */
 /* Déplacer une carte                                                                                    */
 /* ---------------------------------------------------------------------------------------------------- */
+
+/** Les zones d'où une carte mise en jeu ou défaussée ferme le mulligan : la main et le paquet du joueur. */
+const MULLIGAN_ENDING_ZONES = ['hand', 'playerDeck']
 
 /**
  * Déplace une carte vers une zone.
@@ -40,7 +43,8 @@ import {
  *   - un des Démolisseurs qui quitte la table emmène sa manigance (crewVillainLeftTable) ;
  *   - le deck Invocation vidé se remélange (refillInvocationDeck), sans pénalité ; le paquet du joueur et le
  *     paquet Rencontre vidés, eux, ne se reconstituent qu'à la main (shuffleDiscardIntoDeck) ;
- *   - une carte qui arrive sur la table ou dans une défausse met fin au mulligan (mulliganTaken).
+ *   - une carte de la main ou du paquet du joueur qui arrive sur la table ou dans une défausse met fin au
+ *     mulligan (mulliganTaken).
  * Rend ce qu'a donné la défaite du méchant (defeatVillain), tombé à 0 PV quand une telle manigance est
  * sortie du jeu, pour que l'écran le présente ; sinon undefined.
  */
@@ -53,9 +57,15 @@ export function moveCard(game, card, targetZone, options = {}, quiet = false) {
   if (zone === 'deck' || DECK_ZONES.includes(zone)) zone = deckZoneOf(game, card)
   if (zone === 'discard' || DISCARD_ZONES.includes(zone)) zone = discardZoneOf(card)
   const fromZone = card.zone
-  // le mulligan se fait avant tout le reste : une carte mise en jeu ou défaussée y met fin (la mise en place,
-  // qui pose ses propres cartes, le laisse ouvert : newGame)
-  if (fromZone !== zone && (zone === 'table' || DISCARD_ZONES.includes(zone))) game.mulliganTaken = true
+  // les cartes d'une pile de l'identité (Aura de la Mort de Valkyrie, Sens de Daredevil…) : « Mettre de côté » les
+  // y range ; une amélioration Sens qui quitte le jeu y retourne, dessous (returnsUnder)
+  const heroPile = heroPileOfCard(game, card)
+  const leavesPlay = fromZone === 'table' && zone !== 'table'
+  if (heroPile && (zone === 'setAside' || (heroPile.returnsUnder && leavesPlay))) zone = heroPile.zone
+  // le mulligan se fait avant de jouer : une carte de la main ou du paquet du joueur mise en jeu ou défaussée y
+  // met fin. Chercher dans le paquet Rencontre, révéler une carte, prendre une carte mise de côté ou déplacer
+  // une carte de la table le laissent ouvert, comme la mise en place, qui pose ses propres cartes (newGame)
+  if (MULLIGAN_ENDING_ZONES.includes(fromZone) && (zone === 'table' || DISCARD_ZONES.includes(zone))) game.mulliganTaken = true
   // en jeu : face visible sur la table, pas un boost (on ne fait que le regarder)
   const wasInPlay = fromZone === 'table' && card.faceUp && !card.isBoost
   card.zone = zone
@@ -64,6 +74,12 @@ export function moveCard(game, card, targetZone, options = {}, quiet = false) {
   if (DECK_ZONES.includes(zone)) {
     card.faceUp = zone === 'invocationDeck'
     if (options.bottom) moveToBottom(game, card)
+    else moveToTop(game, card)
+  } else if (HERO_PILE_ZONES.includes(zone)) {
+    // une pile de l'identité : face cachée ou visible selon la pile ; dessous si elle y retourne (Sens)
+    const pile = heroPileOfZone(game, zone)
+    card.faceUp = !pile?.faceDown
+    if (options.bottom || pile?.returnsUnder) moveToBottom(game, card)
     else moveToTop(game, card)
   } else {
     if (fromZone !== 'table' || zone === 'hand' || DISCARD_ZONES.includes(zone)) card.faceUp = !options.faceDown
@@ -86,9 +102,11 @@ export function moveCard(game, card, targetZone, options = {}, quiet = false) {
 
   if (!quiet && fromZone !== zone) {
     const name = card.faceUp || fromZone === 'hand' ? `« ${cardName(card)} »` : 'Une carte face cachée'
-    const destination = DECK_ZONES.includes(zone)
-      ? `${options.bottom ? 'sous le' : 'sur le'} ${zoneLabel(game, zone)}`
-      : `→ ${zoneLabel(game, zone)}`
+    // une pioche, ou une pile de l'identité qui reçoit ses cartes dessous (le deck Sens de Daredevil) : sur ou sous elle
+    const underHeroPile = HERO_PILE_ZONES.includes(zone) && (options.bottom || heroPileOfZone(game, zone)?.returnsUnder)
+    let destination = `→ ${zoneLabel(game, zone)}`
+    if (DECK_ZONES.includes(zone)) destination = `${options.bottom ? 'sous le' : 'sur le'} ${zoneLabel(game, zone)}`
+    else if (underHeroPile) destination = `→ sous le ${zoneLabel(game, zone)}`
     const hitPointsText = hitPointsChange ? ` ${hitPointsChange.text}.` : ''
     logMessage(game, `${name} : ${zoneLabel(game, fromZone)} ${destination}${entryTokensText && `, avec ${entryTokensText}`}.${hitPointsText}`, !!hitPointsChange)
   } else if (hitPointsChange && !isInPlay) {
@@ -287,7 +305,48 @@ export function identityFormName(card, side = card.side) {
 export function setIdentityForm(game, card, side) {
   if (!card?.isIdentity || card.side === side || (side === 2 && !definitionOf(card).thirdName)) return
   card.side = side
-  logMessage(game, `Changement de forme : ${identityFormName(card)}.`, true)
+  // la carte qui l'accompagne se retourne avec elle (la combinaison de SP//dr : face A en héros, B en alter ego)
+  const companions = companionCards(game)
+  for (const companion of companions) companion.side = side === 1 ? 1 : 0
+  const companionNote = companions.length ? ` ; « ${cardName(companions[0])} » se retourne avec elle` : ''
+  logMessage(game, `Changement de forme : ${identityFormName(card)}${companionNote}.`, true)
+}
+
+/**
+ * La version suivante de l'identité (rules.js levelUp : Ironheart, ses versions 2 et 3 dans sa pile « Versions ») :
+ * {card, version}, version étant son numéro (2, 3) ; null s'il n'y en a pas.
+ */
+export function nextIdentityVersion(game) {
+  const versions = heroRules(game.setup?.hero).levelUp ?? []
+  const identity = identityCard(game)
+  if (!versions.length || !identity) return null
+  const index = versions.indexOf(definitionOf(identity).code)
+  const nextId = DEFINITION_BY_CODE[versions[index + 1]]?.id
+  const card = nextId && game.cards.find(candidate => candidate.definitionId === nextId && HERO_PILE_ZONES.includes(candidate.zone))
+  return card ? { card, version: index + 3 } : null
+}
+
+/**
+ * Level Up! (Ironheart) : la version suivante remplace l'identité, à sa place, sur sa face héros, redressée, avec
+ * ses jetons et ses cartes d'état ; l'ancienne version quitte la partie. Ses PV restent ceux du compteur. Rend la
+ * nouvelle identité, ou null s'il n'y a pas de version suivante.
+ */
+export function levelUpIdentity(game) {
+  const next = nextIdentityVersion(game)
+  const identity = identityCard(game)
+  if (!next || !identity) return null
+  const { card, version } = next
+  Object.assign(card, {
+    zone: 'table', faceUp: true, side: 0, exhausted: false, isIdentity: true,
+    x: identity.x, y: identity.y, zIndex: identity.zIndex, tokens: identity.tokens
+  })
+  for (const status of STATUS_CARDS) if (identity[status.id]) card[status.id] = true
+  delete identity.isIdentity
+  identity.zone = 'outOfGame'
+  resetCard(identity)
+  moveToTop(game, card)
+  logMessage(game, `Level Up! : la version ${version} remplace la version ${version - 1}, sur sa face héros (${identityFormName(card)}), redressée.`, true)
+  return card
 }
 
 /**

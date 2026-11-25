@@ -3,7 +3,7 @@
 Rubrique « Restez informé » pour l'appli Marvel Champions de Gamebox Hero.
 Le visiteur laisse son nom et son e-mail, un script PHP les enregistre dans une base SQLite sur le VPS.
 Un second script envoie ensuite la mailing list à partir d'un template HTML (voir la partie 4).
-Le même dossier reçoit aussi les rapports de bug de l'appli, envoyés par e-mail (« Signaler un bug », partie 6).
+Le même dossier reçoit aussi les rapports de bug de l'appli, envoyés par e-mail (« Signaler un bug », partie 6), et relaie l'API de MC4DB pour l'appli (partie 7).
 
 Version courte, pour l'usage courant (réglages, newsletter, commandes, dépannage) : [MEMO NEWSLETTER.md](<MEMO NEWSLETTER.md>).
 
@@ -13,10 +13,12 @@ server/
     signup.php               → à copier dans la racine web (DocumentRoot)/api/
     unsubscribe.php          → idem : page de désinscription
     bug-report.php           → idem : rapports de bug (« Signaler un bug », partie 6)
+    mc4db.php                → idem : relais vers MC4DB, données et images (partie 7)
   private/                   → à copier HORS de la racine web
     lib.php                  validation, anti-spam, base, liens de désinscription
     mail.php                 envoi des e-mails (mailing list et mail de confirmation)
     bug-report.php           rapports de bug : validation, envoi par e-mail avec la partie jointe
+    mc4db.php                relais MC4DB : demandes acceptées, cache, appel à l'API
     config.sample.php        à copier en config.php
     bin/signups.php          outil d'admin (liste, export, suppression, suivi des campagnes)
     bin/mailing.php          envoi de la mailing list
@@ -29,6 +31,7 @@ server/
     mailing-test.php         test de la mailing list (77 vérifications)
     confirmation-test.php    test du mail de confirmation et de l’avis (42 vérifications)
     bug-report-test.php      test des rapports de bug (40 vérifications)
+    mc4db-test.php           test du relais MC4DB (45 vérifications), avec un faux MC4DB (mc4db-fake.php)
     smtp-sink.php            faux serveur SMTP utilisé par le test
 ```
 
@@ -56,7 +59,7 @@ sudo mkdir data && sudo chown www-data:www-data data && sudo chmod 770 data
 
 # Points d'entrée publics
 sudo mkdir -p /home/prod/WWW/base/api
-sudo cp server/public/api/signup.php server/public/api/unsubscribe.php server/public/api/bug-report.php /home/prod/WWW/base/api/
+sudo cp server/public/api/signup.php server/public/api/unsubscribe.php server/public/api/bug-report.php server/public/api/mc4db.php /home/prod/WWW/base/api/
 ```
 
 Adapte `/home/prod/WWW/base` à ton DocumentRoot. Si le dossier privé n'est pas `/home/prod/gamebox-private`, indique-le dans le vhost :
@@ -260,6 +263,38 @@ curl -s -X POST https://gameboxheroes.fr/api/bug-report.php   -H 'Origin: https:
 
 Le script vérifie l'origine et le format comme l'inscription, refuse un rapport sans titre ou avec une adresse invalide, limite les envois par connexion (compteur à part de celui de l'inscription), ignore les robots (champ piège, délai minimal) et coupe les textes trop longs. Une partie illisible ou trop volumineuse (plus de 900 Ko) n'empêche pas l'envoi : le mail part sans pièce jointe, en le disant. Il envoie le mail avant de répondre : le joueur sait si son rapport est bien parti.
 
+## 7. Relais MC4DB
+
+[MC4DB](https://mc4db.merlindumesnil.net) (dérivé de MarvelCDB, avec des héros créés par des fans) a la même API publique que MarvelCDB, mais n'autorise pas un autre site à la lire depuis le navigateur (pas d'en-tête `Access-Control-Allow-Origin`). `api/mc4db.php` la lit à la place de l'appli, côté serveur, et lui renvoie le JSON (ou l'image) tel quel. L'appli s'en sert pour « Charger un deck » avec un lien MC4DB (`src/game/mc4db.js`). Il n'accepte que cinq demandes, aux paramètres vérifiés :
+
+| Demande | Ce qu'il demande à MC4DB | Gardée en cache |
+| --- | --- | --- |
+| `?decklist=58` | `/api/public/decklist/58.json` | 5 min |
+| `?card=70302` | `/api/public/card/70302.json?locale=fr` | 1 jour |
+| `?pack=mystique_by_merlin` | `/api/public/cards/mystique_by_merlin.json?locale=fr` (obligation et Némésis d'un héros) | 1 jour |
+| `?author=pseudo` | `/api/public/decks?page=1&limit=100&author=pseudo` (les decks publics d'un joueur) | 10 min |
+| `?image=mystique_by_merlin/70302` | `/bundles/cards/EN/mystique_by_merlin/70302.webp` (l'image anglaise d'une carte de fans) | 30 jours |
+
+- **Jamais une adresse libre** (le serveur servirait à d'autres pour attaquer des sites), **jamais les pages de comptes de MC4DB** : `/api/public/user/<n>` y renvoie l'e-mail des inscrits sans connexion.
+- **Ménager MC4DB**, qui refuse les rafales (« 429 Too Many Requests », constaté avec un deck de fans dont les images étaient demandées d'un coup) :
+  - **cache** dans `data/mc4db-cache` (à côté de la base), pour tous les joueurs : une carte n'est demandée à MC4DB qu'une fois par jour, une image une fois par mois ; si MC4DB ne répond pas, la dernière réponse gardée sert encore (en-tête `X-Cache: STALE`). Les fichiers de plus de 45 jours sont effacés de temps en temps ;
+  - **une demande à la fois** pour tout le serveur, au moins 0,25 s après la précédente (verrou `data/mc4db-cache/.verrou`) ;
+  - un **refus « 429 » est retenté une fois**, après 2 s au plus (son `Retry-After`) ; s'il revient, le relais répond 503 avec `Retry-After`, sans insister.
+- **Limite par connexion** : 300 demandes envoyées à MC4DB par heure (réglage `mc4db.rate_limit`), sur la table `rate_hits` sous une clé à part ; les réponses en cache ne comptent pas. Un deck de fans de 46 cartes en demande une quarantaine la première fois (cartes, puis images).
+- **Nom d'appli** dans chaque demande (`MarvelChampionsTable (gameboxheroes.fr)`) : MC4DB voit d'où viennent les appels.
+- **Pas d'en-tête `Access-Control-Allow-Origin`** : seules les pages de gameboxheroes.fr peuvent lire le relais.
+- Réponses : 200 (le JSON ou l'image de MC4DB), 400 (demande inconnue), 404 (inconnu de MC4DB), 405, 429, 500, 502 (MC4DB injoignable, réponse illisible ou de plus de 4 Mo), 503 (MC4DB demande de ralentir).
+
+**Prérequis** : l'extension PHP `curl` (`php -m | grep curl` ; sinon `sudo apt install php-curl` puis redémarrer PHP), à défaut `allow_url_fopen`. **Installation** : copier les deux fichiers ; le bloc `mc4db` de `config.php` est facultatif :
+
+```bash
+sudo cp server/private/mc4db.php /home/prod/gamebox-private/
+sudo cp server/public/api/mc4db.php /home/prod/WWW/base/api/
+curl -s "https://gameboxheroes.fr/api/mc4db.php?decklist=58" | head -c 200   # le deck « Mystique »
+```
+
+Les erreurs sont dans le journal d'erreurs Apache, préfixées `[gamebox-mc4db]`. La version artefact de l'appli, sans serveur, ne peut pas lire MC4DB.
+
 ## Ce que fait le script d'inscription
 
 - **Validation** : nom de 1 à 80 caractères, sans lien ni balise ; e-mail valide, mis en minuscules ; domaine qui reçoit du courrier (`check_mx`) ; case de consentement cochée.
@@ -287,6 +322,7 @@ php server/tests/api-test.php            # inscription
 php server/tests/mailing-test.php        # mailing list et désinscription
 php server/tests/confirmation-test.php   # mail de confirmation et avis de nouvelle inscription
 php server/tests/bug-report-test.php     # rapports de bug
+php server/tests/mc4db-test.php          # relais MC4DB
 ```
 
 Sans PHP sur le poste : `docker run --rm -v "$PWD/server:/srv:ro" -w /srv php:8.3-cli php tests/confirmation-test.php` (idem pour les autres).
@@ -296,3 +332,4 @@ Les tests lancent des serveurs locaux sur une copie temporaire, dont un faux ser
 - **Inscription** : cas valides et invalides, anti-spam, doublons, codes HTTP, outil en ligne de commande.
 - **Mailing list** : personnalisation, échappement, en-têtes, version texte, images jointes, reprise, échecs, cadence, verrou, panne SMTP et page de désinscription.
 - **Rapports de bug** : mail reçu (destinataires, sujet, « Répondre », texte, partie jointe), champs invalides, anti-spam, codes HTTP, service fermé, panne SMTP, limite par connexion à part de celle de l'inscription.
+- **Relais MC4DB** : les cinq demandes et les adresses demandées, images, cache (puis ancienne réponse quand MC4DB tombe), demandes espacées et « 429 » retenté une fois, valeurs piégées refusées sans rien demander à MC4DB, erreurs de MC4DB, limite par connexion. Un faux MC4DB local : le vrai n'est jamais contacté.

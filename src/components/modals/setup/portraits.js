@@ -33,7 +33,12 @@ const CROPS = {
   goblin_gimmicks: [0.25, 0, 0.45],
   a_mess_of_things: [0.14, 0.1, 0.28],
   power_drain: [0.05, 0.03, 0.3],
-  running_interference: [0.08, 0, 0.3]
+  running_interference: [0.08, 0, 0.3],
+  // fan-made : Kraven le Chasseur (I) ; le Vautour et King Cobra sur la manigance Les Savage Six
+  kraven: [0.4, 0.13, 0.42],
+  savage_six: [0, 0.13, 0.42],
+  // héros lus sur MarvelCDB (decks importés), réglés sur le scan français de cgbuilder : Tornade
+  storm: [0.5, 0.15, 0.36]
 }
 /** Carte debout sans réglage : le haut de l'illustration, sous le bandeau du nom. */
 const DEFAULT_CROP = [0.2, 0.16, 0.6]
@@ -45,7 +50,11 @@ const DEFAULT_CROP = [0.2, 0.16, 0.6]
 const PORTRAIT_TYPES = { hero: ['hero'], villain: ['villain'], modular: ['side_scheme', 'minion', 'attachment', 'treachery'] }
 function portraitCard(kind, setId) {
   for (const type of PORTRAIT_TYPES[kind]) {
-    const definition = CARD_DEFINITIONS.find(candidate => candidate.type === type && candidate.set === setId)
+    // la première des fiches ; pour un héros, la première par code : la version 1 d'Ironheart, dont les trois
+    // identités ont le même set
+    const candidates = CARD_DEFINITIONS.filter(candidate => candidate.type === type && candidate.set === setId)
+    if (kind === 'hero') candidates.sort((first, second) => String(first.code).localeCompare(String(second.code)))
+    const [definition] = candidates
     if (definition) return definition
   }
   return null

@@ -21,9 +21,13 @@
 //   phase: 'hero' | 'villain'     phase du round ; la partie commence en phase du héros
 //   accelerationTokens: number    pions Accélération (un de plus à chaque paquet Rencontre épuisé)
 //   mulliganTaken: boolean        le mulligan n'est plus possible : il a été fait (ou la main gardée), ou
-//                                 une carte a été mise en jeu ou défaussée depuis la mise en place
+//                                 une carte de la main ou du paquet du joueur a été mise en jeu ou
+//                                 défaussée depuis la mise en place
 //   topZIndex: number             plus grand ordre d'empilement sur la table (la dernière carte posée dessus)
-//   setupCardId?: string          carte mise en main par la mise en place de l'identité (Bouclier de Captain America)
+//   setupCardId?: string          carte mise en main par la mise en place de l'identité, après le mulligan
+//                                 (Bouclier de Captain America)
+//   identitySetupChoice?: true    cette mise en place attend le choix du joueur, après le mulligan (T'Challa :
+//                                 laquelle de ses améliorations Black Panther ; setup.js)
 //   crew?: string[]               plusieurs méchants à la fois (Les Démolisseurs) : leurs sets Rencontre
 //   activeVillainSet?: string     set du méchant qui a le jeton Actif ; les zones encounterDeck et
 //                                 encounterDiscard sont partagées, les piles en service sont ses cartes
@@ -54,8 +58,8 @@
 // {width, height, cardWidth} : taille de la table et largeur d'une carte, en pixels, pour placer les cartes ;
 // et, mesurés à l'écran, la place du décor du méchant : villainInset, heroInset, villainHud (layout.js).
 
-import { DEFINITION_BY_ID, ZONE_LABELS, CHARACTER_TYPES, SCHEME_TYPES, PAWN_KIND_BY_ID } from '../data.js'
-import { scenarioRules, SHADOW_OF_THE_PAST_ID } from '../rules.js'
+import { DEFINITION_BY_ID, DEFINITION_BY_CODE, ZONE_LABELS, CHARACTER_TYPES, SCHEME_TYPES, PAWN_KIND_BY_ID } from '../data.js'
+import { heroRules, scenarioRules, SHADOW_OF_THE_PAST_ID } from '../rules.js'
 
 /* ---------------------------------------------------------------------------------------------------- */
 /* Hasard et identifiants                                                                                */
@@ -82,6 +86,12 @@ export const uniqueId = () => `${(++createdCount).toString(36)}${Math.floor(rand
 
 /** "1 carte", "3 cartes" : le nombre et le mot, au pluriel au-delà de 1. */
 export const plural = (count, word) => `${count} ${word}${count > 1 ? 's' : ''}`
+
+/**
+ * « de Spider-Man », « d'Iceberg », « d'Anna Marie » : le complément d'un nom, élidé devant une voyelle, et devant
+ * le h muet d'Hercule (pas devant le h aspiré de Hulk ou de Hawkeye).
+ */
+export const ofName = name => (/^([aeiouyàâäéèêëîïôöûüœ]|hercule)/iu.test(name) ? `d'${name}` : `de ${name}`)
 
 /** "A, B et C" : une liste en français. */
 export const listInFrench = items => (items.length > 1 ? `${items.slice(0, -1).join(', ')} et ${items.at(-1)}` : items[0] ?? '')
@@ -141,6 +151,47 @@ export const isCharacter = card => !!card.isIdentity || CHARACTER_TYPES.includes
 
 /** Traits de la face en jeu, en minuscules ([] si la fiche n'en donne pas). */
 export const traitsOf = card => (card.side === 1 && definitionOf(card).backName ? definitionOf(card).backTraits : definitionOf(card).traits) ?? []
+
+/**
+ * La carte du dessus de cette pioche se montre face visible (rules.js showsTopCard) : Magik sous forme de héros
+ * (son paquet), Faucon sous forme de héros pendant la phase du joueur (le paquet Rencontre). Seul l'affichage la
+ * montre (CardPile, l'aperçu) : l'état de la carte ne change pas.
+ */
+export function showsTopCardOf(game, zone) {
+  const identity = identityCard(game)
+  if (!identity || isAlterEgo(identity)) return false
+  return (heroRules(game.setup?.hero).showsTopCard ?? []).some(entry => entry.zone === zone && (!entry.phase || entry.phase === game.phase))
+}
+
+/**
+ * Les cartes qui accompagnent l'identité sur la table (rules.js identity.companion : la combinaison de SP//dr) :
+ * elles se retournent avec elle. [] pour un héros sans compagnon.
+ */
+export function companionCards(game) {
+  const companionId = DEFINITION_BY_CODE[heroRules(game.setup?.hero).identity?.companion?.code]?.id
+  return companionId ? game.cards.filter(card => card.definitionId === companionId && card.zone === 'table') : []
+}
+
+/** Les zones des piles de l'identité, dans l'ordre de rules.js heroPiles (le bandeau du joueur en montre deux au plus). */
+export const HERO_PILE_ZONES = ['heroSetAside', 'heroSetAside2']
+/**
+ * Les piles de l'identité (rules.js heroPiles : cartes mises de côté, decks à part), sous une seule forme :
+ * {zone, label, entries: [{code, copies}], faceDown, shuffled, playsTop, returnsUnder, isDeck} ; copies vaut 0 quand
+ * le deck fournit ses exemplaires ; isDeck : un deck (« deck Sens »), ou une pile (« pile Versions »). [] pour un
+ * héros sans pile.
+ */
+export const heroPilesOf = game => (heroRules(game.setup?.hero).heroPiles ?? []).slice(0, HERO_PILE_ZONES.length).map((pile, index) => ({
+  zone: HERO_PILE_ZONES[index],
+  label: pile.label ?? 'De côté',
+  entries: (pile.cards ?? []).map(entry => (typeof entry === 'string' ? { code: entry, copies: 0 } : { code: entry.code, copies: entry.copies ?? 0 })),
+  faceDown: !!pile.faceDown, shuffled: !!pile.shuffled, playsTop: !!pile.playsTop, returnsUnder: !!pile.returnsUnder,
+  isDeck: pile.deck !== false
+}))
+/** La pile de l'identité de cette zone, ou null. */
+export const heroPileOfZone = (game, zone) => heroPilesOf(game).find(pile => pile.zone === zone) ?? null
+/** La pile de l'identité d'où vient cette carte (Aura de la Mort de Valkyrie, Sens de Daredevil…), ou null. */
+export const heroPileOfCard = (game, card) => heroPilesOf(game)
+  .find(pile => pile.entries.some(entry => DEFINITION_BY_CODE[entry.code]?.id === card.definitionId)) ?? null
 
 /** Carte du deck Invocation à part de Docteur Strange : son set s'appelle "<héros>_invocation". */
 export const isInvocationCard = card => !!definitionOf(card).set?.endsWith('_invocation')
@@ -207,7 +258,11 @@ export function discardZoneOf(card) {
 /** Nom d'une zone pour le journal ; le deck du scénario prend son nom ("deck Armes Expérimentales"). */
 export function zoneLabel(game, zone) {
   const scenarioDeck = scenarioDeckOf(game)
-  return zone === 'scenarioDeck' && scenarioDeck ? `deck ${scenarioDeck.name}` : ZONE_LABELS[zone]
+  if (zone === 'scenarioDeck' && scenarioDeck) return `deck ${scenarioDeck.name}`
+  // une pile de l'identité : « de côté (héros) », ou le nom de son deck (« deck Travaux », « pile Versions »)
+  const heroPile = HERO_PILE_ZONES.includes(zone) ? heroPileOfZone(game, zone) : null
+  if (heroPile && heroPile.label !== 'De côté') return `${heroPile.isDeck ? 'deck' : 'pile'} ${heroPile.label}`
+  return ZONE_LABELS[zone]
 }
 
 /** Met la carte sur le dessus de sa pile (fin du tableau). */

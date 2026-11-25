@@ -5,7 +5,8 @@
 // son nom sur un carré violet, comme la case « Random » de la maquette ; le slot peut y ajouter un signe
 // au-dessus du nom. Une case vide (filler) complète la rangée, comme sur la maquette.
 // Le nom et le détail ne s'affichent pas dans la case : la fenêtre les montre au pied quand on la survole ou
-// qu'elle a le focus ; ils sont dans l'aria-label pour les lecteurs d'écran.
+// qu'elle a le focus ; ils sont dans l'aria-label pour les lecteurs d'écran. Un scénario ou un set fait par des
+// fans porte un badge « Fan-made » au pied de son portrait.
 import { cropStyle } from './portraits.js'
 
 defineProps({
@@ -20,6 +21,8 @@ defineProps({
   selected: Boolean,
   /** Choix conseillé (set modulaire du méchant) : une petite pastille jaune. */
   advised: Boolean,
+  /** Scénario ou set fait par des fans : un badge « Fan-made » sur le bas du portrait. */
+  fanMade: Boolean,
   /** Case spéciale : une action plutôt qu'un portrait (tirer au hasard). */
   special: Boolean,
   /** Case vide, qui complète la grille : ni bouton, ni contenu. */
@@ -31,10 +34,11 @@ defineEmits(['pick'])
 <template>
   <span v-if="filler" class="choice filler" aria-hidden="true" />
   <button v-else type="button" class="choice" :class="{ selected, special }" :aria-pressed="selected"
-    :aria-label="[label, detail, advised ? 'conseillé' : ''].filter(Boolean).join(', ')" @click="$emit('pick')">
+    :aria-label="[label, detail, advised ? 'conseillé' : '', fanMade ? 'fan-made' : ''].filter(Boolean).join(', ')" @click="$emit('pick')">
     <span class="thumb">
       <span v-if="special" class="special-label" aria-hidden="true"><slot />{{ label }}</span>
       <img v-else-if="imageUrl" :src="imageUrl" :style="cropStyle(crop)" alt="" draggable="false">
+      <span v-if="fanMade" class="fan-made" aria-hidden="true">Fan-made</span>
     </span>
     <span v-if="advised" class="advised" aria-hidden="true">★</span>
   </button>
@@ -93,6 +97,15 @@ defineEmits(['pick'])
   display: grid; place-items: center; width: calc(22 * var(--su)); height: calc(19 * var(--su));
   clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%);
   background: var(--yellow); color: var(--brass-ink); font-size: calc(12 * var(--su)); line-height: 1;
+}
+
+/* fan-made : un bandeau sur le bas du portrait, par-dessus l'illustration */
+.fan-made {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 1;
+  padding: calc(2 * var(--su)) 0 calc(3 * var(--su)); text-align: center;
+  background: rgb(13 16 37 / .82); border-top: 1px solid #c2c3fd;
+  font: italic 500 max(10px, calc(11 * var(--su)))/1 var(--font-display); letter-spacing: .04em;
+  text-transform: uppercase; color: #c2c3fd;
 }
 
 @media (hover: hover) and (pointer: fine) {

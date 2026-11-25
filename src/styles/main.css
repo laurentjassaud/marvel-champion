@@ -30,6 +30,9 @@
   --red-ui: #d31616;
   --blue: #2f66d8;
   --blue-lip: #1c3f8c;
+  /* bleu clair électrique, en trois nombres pour rgb(var(--electric) / alpha) : la carte que la mise en place
+     de l'identité ajoute à la main, et le choix de cette carte (T'Challa) */
+  --electric: 64 224 255;
   /* jaune de « VS » : focus, sélection, messages de règle */
   --yellow: #ffc219;
   --brass: var(--yellow);
@@ -46,9 +49,11 @@
   --ease-out: cubic-bezier(.23, 1, .32, 1);
   --ease-in-out: cubic-bezier(.77, 0, .175, 1);
   --ease-drawer: cubic-bezier(.32, .72, 0, 1);
-  /* un pixel de la maquette (1920 × 1080) à la taille de l'écran : le décor et les grands chiffres suivent */
+  /* un pixel de la maquette (1920 × 1080) à la taille de l'écran : le décor et les grands chiffres suivent.
+     Ordinateur et tablette : la hauteur visible quand les barres du navigateur sont affichées (svh), qui ne
+     change pas ; seul le téléphone suit les barres qui s'effacent (dvh, « petits écrans ») */
   --u: min(100vw / 1920, 100vh / 1080);
-  --u: min(100vw / 1920, 100dvh / 1080);
+  --u: min(100vw / 1920, 100svh / 1080);
   --cw: 80px;  /* largeur d'une carte sur la table (réglage « Taille ») */
   --hw: max(62px, calc(90 * var(--u)));  /* largeur d'une carte de la main et des piles du joueur */
   --sw: max(52px, calc(80 * var(--u)));  /* largeur d'une carte des piles de la colonne de droite */
@@ -65,7 +70,12 @@ body {
   background: var(--bg); color: var(--fg); font: 14px/1.45 var(--font-text); overflow: hidden; overscroll-behavior: none;
   touch-action: manipulation; /* pas de zoom au double toucher (le pincement reste possible) */
 }
-#app { height: 100%; height: 100dvh; }
+#app { height: 100%; }
+/* téléphone : la hauteur visible, qui suit les barres du navigateur (en portrait, « petits écrans » la rend
+   ensuite à son contenu) ; ordinateur et tablette restent à 100 % */
+@media (max-width: 700px), (pointer: coarse) and (max-height: 500px) {
+  #app { height: 100dvh; }
+}
 button, input, select, textarea { font: inherit; color: inherit; }
 button { cursor: pointer; touch-action: manipulation; }
 /* les commandes ne sont pas du texte : un appui long ne doit pas sélectionner leur libellé */
@@ -276,6 +286,20 @@ input, textarea { -webkit-user-select: text; user-select: text; } /* sinon iOS n
 .card.sel { outline: 2px solid var(--yellow); outline-offset: 2px; }
 /* carte de la main tirée au hasard (après .sel : elle l'emporte quand les deux s'appliquent) */
 .card.rand { outline: 3px solid #ff3b2f; outline-offset: 2px; box-shadow: 0 0 0 5px rgb(255 59 47 / .25), 0 4px 4px rgb(0 0 0 / .25); }
+/* carte que la mise en place de l'identité vient de mettre en jeu (une fois distribuée) ou d'ajouter à la main
+   (après le mulligan) : un filet bleu électrique et son halo, tenus 0,6 s, puis effacés en 0,6 s
+   (ui.flashCards, CARD_FLASH_TIME dans ui.js) ; les deux ombres de la carte restent dessous */
+.card.flash { outline: 3px solid rgb(var(--electric) / 0); outline-offset: 2px; animation: card-flash 1.2s linear both; }
+@keyframes card-flash {
+  0%, 50% {
+    outline-color: rgb(var(--electric));
+    box-shadow: 0 0 0 5px rgb(var(--electric) / .3), 0 0 22px 4px rgb(var(--electric) / .75), 0 4px 4px rgb(0 0 0 / .25), 0 10px 22px -10px rgb(0 0 0 / .45);
+  }
+  100% {
+    outline-color: rgb(var(--electric) / 0);
+    box-shadow: 0 0 0 5px rgb(var(--electric) / 0), 0 0 22px 4px rgb(var(--electric) / 0), 0 4px 4px rgb(0 0 0 / .25), 0 10px 22px -10px rgb(0 0 0 / .45);
+  }
+}
 /* la face, cerclée d'un filet noir comme sur la maquette */
 .card .face, .card .back { position: absolute; inset: 0; border-radius: inherit; background: #0d0e1f center / cover no-repeat; box-shadow: inset 0 0 0 1px rgb(0 0 0 / .85); }
 .card .face.plain { display: grid; place-items: center; padding: 8%; border: 1px solid var(--line); text-align: center; font-family: var(--font-display); font-size: max(20px, calc(var(--w) * .13)); line-height: 1.1; overflow: hidden; }
@@ -324,6 +348,8 @@ input, textarea { -webkit-user-select: text; user-select: text; } /* sinon iOS n
 .pawn-image, .pawn-ghost img { display: block; width: 100%; height: 100%; pointer-events: none; }
 .pawn-ghost { filter: drop-shadow(0 8px 10px rgb(0 0 0 / .45)); }
 .card.pick { outline: 3px solid var(--danger); outline-offset: 2px; opacity: .5; }
+/* la carte choisie pour rejoindre la main (mise en place de T'Challa, fenêtre du mulligan) */
+.card.chosen { outline: 3px solid rgb(var(--electric)); outline-offset: 2px; box-shadow: 0 0 0 5px rgb(var(--electric) / .3), 0 0 18px rgb(var(--electric) / .6); }
 .ghost { position: fixed; left: 0; top: 0; pointer-events: none; z-index: 1000; opacity: .92; }
 
 /* ---------- menu contextuel ---------- */
@@ -350,7 +376,7 @@ input, textarea { -webkit-user-select: text; user-select: text; } /* sinon iOS n
    de la hauteur de l'écran au-dessus et au-dessous d'elle */
 .modal {
   position: fixed; inset: 0; z-index: 1500; display: grid; grid-template: minmax(0, 1fr) / minmax(0, 1fr); place-items: center;
-  padding: max(16px, 10vh) 16px; padding-block: max(16px, 10dvh);
+  padding: max(16px, 10vh) 16px; padding-block: max(16px, 10svh);
   background: rgb(10 11 28 / .35);
   -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
   transition: opacity 200ms var(--ease-out);
@@ -496,12 +522,6 @@ input, textarea { -webkit-user-select: text; user-select: text; } /* sinon iOS n
    la boîte se centre dans la place qui reste à sa gauche ; le panneau a le même filet de 1 px que celui de
    SideTabs, pour que la carte ne bouge pas d'un pixel quand la fenêtre s'ouvre */
 .modal.beside-zoom { padding-right: calc(var(--zoom-room) + 16px); }
-/* sur l'accueil, « Nouvelle partie » laisse voir le grand logo « Marvel Champions Table » : elle se pose juste
-   dessous (BaseModal mesure --title-room), sans la marge du bas des fenêtres hautes (elle rétrécirait, et sa
-   grille défilerait) ; si la place manque, elle rétrécit et son contenu défile. Les autres fenêtres restent
-   centrées */
-.modal.below-title { padding-top: var(--title-room); padding-bottom: 16px; }
-.modal.below-title .box.wide { align-self: start; }
 .modal-zoom { position: absolute; display: grid; grid-template-rows: minmax(0, 1fr); padding: 1px; pointer-events: none; }
 .modal p { margin: 0; color: var(--muted); line-height: 1.5; max-width: 68ch; }
 /* les boutons du contenu (importer un deck…) : ceux du pied, en lavande */
@@ -524,8 +544,6 @@ input, textarea { -webkit-user-select: text; user-select: text; } /* sinon iOS n
 /* dans les fenêtres, les libellés prennent le lavande des titres et des onglets */
 .modal :is(.fieldset > .lab, .keys .lab) { color: #c2c3fd; }
 .choices { display: flex; flex-wrap: wrap; gap: 8px; }
-.file-btn { position: relative; overflow: hidden; }
-.file-btn input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
 .help-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 18px; }
 .keys { display: grid; grid-template-columns: auto 1fr; gap: 7px 12px; align-items: center; align-content: start; }
 .keys .lab { grid-column: 1 / -1; }
@@ -617,10 +635,14 @@ input, textarea { -webkit-user-select: text; user-select: text; } /* sinon iOS n
   .modal .box, .modal .box.wide { --pad: 20px; }
   .modal .box-actions { padding-right: 16px; padding-bottom: 16px; }
 }
-/* téléphone, en portrait ou à l'horizontale (même requête que l'accueil, IntroScreen) : l'appli ne s'y joue pas
-   encore, l'accueil couvre l'écran avec son message. Tant qu'il est ouvert, la page de jeu, dessous, est
-   coupée à la hauteur visible et ne défile pas : rien ne se découvre au glissement du doigt */
+/* téléphone, en portrait ou à l'horizontale (même requête que l'accueil, IntroScreen) : les hauteurs suivent
+   les barres du navigateur qui apparaissent ou s'effacent (dvh ; ordinateur et tablette gardent svh et 100 %,
+   :root). L'appli ne s'y joue pas encore, l'accueil couvre l'écran avec son message. Tant qu'il est ouvert, la
+   page de jeu, dessous, est coupée à la hauteur visible et ne défile pas : rien ne se découvre au glissement
+   du doigt */
 @media (max-width: 700px), (pointer: coarse) and (max-height: 500px) {
+  :root { --u: min(100vw / 1920, 100dvh / 1080); }
+  .modal { padding-block: max(16px, 10dvh); }
   body:has(.app.under-intro) { overflow: hidden; }
   .app.under-intro { height: 100dvh; min-height: 0; overflow: hidden; }
 }

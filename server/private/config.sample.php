@@ -63,6 +63,14 @@ return [
         'rate_limit' => ['max' => 5, 'window' => 3600],
     ],
 
+    // ── Relais MC4DB (public/api/mc4db.php) ─────────────────────────────────────────────────────────
+    // Decks, cartes, decks d'un auteur et images lus sur mc4db.merlindumesnil.net pour l'appli, gardés en cache dans
+    // data/mc4db-cache, demandés un à un. Bloc facultatif ; demande l'extension PHP curl (ou allow_url_fopen).
+    'mc4db' => [
+        // Au plus `max` demandes envoyées à MC4DB par connexion sur `window` secondes (le cache ne compte pas).
+        'rate_limit' => ['max' => 300, 'window' => 3600],
+    ],
+
     'mail' => [
         // 'smtp' : passe par un serveur SMTP authentifié (hébergeur, Brevo, Mailjet, Google Workspace…).
         //          C'est le choix conseillé pour la délivrabilité.

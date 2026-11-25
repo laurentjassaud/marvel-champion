@@ -26,14 +26,14 @@ export function useKeyboard() {
     // pendant le changement de scène de « Lancer la partie », la fenêtre s'en va d'elle-même : rien à faire
     if (ui.scene) return
     // Échap ferme le menu ouvert (par-dessus une fenêtre de défausse, la fenêtre reste), sinon la liste des
-    // pions, sinon la fenêtre
+    // pions, sinon la fenêtre, sauf celle qui attend une réponse (le mulligan du début de partie)
     if (event.key === 'Escape') {
       if (ui.contextMenu) ui.closeContextMenu()
       else if (ui.pawnTrayOpen) {
         // la liste des pions se ferme, le focus revient à son onglet
         ui.closePawnTray()
         document.querySelector('[data-pawn-anchor]')?.focus()
-      } else ui.closeModal()
+      } else if (!ui.modal?.required) ui.closeModal()
       return
     }
     if (event.ctrlKey || event.metaKey || event.altKey) return

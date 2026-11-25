@@ -1,7 +1,9 @@
 <script setup>
-// Le bandeau du joueur, en bas de l'écran (maquette) : à gauche ses piles ; au milieu sa main en éventail ;
+// Le bandeau du joueur, en bas de l'écran (maquette) : à gauche ses piles (paquet, « De côté » de Valkyrie,
+// Malicia et Iceberg ou « Climat » de Tornade, défausse, deck Invocation de Docteur Strange) ; au milieu sa main en éventail ;
 // à droite le tour, les deux phases et ses PV en grand, et dessous ce qu'on fait de sa main (carte au hasard,
-// mulligan, piocher) en onglets posés sur la bande rouge du bas de l'écran. Tout au bout, en bas à droite de
+// piocher) en onglets posés sur la bande rouge du bas de l'écran ; le mulligan n'y est pas, sa fenêtre
+// s'ouvre d'elle-même au début de la partie (App.vue). Tout au bout, en bas à droite de
 // l'écran, la tirette « Taille » des cartes de la table.
 import { computed, nextTick } from 'vue'
 import CardPile from './CardPile.vue'
@@ -18,6 +20,12 @@ const handCount = computed(() => gameStore.cardsIn('hand').length)
 const villainPhaseStart = computed(() => (gameStore.game?.crew ? 'Phase des ' : 'Phase du '))
 const villainPhaseNoun = computed(() => (gameStore.game?.crew ? 'méchants' : 'méchant'))
 
+/** La bulle d'aide d'une pile de l'identité : ce que fait un clic. */
+function heroPileTitle(pile) {
+  if (!pile.playsTop) return 'Cartes mises de côté par votre identité · clic : voir · glissez la carte du dessus sur la table pour la jouer'
+  return `Deck ${pile.label} · clic : mettre en jeu la carte du dessus${pile.faceDown ? '' : ' · appui long ou clic droit : voir le deck'}`
+}
+
 /** Tire une carte de la main au hasard et, sur téléphone (la main y défile), la fait venir à l'écran. */
 async function pickRandomCard() {
   gameStore.pickRandomHandCard()
@@ -31,6 +39,11 @@ async function pickRandomCard() {
     <div class="dock-left">
       <div class="piles">
         <CardPile zone="playerDeck" label="Paquet" variant="p" title="Clic : piocher" />
+        <!-- les piles de l'identité : les cartes qu'elle met de côté (Aura de la Mort de Valkyrie, Touché de Malicia,
+             Pris Dans la Glace d'Iceberg) ou ses decks à part (Climat de Tornade, Travaux et Dons d'Hercule, Sens de
+             Daredevil) -->
+        <CardPile v-for="pile in gameStore.heroPiles" :key="pile.zone" :zone="pile.zone" :label="pile.label" variant="p"
+          :title="heroPileTitle(pile)" />
         <CardPile zone="playerDiscard" label="Défausse" variant="p" title="Clic : voir" />
         <template v-if="gameStore.hasInvocationDeck">
           <CardPile zone="invocationDeck" label="Invocation" variant="i"
@@ -66,11 +79,6 @@ async function pickRandomCard() {
       <div class="actions" role="group" aria-label="Actions sur la main">
         <button type="button" class="slant foot random" :disabled="!handCount"
           title="Marque en rouge une carte de la main tirée au hasard" @click="pickRandomCard">Au hasard</button>
-        <button type="button" class="slant foot mulligan" :disabled="!gameStore.canMulligan"
-          :title="gameStore.canMulligan ? 'Défausser des cartes de la main de départ et repiocher' : 'Seulement au tour 1, une fois par partie, avant de mettre une carte en jeu ou d\'en défausser une'"
-          @click="ui.openModal('mulligan')">
-          Mulligan
-        </button>
         <button type="button" class="slant foot draw" @click="gameStore.drawCard()">Piocher<kbd>D</kbd></button>
       </div>
     </div>
@@ -150,13 +158,6 @@ async function pickRandomCard() {
   --fill: #990000;
   --lip: #860909;
   width: 120px;
-}
-
-.foot.mulligan {
-  --fill: #a21212;
-  --lip: #990000;
-  width: 99px;
-  margin-left: -14px;
 }
 
 /* Piocher, le plus haut : le dégradé rouge « actif » ; la touche D écrite comme le reste du mot */

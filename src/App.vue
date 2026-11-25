@@ -2,9 +2,9 @@
 // L'application (maquette Figma « Table de jeu ») : la barre du haut ; la table, avec à gauche le décor et
 // les PV du méchant, et à droite les piles Rencontre au-dessus des onglets Carte / Journal ; en bas, de bord
 // à bord, le bandeau du joueur (piles, main en éventail, tour et PV). Puis les fenêtres (une seule ouverte à
-// la fois) et le menu contextuel. Au lancement, la page d'accueil couvre le tout : la table est déjà montée et
+// la fois ; celle du mulligan s'ouvre d'elle-même au début de la partie) et le menu contextuel. Au lancement, la page d'accueil couvre le tout : la table est déjà montée et
 // mesurée dessous, mais inerte (ni clavier, ni lecteur d'écran) tant que l'accueil est là.
-import { onMounted } from 'vue'
+import { computed, onMounted, watch } from 'vue'
 import IntroScreen from './components/IntroScreen.vue'
 import TopBar from './components/TopBar.vue'
 import VillainBackdrop from './components/VillainBackdrop.vue'
@@ -48,6 +48,20 @@ useDealAnimation()
 
 // les composants enfants sont montés d'abord : la table est déjà mesurée ici
 onMounted(() => { if (!gameStore.isReady) gameStore.startExampleGame() })
+
+// La partie commence par le choix de la main de départ : tant que le mulligan reste à faire (ou, après lui, le
+// choix de la mise en place de l'identité : T'Challa), sa fenêtre s'ouvre d'elle-même dès que la table est à
+// l'écran, sans autre fenêtre, et que les cartes ont fini d'être distribuées (une nouvelle partie,
+// « Recommencer », ou une partie reprise depuis l'accueil). Elle attend une réponse : « Garder cette main »
+// compte aussi. Elle attend aussi que s'éteigne le filet bleu des cartes que la mise en place a mises en jeu
+// (Griffes de Wolverine…, ui.flashedCardIds). Le léger délai laisse la distribution commencer (elle part au même
+// rendu que la fin de l'entrée de la table) et la dernière carte se poser.
+const MULLIGAN_DELAY = 300
+const mulliganDue = computed(() => (gameStore.canMulligan || gameStore.identitySetupChoice)
+  && !ui.introOpen && !ui.scene && !ui.isDealing && !ui.flashedCardIds.length && !ui.modal)
+watch(mulliganDue, due => {
+  if (due) setTimeout(() => { if (mulliganDue.value) ui.openModal('mulligan', { required: true }) }, MULLIGAN_DELAY)
+}, { immediate: true })
 </script>
 
 <template>

@@ -5,7 +5,7 @@ import {
   CARD_DEFINITIONS, PRECON_DECKS, HEROES, SCENARIOS, DEFINITION_BY_ID, DEFINITION_BY_CODE, MODULAR_SETS, VICTORY_TEXTS,
   AVAILABLE_HEROES, AVAILABLE_SCENARIOS, AVAILABLE_MODULAR_SETS
 } from './data.js'
-import { HERO_RULES, SCENARIO_RULES, SHADOW_OF_THE_PAST_ID } from './rules.js'
+import { HERO_RULES, IMPORTED_HERO_RULES, SCENARIO_RULES, SHADOW_OF_THE_PAST_ID } from './rules.js'
 import { migrateSavedGame, SAVED_GAME_VERSION } from './savedGame.js'
 
 const L = { width: 1100, height: 580, cardWidth: 80 }
@@ -23,6 +23,13 @@ const game = (over = {}) =>
 const qty = pred => CARD_DEFINITIONS.filter(pred).reduce((n, d) => n + d.quantity, 0)
 // the log, as text
 const logTexts = s => s.log.map(e => e.text)
+// puts back in the deck the starting-hand cards that match `pred`, each replaced by another card of the deck
+const keepOutOfHand = (s, pred) => {
+  for (const c of E.cardsInZone(s, 'hand').filter(pred)) {
+    E.moveCard(s, E.cardsInZone(s, 'playerDeck').find(x => !pred(x)), 'hand', {}, true)
+    E.moveCard(s, c, 'playerDeck', {}, true)
+  }
+}
 // puts the first card of type `t` from a pile face up on the table
 const onTable = (s, t, zone = 'encounterDeck') => {
   const c = E.cardsInZone(s, zone).find(x => E.definitionOf(x).type === t)
@@ -38,13 +45,13 @@ describe('données', () => {
     expect(MODULAR_SETS.find(m => m.id === 'the_doomsday_chair').name).toBe("Le Siège de l'Apocalypse")
   })
 
-  it('mise en place : la boîte de base, le paquet Le Bouffon Vert et les paquets héros Captain America, Hulk et Thor', () => {
+  it('mise en place : la boîte de base, le paquet Le Bouffon Vert, les paquets héros Captain America, Hulk et Thor, et Kraven (fan-made)', () => {
     expect(AVAILABLE_HEROES.map(h => h.id)).toEqual(['spider_man', 'captain_marvel', 'she_hulk', 'iron_man', 'black_panther', 'captain_america', 'hulk', 'thor'])
     // chaque héros proposé a son deck préconstruit
     for (const hero of AVAILABLE_HEROES) expect(PRECON_DECKS[hero.id], hero.id).toBeTruthy()
-    expect(AVAILABLE_SCENARIOS.map(v => v.id)).toEqual(['rhino', 'klaw', 'ultron', 'risky_business', 'mutagen_formula'])
+    expect(AVAILABLE_SCENARIOS.map(v => v.id)).toEqual(['rhino', 'klaw', 'ultron', 'risky_business', 'mutagen_formula', 'kraven'])
     expect(AVAILABLE_MODULAR_SETS.map(m => m.id)).toEqual(['bomb_scare', 'masters_of_evil', 'under_attack', 'legions_of_hydra', 'the_doomsday_chair',
-      'goblin_gimmicks', 'a_mess_of_things', 'power_drain', 'running_interference'])
+      'goblin_gimmicks', 'a_mess_of_things', 'power_drain', 'running_interference', 'savage_six'])
     // le set conseillé de chaque scénario proposé est proposé lui aussi
     for (const scenario of AVAILABLE_SCENARIOS) {
       for (const id of scenario.advisedModulars) expect(AVAILABLE_MODULAR_SETS.map(m => m.id), scenario.id).toContain(id)
@@ -145,30 +152,53 @@ describe('mise en place', () => {
     expect(E.cardsInZone(s, 'encounterDeck')).toHaveLength(edeck)
   })
 
-  it('Captain America : le Bouclier est ajouté à la main de départ (mise en place de Steve Rogers)', () => {
+  it('Captain America : le Bouclier rejoint la main après le mulligan (mise en place de Steve Rogers)', () => {
     const s = game({ hero: 'captain_america', deckList: PRECON_DECKS.captain_america })
     expect(E.cardName(E.identityCard(s))).toBe('Steve Rogers')
     expect(s.counters[0]).toMatchObject({ label: 'CAPTAIN AMERICA', value: 11 })
     const shield = c => E.cardName(c) === 'Bouclier de Captain America'
-    expect(E.cardsInZone(s, 'hand').filter(shield)).toHaveLength(1)
+    // the starting hand is only the drawn cards: the shield waits for the mulligan, announced by its window
+    expect(E.cardsInZone(s, 'hand')).toHaveLength(6)
+    expect(E.cardsInZone(s, 'hand').some(shield)).toBe(false)
+    expect(logTexts(s).some(t => t.includes('Bouclier'))).toBe(false)
+    expect(E.identitySetupOf(s)).toMatchObject({ alterEgoName: 'Steve Rogers' })
+    expect(E.identitySetupOf(s).candidates).toHaveLength(1)
+    expect(shield(E.identitySetupOf(s).candidates[0])).toBe(true)
     expect(E.cardsInZone(s, 'playerDeck').length + E.cardsInZone(s, 'hand').length).toBe(40)
     expect(E.cardsInZone(s, 'encounterDeck').some(c => E.cardName(c) === "Homme d'une Autre Époque")).toBe(true)
     expect(E.cardsInZone(s, 'setAside').filter(c => E.definitionOf(c).set === 'captain_america_nemesis')).toHaveLength(5)
+    // the hand kept: the shield joins it
+    E.mulligan(s, L, [])
+    expect(E.cardsInZone(s, 'hand')).toHaveLength(7)
+    expect(E.cardsInZone(s, 'hand').filter(shield)).toHaveLength(1)
+    expect(logTexts(s).at(-1)).toBe('Mise en place de Steve Rogers : « Bouclier de Captain America » rejoint votre main ; le paquet est mélangé.')
+    expect(E.identitySetupOf(s).candidates).toEqual([])
+    expect(s.identitySetupChoice).toBeUndefined()
   })
 
   it('Captain America : le Bouclier ne compte pas dans la main du mulligan, et revient s\'il est défaussé', () => {
     const s = game({ hero: 'captain_america', deckList: PRECON_DECKS.captain_america })
     const isShield = c => E.cardName(c) === 'Bouclier de Captain America'
-    const hand = E.cardsInZone(s, 'hand')
-    expect(hand).toHaveLength(hand.some(c => c.id === s.setupCardId) ? 7 : 6)
-    // keep the shield, discard 2 others: back to 6 + the shield
-    E.mulligan(s, L, hand.filter(c => !isShield(c)).slice(0, 2).map(c => c.id))
+    // discard 2 cards: back to 6, then the shield
+    E.mulligan(s, L, E.cardsInZone(s, 'hand').slice(0, 2).map(c => c.id))
     expect(E.cardsInZone(s, 'hand')).toHaveLength(7)
-    // discard the shield too: it comes back from the discard pile
+    expect(E.cardsInZone(s, 'hand').filter(isShield)).toHaveLength(1)
+    // the shield drawn in the starting hand, then discarded: it comes back from the discard pile
     const s2 = game({ hero: 'captain_america', deckList: PRECON_DECKS.captain_america })
+    E.moveCard(s2, E.cardsInZone(s2, 'hand')[0], 'playerDeck', {}, true)
+    E.moveCard(s2, E.cardsInZone(s2, 'playerDeck').find(isShield), 'hand', {}, true)
+    expect(s2.mulliganTaken).toBe(false)
     E.mulligan(s2, L, E.cardsInZone(s2, 'hand').filter(isShield).map(c => c.id))
     expect(E.cardsInZone(s2, 'hand').filter(isShield)).toHaveLength(1)
     expect(E.cardsInZone(s2, 'hand')).toHaveLength(7)
+    expect(E.cardsInZone(s2, 'playerDiscard')).toHaveLength(0)
+    // drawn and kept: nothing more to add
+    const s3 = game({ hero: 'captain_america', deckList: PRECON_DECKS.captain_america })
+    E.moveCard(s3, E.cardsInZone(s3, 'hand')[0], 'playerDeck', {}, true)
+    E.moveCard(s3, E.cardsInZone(s3, 'playerDeck').find(isShield), 'hand', {}, true)
+    expect(E.identitySetupOf(s3).candidates).toEqual([])
+    E.mulligan(s3, L, [])
+    expect(E.cardsInZone(s3, 'hand')).toHaveLength(6)
   })
 
   it('Hulk : sous forme de héros, il défausse sa main à la fin de son tour (Enragé)', () => {
@@ -547,7 +577,7 @@ describe('mulligan', () => {
     expect(s.mulliganTaken).toBe(true)
   })
 
-  it('une carte mise en jeu ou défaussée y met fin ; la mise en place, piocher ou déplacer une carte de la table, non', () => {
+  it('une carte de la main ou du paquet mise en jeu ou défaussée y met fin ; la mise en place, piocher, la Rencontre, la réserve ou la table, non', () => {
     // la mise en place pose des cartes sur la table (Réseau de Défense, Klaw « l'Immortel » en expert)
     const klaw = game({ scenario: 'klaw', modulars: ['masters_of_evil'], expert: true })
     expect(klaw.mulliganTaken).toBe(false)
@@ -557,14 +587,21 @@ describe('mulligan', () => {
     // une carte jouée sur la table
     E.playToTable(klaw, L, E.cardsInZone(klaw, 'hand')[0])
     expect(klaw.mulliganTaken).toBe(true)
-    // une carte défaussée
+    // une carte de la main défaussée
     const s = game()
     E.moveCard(s, E.cardsInZone(s, 'hand')[0], 'discard')
     expect(s.mulliganTaken).toBe(true)
-    // une carte Rencontre révélée
+    // une carte du paquet défaussée
+    const d = game()
+    E.moveCard(d, E.cardsInZone(d, 'playerDeck').at(-1), 'discard')
+    expect(d.mulliganTaken).toBe(true)
+    // la Rencontre (révélée, cherchée dans le paquet, défaussée de la table) et les cartes mises de côté : non
     const t = game()
     E.revealEncounterCard(t, L)
-    expect(t.mulliganTaken).toBe(true)
+    E.moveCard(t, E.cardsInZone(t, 'encounterDeck')[0], 'table', { x: 400, y: 300 })
+    E.moveCard(t, E.cardsInZone(t, 'table').at(-1), 'discard')
+    E.moveCard(t, E.cardsInZone(t, 'setAside')[0], 'table', { x: 500, y: 300 })
+    expect(t.mulliganTaken).toBe(false)
   })
 })
 
@@ -1188,6 +1225,56 @@ describe('Kang le Conquérant', () => {
   })
 })
 
+describe('Kraven le Chasseur (fan-made)', () => {
+  const kraven = over => game({ scenario: 'kraven', modulars: ['savage_six'], ...over })
+  const villain = s => E.cardsInZone(s, 'table').find(c => E.definitionOf(c).type === 'villain')
+
+  it('les sets ont le nombre de cartes imprimé (sans le Collier de Dents, qui manque), absents de MarvelCDB, marqués fan-made', () => {
+    const sizes = { kraven: 20, kraven_traps: 16, savage_six: 7 }
+    for (const [set, n] of Object.entries(sizes)) expect(qty(d => d.set === set), set).toBe(n)
+    expect(Object.values(DEFINITION_BY_CODE).filter(d => d.pack === 'kraven')).toEqual([])
+    expect(SCENARIOS.find(v => v.id === 'kraven')).toMatchObject({ fanMade: true, advisedModulars: ['savage_six'] })
+    expect(MODULAR_SETS.find(m => m.id === 'savage_six').fanMade).toBe(true)
+  })
+
+  it('mise en place : Kraven I et II, deck Piège à côté du paquet Rencontre, ni Piège ni étape dans le paquet', () => {
+    const s = kraven()
+    expect(E.definitionOf(villain(s))).toMatchObject({ name: 'Kraven le Chasseur', stage: 'I', hitPoints: 15 })
+    expect(s.counters[2].label).toBe('Menace /7')
+    const enc = qty(d => d.faction === 'encounter' && ['kraven', 'savage_six', 'standard'].includes(d.set) && !['villain', 'main_scheme'].includes(d.type)) + 1
+    expect(E.cardsInZone(s, 'encounterDeck')).toHaveLength(enc)
+    expect(E.cardsInZone(s, 'scenarioDeck')).toHaveLength(16)
+    expect(E.cardsInZone(s, 'scenarioDeck').every(c => !c.faceUp && E.definitionOf(c).set === 'kraven_traps')).toBe(true)
+    expect(E.zoneLabel(s, 'scenarioDeck')).toBe('deck Piège')
+    expect(logTexts(s).join('\n')).toContain('deck Piège de 16 cartes à côté du paquet Rencontre')
+  })
+
+  it('« attribuez-vous une carte PIÈGE » : face cachée devant l\'identité, retournée elle entre en jeu ; deck vide, rien', () => {
+    const s = kraven()
+    const trap = E.dealScenarioDeckCardToPlayer(s, L)
+    expect(trap).toMatchObject({ zone: 'table', faceUp: false, dealtToPlayer: true })
+    expect(E.definitionOf(trap).set).toBe('kraven_traps')
+    expect(E.cardsInZone(s, 'scenarioDeck')).toHaveLength(15)
+    E.flipCard(s, trap)
+    expect(trap.faceUp).toBe(true)
+    expect(trap.dealtToPlayer).toBeUndefined()
+    while (E.cardsInZone(s, 'scenarioDeck').length) E.dealScenarioDeckCardToPlayer(s, L)
+    expect(E.dealScenarioDeckCardToPlayer(s, L)).toBeNull()
+    // sans deck du scénario (Rhino), rien n'est attribué
+    expect(E.dealScenarioDeckCardToPlayer(game(), L)).toBeNull()
+  })
+
+  it('Kraven III révélé : une carte Piège pour vous, face cachée', () => {
+    const s = kraven({ expert: true })
+    expect(E.definitionOf(villain(s)).stage).toBe('II')
+    E.defeatVillain(s, villain(s), L)
+    expect(E.definitionOf(villain(s)).stage).toBe('III')
+    expect(E.cardsInZone(s, 'scenarioDeck')).toHaveLength(15)
+    expect(s.cards.filter(c => c.dealtToPlayer && E.definitionOf(c).set === 'kraven_traps')).toHaveLength(1)
+    expect(logTexts(s)).toContain('« Kraven le Chasseur » III, une fois révélé : vous recevez une carte Piège face cachée, posée devant votre identité.')
+  })
+})
+
 describe('jetons d\'entrée en jeu', () => {
   const named = (s, name) => s.cards.find(c => c.zone !== 'table' && E.cardName(c) === name)
 
@@ -1267,7 +1354,10 @@ describe('règles spéciales (rules.js)', () => {
     expect(Object.keys(SCENARIO_RULES).sort()).toEqual(SCENARIOS.map(v => v.id).sort())
     const missing = []
     const known = (id, t) => { if (!DEFINITION_BY_ID[id] || (t && DEFINITION_BY_ID[id].type !== t)) missing.push(`${id}${t ? ` (${t})` : ''}`) }
-    for (const r of Object.values(HERO_RULES)) if (r.setupCardId) known(r.setupCardId)
+    for (const r of [...Object.values(HERO_RULES), ...Object.values(IMPORTED_HERO_RULES)]) {
+      if (r.setupCard?.id) known(r.setupCard.id)
+      if (r.setupCard?.trait && !CARD_DEFINITIONS.some(d => d.type === r.setupCard.type && d.traits?.includes(r.setupCard.trait))) missing.push(r.setupCard.trait)
+    }
     for (const r of Object.values(SCENARIO_RULES)) {
       for (const step of r.setupSteps ?? []) if (step.definitionId) known(step.definitionId)
       for (const g of r.setAside ?? []) known(g)
@@ -1284,10 +1374,318 @@ describe('règles spéciales (rules.js)', () => {
       }
     }
     known(SHADOW_OF_THE_PAST_ID, 'treachery')
+    // les cartes qui commencent en jeu : par leur code MarvelCDB ; connues de la table pour ses héros
+    // startsInPlay : des codes, ou {code | codes, faceDown?, tokens?, tokenName?}
+    const startingCodes = r => (r.startsInPlay ?? []).flatMap(entry => (typeof entry === 'string' ? [entry] : entry.codes ?? [entry.code]))
+    for (const r of Object.values(HERO_RULES)) for (const code of startingCodes(r)) if (!DEFINITION_BY_CODE[code]) missing.push(code)
     expect(missing).toEqual([])
+    // les héros lus sur MarvelCDB ne sont pas ceux de la table ; leurs cartes, connues après l'import, ont un code valide
+    expect(Object.keys(IMPORTED_HERO_RULES).filter(id => HEROES.some(hero => hero.id === id))).toEqual([])
+    for (const r of Object.values(IMPORTED_HERO_RULES)) {
+      for (const code of [...startingCodes(r), ...(r.setupCard?.code ? [r.setupCard.code] : [])]) expect(code).toMatch(/^\d{5}[a-z]?$/)
+    }
     // every text is a sentence of its own
-    const texts = [...Object.values(HERO_RULES), ...Object.values(SCENARIO_RULES)].flatMap(r => [...(r.automated ?? []), ...(r.byHand ?? [])])
+    const texts = [...Object.values(HERO_RULES), ...Object.values(IMPORTED_HERO_RULES), ...Object.values(SCENARIO_RULES)]
+      .flatMap(r => [...(r.automated ?? []), ...(r.byHand ?? [])])
     expect(texts.filter(t => !/^[A-ZÀ-Ý«].*\.$/.test(t))).toEqual([])
+  })
+
+  it('Vision (lu sur MarvelCDB) commence avec Intangible en jeu, face A, hors du paquet et de la main', () => {
+    const imported = [
+      { id: 'cdb-26001a', code: '26001a', name: 'Vision', type: 'hero', faction: 'hero', set: 'vision', quantity: 1, hitPoints: 11, handSize: 5, backName: 'Vision', backType: 'alter_ego', backHandSize: 6 },
+      { id: 'cdb-26002', code: '26002', name: 'Intangible', type: 'upgrade', faction: 'hero', set: 'vision', quantity: 1, backName: 'Dense', backType: 'upgrade' }
+    ]
+    const s = game({ hero: 'vision', deckList: [['cdb-26001a', 1], ['cdb-26002', 1], ...PRECON_DECKS.spider_man.filter(([id]) => DEFINITION_BY_ID[id].faction !== 'hero')], importedDefinitions: imported })
+    const intangible = s.cards.filter(c => c.definitionId === 'cdb-26002')
+    expect(intangible).toHaveLength(1)
+    expect(intangible[0]).toMatchObject({ zone: 'table', side: 0, faceUp: true })
+    expect(E.cardName(intangible[0])).toBe('Intangible')
+    // à côté de l'identité, dans la rangée du héros
+    const identity = s.cards.find(c => c.isIdentity)
+    expect(Math.abs(intangible[0].y - identity.y)).toBeLessThan(L.cardWidth)
+    expect(E.cardsInZone(s, 'hand')).toHaveLength(6)
+    expect(s.mulliganTaken).toBe(false)
+    expect(logTexts(s).some(t => t.includes('« Intangible » en jeu (mise en place de Vision)'))).toBe(true)
+    // un autre héros n'a rien en jeu au départ
+    expect(E.cardsInZone(game(), 'table').filter(c => c.owner === 'player' && !c.isIdentity)).toEqual([])
+    expect(E.startingCardsInPlay(game())).toEqual([])
+    expect(E.startingCardsInPlay(s)).toEqual(intangible)
+  })
+
+  it('héros lus sur MarvelCDB : leurs cartes de mise en place commencent en jeu, sur la bonne face, avec leurs jetons', () => {
+    const basics = PRECON_DECKS.spider_man.filter(([id]) => DEFINITION_BY_ID[id].faction !== 'hero')
+    const identity = (set, code, name, backName) => ({ id: `cdb-${code}`, code, name, type: 'hero', faction: 'hero', set, quantity: 1, hitPoints: 11, handSize: 5, backName, backType: 'alter_ego', backHandSize: 6 })
+    const upgrade = (code, name, quantity = 1, extra = {}) => ({ id: `cdb-${code}`, code, name, type: 'upgrade', faction: 'hero', set: 'test', quantity, ...extra })
+    const heroGame = (heroCard, cards) => game({
+      hero: heroCard.set, deckList: [[heroCard.id, 1], ...cards.map(c => [c.id, c.quantity]), ...basics], importedDefinitions: [heroCard, ...cards]
+    })
+    const inPlay = (s, id) => s.cards.filter(c => c.definitionId === id && c.zone === 'table')
+
+    // Wolverine : ses Griffes, face visible
+    const wolverine = heroGame(identity('wolverine', '35001a', 'Wolverine', 'Logan'), [upgrade('35002', 'Griffes de Wolverine')])
+    expect(inPlay(wolverine, 'cdb-35002')).toMatchObject([{ faceUp: true, side: 0, tokens: 0 }])
+    expect(logTexts(wolverine).some(t => t.includes('et « Griffes de Wolverine » en jeu (mise en place de Wolverine)'))).toBe(true)
+    // Psylocke : ses 2 exemplaires, face Psi-Couteau
+    const psylocke = heroGame(identity('psylocke', '41001a', 'Psylocke', 'Betsy Braddock'),
+      [upgrade('41002a', 'Psi-Couteau', 2, { backName: 'Psi-Katana', backType: 'upgrade' })])
+    expect(inPlay(psylocke, 'cdb-41002a')).toHaveLength(2)
+    expect(inPlay(psylocke, 'cdb-41002a').every(c => c.faceUp && c.side === 0)).toBe(true)
+    expect(E.cardsInZone(psylocke, 'hand')).toHaveLength(6)
+    expect(logTexts(psylocke).some(t => t.includes('et 2 « Psi-Couteau » en jeu'))).toBe(true)
+    // Phénix : la Force Phénix, face Contenue, avec 4 jetons Pouvoir
+    const phoenix = heroGame(identity('phoenix', '34001a', 'Phénix', 'Jean Grey'),
+      [upgrade('34002a', 'Force Phénix', 1, { backName: 'Force Phénix', backType: 'upgrade' })])
+    expect(inPlay(phoenix, 'cdb-34002a')).toMatchObject([{ faceUp: true, side: 0, tokens: 4 }])
+    expect(logTexts(phoenix).some(t => t.includes('et « Force Phénix » avec 4 jetons Pouvoir en jeu'))).toBe(true)
+    // Spectrum : ses 3 formes d'énergie, face cachée ; « retourner » en révèle une
+    const forms = [upgrade('21002', 'Gamma'), upgrade('21003', 'Photon'), upgrade('21004', 'Pulsar')]
+    const spectrum = heroGame(identity('spectrum', '21001a', 'Spectrum', 'Monica Rambeau'), forms)
+    const formsInPlay = E.startingCardsInPlay(spectrum)
+    expect(formsInPlay.map(c => c.definitionId).sort()).toEqual(['cdb-21002', 'cdb-21003', 'cdb-21004'])
+    expect(formsInPlay.every(c => !c.faceUp)).toBe(true)
+    expect(logTexts(spectrum).some(t => t.includes('et « Gamma », « Photon » et « Pulsar » (face cachée) en jeu (mise en place de Spectrum)'))).toBe(true)
+    // le joueur voit leur face dans l'aperçu au survol, tant qu'elles sont face cachée sur la table
+    expect(formsInPlay.every(c => E.previewsFaceDownCard(spectrum, c))).toBe(true)
+    E.flipCard(spectrum, formsInPlay[0])
+    expect(formsInPlay[0].faceUp).toBe(true)
+    expect(E.previewsFaceDownCard(spectrum, formsInPlay[0])).toBe(false)
+    // les autres cartes face cachée, non : une carte Rencontre attribuée, les cartes d'un autre héros
+    E.dealEncounterCardToPlayer(spectrum, L)
+    expect(E.previewsFaceDownCard(spectrum, E.cardsInZone(spectrum, 'table').find(c => c.dealtToPlayer))).toBe(false)
+    expect(inPlay(psylocke, 'cdb-41002a').some(c => E.previewsFaceDownCard(psylocke, c))).toBe(false)
+    // la mise en place ne ferme pas le mulligan
+    for (const s of [wolverine, psylocke, phoenix, spectrum]) expect(s.mulliganTaken).toBe(false)
+  })
+
+  it('héros lus sur MarvelCDB : les cartes que leur identité met de côté vont dans la pile « De côté » du joueur', () => {
+    const basics = PRECON_DECKS.spider_man.filter(([id]) => DEFINITION_BY_ID[id].faction !== 'hero')
+    const identity = (set, code, name, backName) => ({ id: `cdb-${code}`, code, name, type: 'hero', faction: 'hero', set, quantity: 1, hitPoints: 12, handSize: 5, backName, backType: 'alter_ego', backHandSize: 6 })
+    const upgrade = (code, name, quantity = 1) => ({ id: `cdb-${code}`, code, name, type: 'upgrade', faction: 'hero', set: 'test', quantity })
+    const aside = s => E.cardsInZone(s, 'heroSetAside')
+
+    // Valkyrie : l'Aura de la Mort de son deck
+    const valkyrieCards = [identity('valk', '25001a', 'Valkyrie', 'Brunnhilde'), upgrade('25002', 'Aura de la Mort')]
+    const valkyrie = game({ hero: 'valk', deckList: [['cdb-25001a', 1], ['cdb-25002', 1], ...basics], importedDefinitions: valkyrieCards })
+    expect(E.heroPilesOf(valkyrie)).toMatchObject([{ zone: 'heroSetAside', label: 'De côté', faceDown: false, playsTop: false }])
+    expect(aside(valkyrie)).toMatchObject([{ definitionId: 'cdb-25002', faceUp: true, owner: 'player' }])
+    expect(valkyrie.cards.filter(c => c.definitionId === 'cdb-25002')).toHaveLength(1)
+    expect(E.cardsInZone(valkyrie, 'hand')).toHaveLength(6)
+    expect(valkyrie.mulliganTaken).toBe(false)
+    expect(logTexts(valkyrie).some(t => t.includes('et « Aura de la Mort » de côté (mise en place de Valkyrie)'))).toBe(true)
+    // jouée (glissée sur la table), puis « Mettre de côté » : elle revient dans sa pile, pas dans « De côté » de la Rencontre
+    const deathGlow = aside(valkyrie)[0]
+    E.takeFromPile(valkyrie, L, deathGlow, 'heroSetAside')
+    expect(deathGlow).toMatchObject({ zone: 'table', faceUp: true })
+    E.moveCard(valkyrie, deathGlow, 'setAside')
+    expect(deathGlow.zone).toBe('heroSetAside')
+    // une autre carte mise de côté va toujours dans « De côté » de la Rencontre
+    const other = E.cardsInZone(valkyrie, 'hand')[0]
+    E.moveCard(valkyrie, other, 'setAside')
+    expect(other.zone).toBe('setAside')
+
+    // Malicia : Touché
+    const rogueCards = [identity('rogue', '38001a', 'Malicia', 'Anna Marie'), upgrade('38002', 'Touché')]
+    const rogue = game({ hero: 'rogue', deckList: [['cdb-38001a', 1], ['cdb-38002', 1], ...basics], importedDefinitions: rogueCards })
+    expect(aside(rogue).map(c => c.definitionId)).toEqual(['cdb-38002'])
+
+    // Iceberg : 6 Pris Dans la Glace, absents du deck, créés par la mise en place et gardés avec la partie
+    const icemanCards = [identity('iceman', '46001a', 'Iceberg', 'Bobby Drake'), { ...upgrade('46002', 'Pris Dans la Glace', 6), set: 'iceman_frostbite' }]
+    const iceman = game({ hero: 'iceman', deckList: [['cdb-46001a', 1], ...basics], importedDefinitions: icemanCards })
+    expect(aside(iceman)).toHaveLength(6)
+    expect(aside(iceman).every(c => c.definitionId === 'cdb-46002' && c.faceUp)).toBe(true)
+    expect(E.cardsInZone(iceman, 'playerDeck').length + E.cardsInZone(iceman, 'hand').length).toBe(basics.reduce((n, [, q]) => n + q, 0))
+    expect(iceman.setup.importedDefinitions.map(d => d.id)).toContain('cdb-46002')
+    expect(logTexts(iceman).some(t => t.includes("et 6 « Pris Dans la Glace » de côté (mise en place d'Iceberg)"))).toBe(true)
+
+    expect(E.ofName('Iceberg')).toBe("d'Iceberg")
+    expect(E.ofName('Spider-Man')).toBe('de Spider-Man')
+    // h muet d'Hercule, h aspiré de Hulk
+    expect(E.ofName('Hercule')).toBe("d'Hercule")
+    expect(E.ofName('Hulk')).toBe('de Hulk')
+    // un héros sans cartes mises de côté n'a pas cette pile
+    expect(E.heroPilesOf(game())).toEqual([])
+    expect(aside(game())).toEqual([])
+  })
+
+  it('Tornade (lue sur MarvelCDB) : son deck Climat est sa pile du bandeau ; après le mulligan, elle choisit le soutien qui entre en jeu', () => {
+    const basics = PRECON_DECKS.spider_man.filter(([id]) => DEFINITION_BY_ID[id].faction !== 'hero')
+    const weather = (code, name) => ({ id: `cdb-${code}`, code, name, type: 'support', faction: 'hero', set: 'storm_weather_deck', quantity: 1 })
+    const stormCards = [
+      { id: 'cdb-36001a', code: '36001a', name: 'Tornade', type: 'hero', faction: 'hero', set: 'storm', quantity: 1, hitPoints: 10, handSize: 5, backName: 'Ororo Munroe', backType: 'alter_ego', backHandSize: 6 },
+      weather('36002', 'Ciel Dégagé'), weather('36003', 'Ouragan'), weather('36004', 'Orage'), weather('36005', 'Blizzard')
+    ]
+    // le deck Climat n'est pas dans la liste du deck : la mise en place crée ses 4 soutiens
+    const storm = game({ hero: 'storm', deckList: [['cdb-36001a', 1], ...basics], importedDefinitions: stormCards })
+    expect(E.heroPilesOf(storm).map(pile => pile.label)).toEqual(['Climat'])
+    const deck = E.cardsInZone(storm, 'heroSetAside')
+    expect(deck.map(c => E.cardName(c)).sort()).toEqual(['Blizzard', 'Ciel Dégagé', 'Orage', 'Ouragan'])
+    expect(E.identitySetupOf(storm)).toMatchObject({ alterEgoName: 'Ororo Munroe', label: 'un soutien Climat', fromText: 'du deck Climat', intoPlay: true, shufflesDeck: false })
+    const deckOrder = E.cardsInZone(storm, 'playerDeck').map(c => c.id)
+    E.mulligan(storm, L, [])
+    expect(storm.identitySetupChoice).toBe(true)
+    expect(E.identitySetupOf(storm).candidates).toHaveLength(4)
+    const thunderstorm = deck.find(c => E.cardName(c) === 'Orage')
+    expect(E.chooseIdentitySetupCard(storm, L, thunderstorm.id)).toBe(thunderstorm)
+    expect(thunderstorm).toMatchObject({ zone: 'table', faceUp: true, side: 0, threat: 0 })
+    // à côté de l'identité, dans la rangée du héros ; le paquet n'a pas été fouillé, ni mélangé
+    expect(Math.abs(thunderstorm.y - E.identityCard(storm).y)).toBeLessThan(L.cardWidth)
+    expect(E.cardsInZone(storm, 'playerDeck').map(c => c.id)).toEqual(deckOrder)
+    expect(E.cardsInZone(storm, 'heroSetAside')).toHaveLength(3)
+    expect(logTexts(storm).at(-1)).toBe("Mise en place d'Ororo Munroe : « Orage » entre en jeu.")
+    // Contrôle Climatique : un autre soutien en jeu, l'ancien rangé dans la pile (X)
+    E.takeFromPile(storm, L, E.cardsInZone(storm, 'heroSetAside').find(c => E.cardName(c) === 'Blizzard'), 'heroSetAside')
+    E.moveCard(storm, thunderstorm, 'setAside')
+    expect(E.cardsInZone(storm, 'heroSetAside').map(c => E.cardName(c)).sort()).toEqual(['Ciel Dégagé', 'Orage', 'Ouragan'])
+  })
+
+  it('Hercule et Daredevil (lus sur MarvelCDB) : leurs decks à part sont leurs piles du bandeau ; un clic joue la carte du dessus', () => {
+    const basics = PRECON_DECKS.spider_man.filter(([id]) => DEFINITION_BY_ID[id].faction !== 'hero')
+    const identity = (set, code, name, backName) => ({ id: `cdb-${code}`, code, name, type: 'hero', faction: 'hero', set, quantity: 1, hitPoints: 12, handSize: 5, backName, backType: 'alter_ego', backHandSize: 6 })
+    const card = (code, name, type, set) => ({ id: `cdb-${code}`, code, name, type, faction: 'hero', set, quantity: 1 })
+
+    // Hercule : Travaux et Dons, 3 cartes chacun, mélangés, face cachée
+    const herculesCards = [
+      identity('hercules', '59001a', 'Hercule', 'Hercule'),
+      card('59002', 'Vaincre l\'Hydre', 'attachment', 'hercules_labor_deck'), card('59003', 'Incarner le Pathos', 'attachment', 'hercules_labor_deck'),
+      card('59004', 'Protéger l\'Humanité', 'obligation', 'hercules_labor_deck'),
+      card('59005', 'Peau du Lion de Némée', 'upgrade', 'hercules_gift_deck'), card('59006', 'Bouclier de Persée', 'upgrade', 'hercules_gift_deck'),
+      card('59007', 'Épée de Pélée', 'upgrade', 'hercules_gift_deck')
+    ]
+    const hercules = game({ hero: 'hercules', deckList: [['cdb-59001a', 1], ...basics], importedDefinitions: herculesCards })
+    expect(E.heroPilesOf(hercules).map(({ zone, label, faceDown, playsTop }) => ({ zone, label, faceDown, playsTop }))).toEqual([
+      { zone: 'heroSetAside', label: 'Travaux', faceDown: true, playsTop: true },
+      { zone: 'heroSetAside2', label: 'Dons', faceDown: true, playsTop: true }
+    ])
+    const labors = E.cardsInZone(hercules, 'heroSetAside')
+    const gifts = E.cardsInZone(hercules, 'heroSetAside2')
+    expect(labors.map(c => c.definitionId).sort()).toEqual(['cdb-59002', 'cdb-59003', 'cdb-59004'])
+    expect(gifts.map(c => c.definitionId).sort()).toEqual(['cdb-59005', 'cdb-59006', 'cdb-59007'])
+    expect([...labors, ...gifts].every(c => !c.faceUp && c.owner === 'player')).toBe(true)
+    // l'obligation des Travaux n'est pas une obligation du paquet Rencontre
+    expect(E.cardsInZone(hercules, 'encounterDeck').some(c => c.definitionId === 'cdb-59004')).toBe(false)
+    expect(logTexts(hercules).some(t => t.includes("et le deck Travaux (3 cartes), le deck Dons (3 cartes) (mise en place d'Hercule)"))).toBe(true)
+    // Nouveaux Travaux d'Hercule : la carte du dessus est révélée, face visible, à côté de l'identité
+    const topLabor = labors.at(-1)
+    expect(E.playTopOfHeroPile(hercules, L, 'heroSetAside')).toBe(topLabor)
+    expect(topLabor).toMatchObject({ zone: 'table', faceUp: true })
+    expect(logTexts(hercules).at(-1)).toBe(`« ${E.cardName(topLabor)} » : deck Travaux → table.`)
+    expect(E.cardsInZone(hercules, 'heroSetAside')).toHaveLength(2)
+    // « Mettre de côté » la range dans son deck, face cachée
+    E.moveCard(hercules, topLabor, 'setAside')
+    expect(topLabor).toMatchObject({ zone: 'heroSetAside', faceUp: false })
+
+    // Daredevil : Sens, 5 cartes, mélangé, face visible ; une amélioration Sens qui quitte le jeu retourne dessous
+    const daredevilCards = [identity('daredevil', '60001a', 'Daredevil', 'Matt Murdock'),
+      ...['60002', '60003', '60004', '60005', '60006'].map((code, index) => card(code, `Sens ${index + 1}`, 'upgrade', 'daredevil_sense_deck'))]
+    const daredevil = game({ hero: 'daredevil', deckList: [['cdb-60001a', 1], ...basics], importedDefinitions: daredevilCards })
+    const senses = E.cardsInZone(daredevil, 'heroSetAside')
+    expect(senses).toHaveLength(5)
+    expect(senses.every(c => c.faceUp)).toBe(true)
+    expect(E.heroPilesOf(daredevil)).toMatchObject([{ label: 'Sens', faceDown: false, shuffled: true, playsTop: true, returnsUnder: true }])
+    const played = E.playTopOfHeroPile(daredevil, L, 'heroSetAside')
+    expect(played).toMatchObject({ zone: 'table', faceUp: true })
+    E.moveCard(daredevil, played, 'discard')
+    expect(played.zone).toBe('heroSetAside')
+    expect(E.cardsInZone(daredevil, 'heroSetAside')[0]).toBe(played)
+    expect(logTexts(daredevil).at(-1)).toBe(`« ${E.cardName(played)} » : table → sous le deck Sens.`)
+    // glissée sur le deck Sens (le pointeur la déplace dans sa zone) : dessous aussi, comme toute carte qu'on y glisse
+    const dragged = E.playTopOfHeroPile(daredevil, L, 'heroSetAside')
+    E.moveCard(daredevil, dragged, 'heroSetAside')
+    expect(E.cardsInZone(daredevil, 'heroSetAside')[0]).toBe(dragged)
+    const fromHand = E.cardsInZone(daredevil, 'hand')[0]
+    E.moveCard(daredevil, fromHand, 'heroSetAside')
+    expect(E.cardsInZone(daredevil, 'heroSetAside')[0]).toBe(fromHand)
+    E.moveCard(daredevil, fromHand, 'hand', {}, true)
+    // de la main aussi : elle quitte le jeu, elle retourne dessous ; mais prise du deck en main, non
+    const second = E.playTopOfHeroPile(daredevil, L, 'heroSetAside')
+    E.moveCard(daredevil, second, 'hand')
+    expect(E.cardsInZone(daredevil, 'heroSetAside')[0]).toBe(second)
+    // une pile qui ne joue pas sa carte du dessus (Valkyrie) ne fait rien au clic du moteur
+    expect(E.playTopOfHeroPile(game(), L, 'heroSetAside')).toBeNull()
+  })
+
+  it('Ironheart (lue sur MarvelCDB) : ses versions 2 et 3 attendent dans sa pile ; Level Up! remplace l\'identité par la suivante', () => {
+    const basics = PRECON_DECKS.spider_man.filter(([id]) => DEFINITION_BY_ID[id].faction !== 'hero')
+    const version = (code, handSize) => ({ id: `cdb-${code}`, code, name: 'Ironheart', type: 'hero', faction: 'hero', set: 'ironheart', quantity: 1, hitPoints: 10, handSize, backName: 'Riri Williams', backType: 'alter_ego', backHandSize: 6 })
+    // les versions 2 et 3 connues avant la version 1 : la partie prend quand même l'identité du deck
+    const ironheartCards = [version('29002a', 5), version('29003a', 6), version('29001a', 4)]
+    const ironheart = game({ hero: 'ironheart', deckList: [['cdb-29001a', 1], ...basics], importedDefinitions: ironheartCards })
+    const v1 = E.identityCard(ironheart)
+    expect(v1.definitionId).toBe('cdb-29001a')
+    expect(E.heroPilesOf(ironheart)).toMatchObject([{ label: 'Versions', isDeck: false }])
+    expect(logTexts(ironheart).some(t => t.includes("et la pile Versions (2 cartes) (mise en place d'Ironheart)"))).toBe(true)
+    expect(E.zoneLabel(ironheart, 'heroSetAside')).toBe('pile Versions')
+    expect(E.cardsInZone(ironheart, 'heroSetAside').map(c => c.definitionId).sort()).toEqual(['cdb-29002a', 'cdb-29003a'])
+    expect(E.nextIdentityVersion(ironheart)).toMatchObject({ version: 2, card: { definitionId: 'cdb-29002a' } })
+    // en héros, inclinée, avec des jetons de progrès et Tenace : la version 2 prend sa place, redressée
+    E.flipCard(ironheart, v1)
+    v1.exhausted = true
+    v1.tokens = 2
+    v1.tough = true
+    const { x, y } = v1
+    const v2 = E.levelUpIdentity(ironheart)
+    expect(v2).toMatchObject({ definitionId: 'cdb-29002a', zone: 'table', isIdentity: true, side: 0, exhausted: false, tokens: 2, tough: true, x, y })
+    expect(E.identityCard(ironheart)).toBe(v2)
+    expect(v1.zone).toBe('outOfGame')
+    expect(v1.isIdentity).toBeUndefined()
+    expect(E.handSize(ironheart)).toBe(5)
+    expect(logTexts(ironheart).at(-1)).toBe('Level Up! : la version 2 remplace la version 1, sur sa face héros (Ironheart (héros)), redressée.')
+    // puis la version 3, et plus rien après
+    expect(E.nextIdentityVersion(ironheart)).toMatchObject({ version: 3 })
+    expect(E.levelUpIdentity(ironheart).definitionId).toBe('cdb-29003a')
+    expect(E.handSize(ironheart)).toBe(6)
+    expect(E.nextIdentityVersion(ironheart)).toBeNull()
+    expect(E.levelUpIdentity(ironheart)).toBeNull()
+    expect(E.cardsInZone(ironheart, 'heroSetAside')).toEqual([])
+    // un héros sans versions n'en a pas
+    expect(E.nextIdentityVersion(game())).toBeNull()
+  })
+
+  it('Deadpool (lu sur MarvelCDB) : sous forme de héros, tombé à 0 PV, il n\'est pas battu ; en alter ego, si', () => {
+    const basics = PRECON_DECKS.spider_man.filter(([id]) => DEFINITION_BY_ID[id].faction !== 'hero')
+    const deadpoolCards = [{ id: 'cdb-44001a', code: '44001a', name: 'Deadpool', type: 'hero', faction: 'hero', set: 'deadpool', quantity: 1, hitPoints: 14, handSize: 5, backName: 'Wade Wilson', backType: 'alter_ego', backHandSize: 6 }]
+    const deadpool = game({ hero: 'deadpool', deckList: [['cdb-44001a', 1], ...basics], importedDefinitions: deadpoolCards })
+    const identity = E.identityCard(deadpool)
+    E.flipCard(deadpool, identity)
+    expect(E.isAlterEgo(identity)).toBe(false)
+    // tombé à 0 PV en héros : 1 PV, alter ego, 1 pion Accélération ; la fenêtre l'explique
+    const result = E.addDamage(deadpool, identity, 20)
+    expect(result).toEqual({ kind: 'heroRegenerates', fromCardId: identity.id, text: 'Deadpool n\'est pas mort !', accelerationTokens: 1 })
+    expect(deadpool.counters[0].value).toBe(1)
+    expect(E.isAlterEgo(identity)).toBe(true)
+    expect(deadpool.accelerationTokens).toBe(1)
+    expect(logTexts(deadpool).at(-1)).toBe('Deadpool tombe à 0 PV mais n\'est pas battu (Le Dégénéré qui Régénère) : 1 PV, alter ego (Wade Wilson), pion Accélération 1 sur la manigance principale.')
+    // en alter ego, il est battu comme un autre héros
+    expect(E.addDamage(deadpool, identity, 1)).toMatchObject({ kind: 'heroDefeat' })
+    // un autre héros, sous forme de héros, est battu
+    const other = game()
+    E.flipCard(other, E.identityCard(other))
+    expect(E.addDamage(other, E.identityCard(other), 99)).toMatchObject({ kind: 'heroDefeat' })
+    expect(other.accelerationTokens).toBe(0)
+  })
+
+  it('Magik et Faucon (lus sur MarvelCDB) : sous forme de héros, la carte du dessus de leur pioche se montre', () => {
+    const basics = PRECON_DECKS.spider_man.filter(([id]) => DEFINITION_BY_ID[id].faction !== 'hero')
+    const identity = (set, code, name, backName) => ({ id: `cdb-${code}`, code, name, type: 'hero', faction: 'hero', set, quantity: 1, hitPoints: 10, handSize: 5, backName, backType: 'alter_ego', backHandSize: 6 })
+    // Magik : son paquet, sous forme de héros seulement ; l'état de la carte ne change pas
+    const magik = game({ hero: 'magik', deckList: [['cdb-45030a', 1], ...basics], importedDefinitions: [identity('magik', '45030a', 'Magik', 'Illyana Rasputin')] })
+    expect(E.showsTopCardOf(magik, 'playerDeck')).toBe(false)
+    E.flipCard(magik, E.identityCard(magik))
+    expect(E.showsTopCardOf(magik, 'playerDeck')).toBe(true)
+    expect(E.showsTopCardOf(magik, 'encounterDeck')).toBe(false)
+    expect(E.cardsInZone(magik, 'playerDeck').at(-1).faceUp).toBe(false)
+    // Faucon : le paquet Rencontre, sous forme de héros, pendant la phase du joueur
+    const falcon = game({ hero: 'falcon', deckList: [['cdb-53001a', 1], ...basics], importedDefinitions: [identity('falcon', '53001a', 'Faucon', 'Sam Wilson')] })
+    E.flipCard(falcon, E.identityCard(falcon))
+    expect(E.showsTopCardOf(falcon, 'encounterDeck')).toBe(true)
+    expect(E.showsTopCardOf(falcon, 'playerDeck')).toBe(false)
+    E.mulligan(falcon, L, [])
+    E.startVillainPhase(falcon, L)
+    expect(E.showsTopCardOf(falcon, 'encounterDeck')).toBe(false)
+    // un autre héros ne montre rien
+    const other = game()
+    E.flipCard(other, E.identityCard(other))
+    expect(E.showsTopCardOf(other, 'playerDeck')).toBe(false)
   })
 
   it('Klaw : Réseau de Défense révélée à la mise en place ; Ultron : Drones d\'Ultron en jeu', () => {
@@ -1420,9 +1818,123 @@ describe('règles spéciales (rules.js)', () => {
     expect(msgs(s).at(-1)).toContain('placez 1 menace sur chaque manigance annexe')
   })
 
-  it('T\'Challa : sa mise en place rappelée au journal', () => {
+  it('T\'Challa : après le mulligan, il choisit une amélioration Black Panther de son paquet, qui rejoint sa main', () => {
+    const isBlackPantherUpgrade = c => E.definitionOf(c).type === 'upgrade' && !!E.definitionOf(c).traits?.includes('black panther')
     const panther = game({ hero: 'black_panther', deckList: PRECON_DECKS.black_panther })
-    expect(msgs(panther).at(-1)).toMatch(/^Mise en place de T'Challa, après le mulligan : cherchez une amélioration Black Panther/)
+    keepOutOfHand(panther, isBlackPantherUpgrade)
+    expect(E.identitySetupOf(panther)).toMatchObject({ alterEgoName: 'T\'Challa', label: 'une amélioration Black Panther' })
+    expect(E.identitySetupOf(panther).candidates).toHaveLength(4)
+    E.mulligan(panther, L, E.cardsInZone(panther, 'hand').slice(0, 1).map(c => c.id))
+    expect(msgs(panther).at(-1)).toMatch(/^Mulligan : 1 carte défaussée/)
+    // several upgrades in the deck: the player chooses
+    expect(panther.identitySetupChoice).toBe(true)
+    const candidates = E.identitySetupOf(panther).candidates
+    expect(candidates.length).toBeGreaterThan(1)
+    expect(candidates.every(c => c.zone === 'playerDeck' && isBlackPantherUpgrade(c))).toBe(true)
+    const handCount = E.cardsInZone(panther, 'hand').length
+    expect(E.chooseIdentitySetupCard(panther, L, E.cardsInZone(panther, 'hand')[0].id)).toBeNull()
+    const chosen = candidates[1]
+    expect(E.chooseIdentitySetupCard(panther, L, chosen.id)).toBe(chosen)
+    expect(chosen.zone).toBe('hand')
+    expect(E.cardsInZone(panther, 'hand')).toHaveLength(handCount + 1)
+    expect(panther.identitySetupChoice).toBeUndefined()
+    expect(msgs(panther).at(-1)).toBe(`Mise en place de T'Challa : « ${E.cardName(chosen)} » rejoint votre main ; le paquet est mélangé.`)
+    // only once
+    expect(E.chooseIdentitySetupCard(panther, L, candidates[0].id)).toBeNull()
+    // a single upgrade left in the deck: taken without asking
+    const lone = game({ hero: 'black_panther', deckList: PRECON_DECKS.black_panther })
+    const upgrades = lone.cards.filter(isBlackPantherUpgrade)
+    for (const c of upgrades.slice(1)) E.moveCard(lone, c, 'outOfGame', {}, true)
+    keepOutOfHand(lone, isBlackPantherUpgrade)
+    E.mulligan(lone, L, [])
+    expect(lone.identitySetupChoice).toBeUndefined()
+    expect(upgrades[0].zone).toBe('hand')
+  })
+
+  it('Star-Lord et Colossus (lus sur MarvelCDB) : leur carte de mise en place rejoint la main après le mulligan', () => {
+    const basics = PRECON_DECKS.spider_man.filter(([id]) => DEFINITION_BY_ID[id].faction !== 'hero')
+    const starLordCards = [
+      { id: 'cdb-17001a', code: '17001a', name: 'Star-Lord', type: 'hero', faction: 'hero', set: 'stld', quantity: 1, hitPoints: 10, handSize: 5, backName: 'Peter Quill', backType: 'alter_ego', backHandSize: 6 },
+      { id: 'cdb-17007', code: '17007', name: 'Pistolet Élémentaire', type: 'upgrade', faction: 'hero', set: 'stld', quantity: 2 }
+    ]
+    const isGun = c => c.definitionId === 'cdb-17007'
+    const starLord = game({ hero: 'stld', deckList: [['cdb-17001a', 1], ['cdb-17007', 2], ...basics], importedDefinitions: starLordCards })
+    keepOutOfHand(starLord, isGun)
+    E.mulligan(starLord, L, [])
+    expect(E.cardsInZone(starLord, 'hand').filter(isGun)).toHaveLength(1)
+    expect(E.cardsInZone(starLord, 'hand')).toHaveLength(7)
+    expect(msgs(starLord).at(-1)).toBe('Mise en place de Peter Quill : « Pistolet Élémentaire » rejoint votre main ; le paquet est mélangé.')
+    // the other copy, even if one was drawn; and from the discard pile too
+    const drawn = game({ hero: 'stld', deckList: [['cdb-17001a', 1], ['cdb-17007', 2], ...basics], importedDefinitions: starLordCards })
+    keepOutOfHand(drawn, isGun)
+    const guns = drawn.cards.filter(isGun)
+    E.moveCard(drawn, E.cardsInZone(drawn, 'hand')[0], 'playerDeck', {}, true)
+    E.moveCard(drawn, guns[0], 'hand', {}, true)
+    E.mulligan(drawn, L, [guns[0].id])
+    expect(guns.filter(c => c.zone === 'hand')).toHaveLength(1)
+
+    const colossusCards = [
+      { id: 'cdb-32001a', code: '32001a', name: 'Colossus', type: 'hero', faction: 'hero', set: 'colossus', quantity: 1, hitPoints: 13, handSize: 5, backName: 'Piotr Rasputin', backType: 'alter_ego', backHandSize: 6 },
+      { id: 'cdb-32006', code: '32006', name: 'Acier Organique', type: 'upgrade', faction: 'hero', set: 'colossus', quantity: 2 }
+    ]
+    const isSteel = c => c.definitionId === 'cdb-32006'
+    const colossus = game({ hero: 'colossus', deckList: [['cdb-32001a', 1], ['cdb-32006', 2], ...basics], importedDefinitions: colossusCards })
+    keepOutOfHand(colossus, isSteel)
+    E.mulligan(colossus, L, [])
+    expect(E.cardsInZone(colossus, 'hand').filter(isSteel)).toHaveLength(1)
+    expect(msgs(colossus).at(-1)).toBe('Mise en place de Piotr Rasputin : « Acier Organique » rejoint votre main ; le paquet est mélangé.')
+    // the deck only: both copies discarded at the mulligan stay in the discard pile
+    const steelDiscarded = game({ hero: 'colossus', deckList: [['cdb-32001a', 1], ['cdb-32006', 2], ...basics], importedDefinitions: colossusCards })
+    keepOutOfHand(steelDiscarded, isSteel)
+    for (const steel of steelDiscarded.cards.filter(isSteel)) {
+      E.moveCard(steelDiscarded, E.cardsInZone(steelDiscarded, 'hand')[0], 'playerDeck', {}, true)
+      E.moveCard(steelDiscarded, steel, 'hand', {}, true)
+    }
+    E.mulligan(steelDiscarded, L, steelDiscarded.cards.filter(isSteel).map(c => c.id))
+    expect(steelDiscarded.cards.filter(isSteel).every(c => c.zone === 'playerDiscard')).toBe(true)
+    expect(E.cardsInZone(steelDiscarded, 'hand')).toHaveLength(6)
+  })
+
+  it('Cable (lu sur MarvelCDB) : après le mulligan, il choisit une manigance annexe de joueur, qui entre en jeu avec sa menace', () => {
+    const basics = PRECON_DECKS.spider_man.filter(([id]) => DEFINITION_BY_ID[id].faction !== 'hero')
+    const sideScheme = (code, name, faction, startingThreat) => ({ id: `cdb-${code}`, code, name, type: 'side_scheme', faction, set: '', quantity: 1, landscape: true, startingThreat })
+    const cableCards = [
+      { id: 'cdb-40001a', code: '40001a', name: 'Cable', type: 'hero', faction: 'hero', set: 'cable', quantity: 1, hitPoints: 13, handSize: 5, backName: 'Nathan Summers', backType: 'alter_ego', backHandSize: 6 },
+      sideScheme('40006', 'Technovirus Purge', 'hero', 5),
+      sideScheme('40019', 'Lock and Load', 'aggression', 2)
+    ]
+    const isPlayerScheme = c => E.definitionOf(c).type === 'side_scheme'
+    const cableGame = () => game({ hero: 'cable', deckList: [['cdb-40001a', 1], ['cdb-40006', 1], ['cdb-40019', 1], ...basics], importedDefinitions: cableCards })
+    const cable = cableGame()
+    keepOutOfHand(cable, isPlayerScheme)
+    expect(E.identitySetupOf(cable)).toMatchObject({ alterEgoName: 'Nathan Summers', label: 'une manigance annexe de joueur', fromDiscard: true, intoPlay: true })
+    E.mulligan(cable, L, [])
+    // deux manigances : le joueur choisit
+    expect(cable.identitySetupChoice).toBe(true)
+    const candidates = E.identitySetupOf(cable).candidates
+    expect(candidates.map(c => c.definitionId).sort()).toEqual(['cdb-40006', 'cdb-40019'])
+    const lockAndLoad = candidates.find(c => c.definitionId === 'cdb-40019')
+    expect(E.chooseIdentitySetupCard(cable, L, lockAndLoad.id)).toBe(lockAndLoad)
+    expect(lockAndLoad).toMatchObject({ zone: 'table', faceUp: true, side: 0, threat: 2 })
+    expect(E.cardsInZone(cable, 'hand')).toHaveLength(6)
+    expect(cable.identitySetupChoice).toBeUndefined()
+    expect(logTexts(cable).at(-1)).toBe('Mise en place de Nathan Summers : « Lock and Load » entre en jeu avec 2 menaces ; le paquet est mélangé.')
+    // une seule dans le paquet, l'autre défaussée au mulligan : la défausse compte aussi, le joueur choisit encore
+    const discarded = cableGame()
+    keepOutOfHand(discarded, isPlayerScheme)
+    const purge = discarded.cards.find(c => c.definitionId === 'cdb-40006')
+    E.moveCard(discarded, E.cardsInZone(discarded, 'hand')[0], 'playerDeck', {}, true)
+    E.moveCard(discarded, purge, 'hand', {}, true)
+    E.mulligan(discarded, L, [purge.id])
+    expect(E.identitySetupOf(discarded).candidates).toContain(purge)
+    expect(E.chooseIdentitySetupCard(discarded, L, purge.id)).toBe(purge)
+    expect(purge).toMatchObject({ zone: 'table', threat: 5 })
+    // une seule possible : elle entre en jeu sans question
+    const lone = game({ hero: 'cable', deckList: [['cdb-40001a', 1], ['cdb-40019', 1], ...basics], importedDefinitions: cableCards })
+    keepOutOfHand(lone, isPlayerScheme)
+    E.mulligan(lone, L, [])
+    expect(lone.identitySetupChoice).toBeUndefined()
+    expect(lone.cards.find(c => c.definitionId === 'cdb-40019')).toMatchObject({ zone: 'table', threat: 2 })
   })
 
   it('Iron Man : +1 taille de main par amélioration Tech sur la table, sous forme de héros, 7 au plus', () => {
@@ -1838,7 +2350,8 @@ Allies
 
 describe('deck MarvelCDB (API)', () => {
   it('chaque carte a son propre code MarvelCDB : numéro de boîte, numéro de carte, face', () => {
-    const local = CARD_DEFINITIONS.filter(d => d.pack !== 'marvelcdb')
+    // les cartes fan-made (Kraven) ne sont pas sur MarvelCDB : elles n'ont pas de code
+    const local = CARD_DEFINITIONS.filter(d => d.pack !== 'marvelcdb' && d.pack !== 'kraven')
     // every card is reached (no code shadows another); a reprint may answer to a second code (orig)
     expect(new Set(Object.values(DEFINITION_BY_CODE).filter(d => d.pack !== 'marvelcdb')).size).toBe(local.length)
     expect(DEFINITION_BY_CODE['01043a'].name).toBe('Wakanda Éternel !')
@@ -1861,7 +2374,8 @@ describe('deck MarvelCDB (API)', () => {
   })
 
   it('héros absent de la table : pas d\'identité', () => {
-    expect(E.parseMarvelCdbDeck({ name: 'A', hero_code: '17001a', slots: { '01088': 1 } }).hero).toBeNull() // Star-Lord
+    // Venom : aucun test ne lit ses cartes (Star-Lord et Colossus y sont lus pour leur mise en place)
+    expect(E.parseMarvelCdbDeck({ name: 'A', hero_code: '20001a', slots: { '01088': 1 } }).hero).toBeNull()
   })
 })
 
@@ -1871,8 +2385,11 @@ describe('manigances annexes : 1 menace de plus par héros, une fois révélées
   it('les manigances annexes dont l\'« Une fois révélée » ajoute 1 menace par héros', () => {
     const extra = CARD_DEFINITIONS.filter(d => d.extraThreatPerHero)
     expect(extra.every(d => d.type === 'side_scheme' && d.extraThreatPerHero === 1)).toBe(true)
-    expect(extra.map(d => d.code).sort()).toEqual(['01107', '01109', '01125', '01126', '01161', '01171', '01176', '27', '55'])
+    expect(extra.map(d => d.id).filter(id => !/^krv-/.test(id)).map(id => DEFINITION_BY_ID[id].code).sort())
+      .toEqual(['01107', '01109', '01125', '01126', '01161', '01171', '01176', '27', '55'])
     expect(extra.map(d => d.name)).toEqual(expect.arrayContaining(['Réseau de Défense', 'Casser et Emporter', 'Tueur à Louer', 'Les Ambitions de la Vipère']))
+    // Kraven (fan-made) : Le Sérum de Calypso et Gaz Toxique
+    expect(extra.filter(d => d.pack === 'kraven').map(d => d.name)).toEqual(['Le Sérum de Calypso', 'Gaz Toxique'])
   })
 
   it('révélée, reprise de la défausse ou retournée face visible : sa menace de départ plus 1', () => {
