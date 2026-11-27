@@ -1,10 +1,11 @@
 <script setup>
-// La fenêtre d'une pile (paquet, défausse, « De côté », decks Invocation et du scénario) : toutes ses cartes,
-// face visible et debout, du dessus vers le dessous. Toutes se regardent de la même façon : un clic
-// sélectionne la carte et l'agrandit dans la colonne de droite, visible par-dessus la fenêtre (BaseModal ;
-// sur téléphone, au-dessus des cartes), comme dans la main ; le clic droit ou l'appui long ouvre son menu
-// par-dessus la fenêtre, qui reste ouverte (la prendre en main, la mettre en jeu…). Fouiller une pioche la
-// mélange à la fermeture ; une défausse du joueur ou Rencontre se remélange dans son paquet.
+// La fenêtre d'une pile (paquet, défausse, « De côté », decks Invocation et du scénario, défausse du deck
+// Piège) : toutes ses cartes, face visible et debout, du dessus vers le dessous. Toutes se regardent de la
+// même façon : un clic sélectionne la carte et l'agrandit dans la colonne de droite, visible par-dessus la
+// fenêtre (BaseModal ; sur téléphone, au-dessus des cartes), comme dans la main ; le clic droit ou l'appui
+// long ouvre son menu par-dessus la fenêtre, qui reste ouverte (la prendre en main, la mettre en jeu…).
+// Fouiller une pioche la mélange à la fermeture ; une défausse du joueur, Rencontre ou Piège se remélange
+// dans son paquet.
 import { computed, onBeforeUnmount } from 'vue'
 import BaseModal from './BaseModal.vue'
 import GameCard, { printedCard } from '../GameCard.vue'
@@ -43,7 +44,8 @@ const MENU_HINTS = {
   heroSetAside2: 'la poser sur la table',
   invocationDeck: 'la poser sur la table',
   invocationDiscard: 'la poser sur la table, la remettre sur le deck',
-  scenarioDeck: 'la mettre en jeu'
+  scenarioDeck: 'la mettre en jeu',
+  scenarioDiscard: 'la remettre en jeu'
 }
 /** Ce que montre la pile, avant le mode d'emploi. */
 const HELP_START = {
@@ -62,6 +64,13 @@ const helpText = computed(() => {
   return `${start}Clic : agrandir la carte. Clic droit ou appui long : ${MENU_HINTS[props.zone] ?? 'ses actions'}, autres choix.${shuffled}`
 })
 
+/** Le bouton « Remélanger » d'une défausse, selon son paquet. */
+const RESHUFFLE_LABELS = computed(() => ({
+  playerDiscard: 'Remélanger dans le paquet…',
+  encounterDiscard: 'Remélanger dans le paquet Rencontre…',
+  scenarioDiscard: `Remélanger dans le deck ${gameStore.scenarioDeck?.name ?? ''}…`
+}))
+
 /** Les cartes de la pile, du dessus vers le dessous. */
 const cards = computed(() => gameStore.pileOf(props.zone).slice().reverse())
 // le deck propre au scénario prend le nom du scénario (Armes Expérimentales, Manigance Annexe) ; la pile du
@@ -69,6 +78,7 @@ const cards = computed(() => gameStore.pileOf(props.zone).slice().reverse())
 const title = computed(() => {
   let name = TITLES[props.zone]
   if (props.zone === 'scenarioDeck') name = `Chercher dans le deck ${gameStore.scenarioDeck?.name ?? ''}`
+  else if (props.zone === 'scenarioDiscard') name = `Défausse ${gameStore.scenarioDeck?.name ?? ''}`
   else {
     const heroPile = gameStore.heroPiles.find(pile => pile.zone === props.zone)
     if (heroPile && heroPile.label !== 'De côté') name = `${heroPile.isDeck ? 'Deck' : 'Pile'} ${heroPile.label}`
@@ -125,10 +135,10 @@ onBeforeUnmount(() => { if (DECK_PILES.includes(props.zone)) gameStore.shuffleAf
       </div>
     </div>
     <template #actions>
-      <!-- défausse du joueur ou Rencontre : tout remélanger dans le paquet, après confirmation (ReshuffleModal) -->
+      <!-- défausse du joueur, Rencontre ou Piège : tout remélanger dans son paquet, après confirmation (ReshuffleModal) -->
       <template v-if="DECK_OF_DISCARD[zone]">
         <button type="button" class="modal-btn" :disabled="!cards.length" @click="ui.openModal('reshuffle', { zone, fromPile: true })">
-          Remélanger dans le paquet{{ zone === 'encounterDiscard' ? ' Rencontre' : '' }}…
+          {{ RESHUFFLE_LABELS[zone] }}
         </button>
         <span class="sp" />
       </template>

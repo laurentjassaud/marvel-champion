@@ -6,7 +6,8 @@
 // au-dessus du nom. Une case vide (filler) complète la rangée, comme sur la maquette.
 // Le nom et le détail ne s'affichent pas dans la case : la fenêtre les montre au pied quand on la survole ou
 // qu'elle a le focus ; ils sont dans l'aria-label pour les lecteurs d'écran. Un scénario ou un set fait par des
-// fans porte un badge « Fan-made » au pied de son portrait.
+// fans porte un badge « Fan-made » au pied de son portrait. Un choix qui se prépare (busy : un précon lu sur
+// MarvelCDB) estompe son portrait sous un anneau qui tourne.
 import { cropStyle } from './portraits.js'
 
 defineProps({
@@ -25,6 +26,8 @@ defineProps({
   fanMade: Boolean,
   /** Case spéciale : une action plutôt qu'un portrait (tirer au hasard). */
   special: Boolean,
+  /** Son choix se prépare (un précon lu sur MarvelCDB) : le portrait s'estompe sous un anneau qui tourne. */
+  busy: Boolean,
   /** Case vide, qui complète la grille : ni bouton, ni contenu. */
   filler: Boolean
 })
@@ -33,12 +36,14 @@ defineEmits(['pick'])
 
 <template>
   <span v-if="filler" class="choice filler" aria-hidden="true" />
-  <button v-else type="button" class="choice" :class="{ selected, special }" :aria-pressed="selected"
+  <button v-else type="button" class="choice" :class="{ selected, special, busy }" :aria-pressed="selected" :aria-busy="busy || undefined"
     :aria-label="[label, detail, advised ? 'conseillé' : '', fanMade ? 'fan-made' : ''].filter(Boolean).join(', ')" @click="$emit('pick')">
     <span class="thumb">
       <span v-if="special" class="special-label" aria-hidden="true"><slot />{{ label }}</span>
-      <img v-else-if="imageUrl" :src="imageUrl" :style="cropStyle(crop)" alt="" draggable="false">
+      <!-- lazy : dans une grille qui défile (les précons), seuls les portraits en vue se chargent -->
+      <img v-else-if="imageUrl" :src="imageUrl" :style="cropStyle(crop)" alt="" draggable="false" loading="lazy" decoding="async">
       <span v-if="fanMade" class="fan-made" aria-hidden="true">Fan-made</span>
+      <span v-if="busy" class="spinner" aria-hidden="true" />
     </span>
     <span v-if="advised" class="advised" aria-hidden="true">★</span>
   </button>
@@ -74,7 +79,10 @@ defineEmits(['pick'])
   box-shadow: 0 0 0 2px rgb(0 0 0 / .45);
   transition: transform 160ms var(--ease-out), border-color 150ms ease;
 }
-.thumb img { position: absolute; max-width: none; transition: filter 150ms ease; }
+/* aspect-ratio : avant son chargement, l'image a déjà la forme d'une carte debout (394 × 560), puis la sienne
+   (auto). Sans elle, une image pas encore chargée (lazy) n'a pas de hauteur : remontée par son cadrage, elle
+   sortirait de la grille qui défile, et le navigateur, la croyant hors de vue, ne la chargerait jamais */
+.thumb img { position: absolute; max-width: none; aspect-ratio: auto 394 / 560; transition: filter 150ms ease; }
 /* case spéciale : le carré violet, son nom en blanc, ombré */
 .special .thumb {
   background: #3f4079;
@@ -106,6 +114,18 @@ defineEmits(['pick'])
   background: rgb(13 16 37 / .82); border-top: 1px solid #c2c3fd;
   font: italic 500 max(10px, calc(11 * var(--su)))/1 var(--font-display); letter-spacing: .04em;
   text-transform: uppercase; color: #c2c3fd;
+}
+
+/* en préparation : le portrait estompé, un anneau lavande qui tourne au milieu */
+.busy .thumb img { filter: brightness(.45); }
+.spinner {
+  position: absolute; width: calc(28 * var(--su)); height: calc(28 * var(--su)); border-radius: 50%;
+  border: 3px solid rgb(194 195 253 / .25); border-top-color: #c2c3fd;
+  animation: portrait-spin 800ms linear infinite;
+}
+@keyframes portrait-spin { to { transform: rotate(1turn); } }
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation-duration: 2400ms; }
 }
 
 @media (hover: hover) and (pointer: fine) {

@@ -4,6 +4,7 @@
 // continu pour que le moteur place les cartes (ui.layout).
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import GameCard from './GameCard.vue'
+import CardCounterSteps from './CardCounterSteps.vue'
 import { useGameStore } from '../stores/game.js'
 import { useUiStore } from '../stores/ui.js'
 
@@ -11,6 +12,11 @@ const gameStore = useGameStore()
 const ui = useUiStore()
 const tableElement = ref(null)
 const tableCards = computed(() => gameStore.cardsIn('table'))
+/** La carte sélectionnée, si elle est sur la table (pas un pion) : ses boutons + et − (CardCounterSteps). */
+const selectedTableCard = computed(() => {
+  const card = gameStore.cardById(ui.selectedCardId)
+  return card?.zone === 'table' && !card.isPawn ? card : null
+})
 
 let resizeObserver
 /** Mesure la table et donne sa taille à l'interface. */
@@ -27,9 +33,9 @@ onMounted(() => {
 onBeforeUnmount(() => resizeObserver?.disconnect())
 watch(() => ui.cardWidth, () => gameStore.keepCardsOnTable())
 
-/** Un appui sur la table hors d'une carte retire la sélection. */
+/** Un appui sur la table hors d'une carte (et hors des boutons + et − de la carte sélectionnée) retire la sélection. */
 function onPointerDown(event) {
-  if (!event.target.closest('.card')) ui.selectCard(null)
+  if (!event.target.closest('.card, .card-steps')) ui.selectCard(null)
 }
 </script>
 
@@ -44,12 +50,14 @@ function onPointerDown(event) {
     @pointerdown="onPointerDown"
   >
     <GameCard v-for="card in tableCards" :key="card.id" :card="card" positioned />
+    <CardCounterSteps v-if="selectedTableCard" :key="selectedTableCard.id" :card="selectedTableCard" />
   </section>
 </template>
 
 <style scoped>
-/* isolation : les cartes empilées (z-index de plus en plus grands) restent sous les PV du méchant (VillainHud) */
-.table { position: relative; isolation: isolate; overflow: hidden; touch-action: none; min-height: 0; }
+/* isolation : les cartes empilées (z-index de plus en plus grands) restent sous la ligne des PV du méchant et la
+   menace (VillainHud, z-index 2) ; z-index 1 : elles passent au-dessus du nom du méchant, qui n'en a pas */
+.table { position: relative; z-index: 1; isolation: isolate; overflow: hidden; touch-action: none; min-height: 0; }
 /* mise en place : les cartes arrivent de leur paquet, hors de la table (useDealAnimation) */
 .table.dealing { overflow: visible; }
 /* incliner une carte la fait pivoter sur place */

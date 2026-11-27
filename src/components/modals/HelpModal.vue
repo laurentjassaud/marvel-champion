@@ -8,7 +8,7 @@ const ui = useUiStore()
 const SHORTCUT_GROUPS = [
   { title: 'Dégâts, menace, jetons', rows: [['G', 'Dégât +1'], ['⇧ G', 'Dégât −1 (soin)'], ['M', 'Menace +1'], ['⇧ M', 'Menace −1 (contrecarrer)'], ['J', 'Jeton +1'], ['⇧ J', 'Jeton −1']] },
   { title: 'Partie', rows: [['D', 'Piocher'], ['V', 'Phase du méchant (fin de votre phase)'], ['N', 'Phase du héros (tour suivant)'], ['E', 'Révéler une carte Rencontre'], ['I', 'Lancer l\'invocation (Docteur Strange)'], ['?', 'Afficher cette aide']] },
-  { title: 'Carte', rows: [['T', 'Incliner / redresser'], ['F', 'Retourner, changer de forme'], ['H', 'Prendre en main'], ['X', 'Mettre de côté'], ['Suppr', 'Défausser'], ['Entrée', 'Jouer depuis la main'], ['Échap', 'Fermer menu ou fenêtre']] }
+  { title: 'Carte', rows: [['T', 'Incliner / redresser'], ['F', 'Retourner, changer de forme'], ['H', 'Prendre en main'], ['X', 'Mettre de côté'], ['Suppr', 'Défausser'], ['Entrée', 'Jouer depuis la main'], ['Échap', 'Fermer menu ou fenêtre, désélectionner']] }
 ]
 </script>
 
@@ -35,6 +35,12 @@ const SHORTCUT_GROUPS = [
         </template>
       </div>
     </div>
+    <!-- le lasso (usePointer) : ce n'est pas un raccourci, mais T, H, X et Suppr s'y appliquent -->
+    <p class="note">Plusieurs cartes à la fois : glissez sur la table, hors des cartes, pour les entourer (lasso). Le groupe se
+      glisse d'un bloc, sur la table ou dans une défausse ; T, H, X, Suppr et le clic droit agissent sur toutes ses cartes.
+      Un allié, un sbire, une manigance ou une carte à jetons sélectionnés ont leurs boutons + et − à côté d'eux : les
+      dégâts d'un personnage (+ : un dégât de plus), sinon la menace ou les jetons ; à 0 PV, sans menace ou sans jeton
+      d'Utilisations, la carte part à la défausse.</p>
     <!--
     <p class="note">Les dégâts ne vont que sur les personnages (identité, alliés, méchant, sbires), la menace que sur les manigances, les jetons sur toutes les autres cartes (et sur un personnage qui entre en jeu avec des jetons, comme Hawkeye et ses jetons Flèche : ses dégâts à gauche, ses jetons à droite). Dégâts sur le méchant ou sur votre identité : ses PV, écrits en grand (le méchant à gauche de la table, vous en bas à droite), baissent. Menace sur la manigance principale : la menace, sous les PV du méchant, monte, et un pion triangle la montre aussi sur la carte. Ailleurs, un pion se pose sur la carte, un peu de travers : rond pour les dégâts, triangle pour la menace, carré pour les jetons ; il se voit aussi, en grand, sur la carte agrandie. Sans carte visée, G frappe le méchant et M agit sur la manigance principale.</p>
     -->

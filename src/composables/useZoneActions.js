@@ -6,7 +6,7 @@ import { useUiStore } from '../stores/ui.js'
 /** Les zones montrées comme des piles (un clic sur une défausse ou « De côté » l'ouvre en fenêtre). */
 const PILE_ZONES = [
   'playerDeck', 'encounterDeck', 'playerDiscard', 'encounterDiscard', 'setAside', 'heroSetAside', 'heroSetAside2', 'invocationDeck',
-  'invocationDiscard', 'scenarioDeck'
+  'invocationDiscard', 'scenarioDeck', 'scenarioDiscard'
 ]
 
 export function useZoneActions() {

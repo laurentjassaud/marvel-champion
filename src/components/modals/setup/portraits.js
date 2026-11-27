@@ -2,7 +2,7 @@
 // (la carte d'identité d'un héros, la première étape d'un méchant, la manigance annexe d'un set modulaire),
 // montré dans les vignettes à choisir et dans les hexagones une fois le choix fait.
 import { CARD_DEFINITIONS } from '../../../game/data.js'
-import { imageUrlOfDefinition } from '../../../composables/useAssets.js'
+import { imageUrlOfDefinition, cgbuilderImageUrl } from '../../../composables/useAssets.js'
 
 /**
  * Le carré gardé de chaque illustration : [gauche, haut, côté], en fractions de la largeur de la carte (une
@@ -60,10 +60,16 @@ function portraitCard(kind, setId) {
   return null
 }
 
-/** {imageUrl, crop} du portrait d'un héros, d'un scénario ou d'un set modulaire (kind : hero, villain, modular). */
-export function portraitOf(kind, setId) {
+/**
+ * {imageUrl, crop} du portrait d'un héros, d'un scénario ou d'un set modulaire (kind : hero, villain, modular).
+ * Un héros dont la table n'a pas encore la carte (un précon à lire en ligne, game/precons.js) : `code`, celui de
+ * son identité sur MarvelCDB, donne son scan français chez cgbuilder, sinon le scan anglais de MarvelCDB.
+ */
+export function portraitOf(kind, setId, code = null) {
   const definition = portraitCard(kind, setId)
-  return { imageUrl: definition ? imageUrlOfDefinition(definition.id) : '', crop: CROPS[setId] ?? DEFAULT_CROP }
+  let imageUrl = definition ? imageUrlOfDefinition(definition.id) : ''
+  if (!imageUrl && code) imageUrl = cgbuilderImageUrl(code) ?? `https://marvelcdb.com/bundles/cards/${code}.png`
+  return { imageUrl, crop: CROPS[setId] ?? DEFAULT_CROP }
 }
 
 /**

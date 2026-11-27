@@ -10,7 +10,8 @@ let hasPlayedSky = false
 // d'en bas et ses immeubles au premier plan, six héros autour du grand logo « Marvel Champions Table » et du
 // menu, la barre du haut. Elle
 // s'affiche au lancement par-dessus la table, déjà prête et mesurée (une nouvelle partie s'y pose donc
-// normalement), et revient par le titre de la barre. « Scénarios » ouvre la fenêtre « Nouvelle partie »,
+// normalement), et revient par le titre de la barre, ou sous la fenêtre « Nouvelle partie » ouverte depuis la
+// partie (ui.openNewGame : fermée sans lancer, elle ramène à la table). « Scénarios » ouvre la fenêtre « Nouvelle partie »,
 // « Reprendre une partie » découvre la table, « Guide de référence 1.8 » ouvre le guide des règles et
 // « Apprendre le jeu » une vidéo d'explication des règles, chacun dans une nouvelle fenêtre ; les autres liens
 // ne sont pas encore prêts (SoonHint). Tout en bas, discrets, « Mentions légales » et « Remerciements » (qui

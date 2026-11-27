@@ -375,18 +375,23 @@ export const MODULAR_SETS = [
 ]
 
 /**
- * Boîtes proposées à la mise en place (écran Nouvelle partie, héros, scénarios et sets modulaires tirés au
- * hasard) : la boîte de base (5 héros, 3 scénarios, 5 sets modulaires), le paquet de scénarios Le Bouffon
- * Vert (2 scénarios, Entreprise à Risques et Formule Mutagène, et leurs 4 sets modulaires) et les paquets héros
- * Captain America, Hulk et Thor (un héros chacun, avec son deck préconstruit et son set Némésis), et le
+ * Boîtes proposées à la mise en place (écran Nouvelle partie, scénarios et sets modulaires tirés au hasard) : la
+ * boîte de base (3 scénarios, 5 sets modulaires), le paquet de scénarios Le Bouffon Vert (2 scénarios, Entreprise à
+ * Risques et Formule Mutagène, et leurs 4 sets modulaires), les paquets héros Captain America, Hulk et Thor, et le
  * scénario fan-made Kraven le Chasseur (et son set modulaire Savage Six). Les cartes des autres boîtes restent
- * connues de la table (parties sauvegardées, decks importés). Une boîte ajoutée ici l'est aussi aux
+ * connues de la table (leurs héros, parties sauvegardées, decks importés). Une boîte ajoutée ici l'est aussi aux
  * globPatterns de vite.config.js (ses images, hors ligne).
  */
 export const AVAILABLE_PACKS = ['core', 'green_goblin', 'captain_america', 'hulk', 'thor', 'kraven']
-/** Le set (héros, scénario, set modulaire) a des cartes dans une des boîtes proposées. */
+/** Le set (scénario, set modulaire) a des cartes dans une des boîtes proposées. */
 const isAvailableSet = setId => CARD_DEFINITIONS.some(definition => definition.set === setId && AVAILABLE_PACKS.includes(definition.pack))
-export const AVAILABLE_HEROES = HEROES.filter(hero => isAvailableSet(hero.id))
+/**
+ * Héros proposés avec leur précon, hors ligne : tous ceux de la table (HEROES), et le héros tiré au hasard en est un.
+ * Les héros des boîtes proposées ont leurs images téléchargées à l'installation ; ceux des autres boîtes de la
+ * table, à leur premier affichage (le service worker les garde ensuite). Les précons des autres héros se lisent
+ * en ligne (game/precons.js).
+ */
+export const AVAILABLE_HEROES = HEROES.filter(hero => PRECON_DECKS[hero.id])
 export const AVAILABLE_SCENARIOS = SCENARIOS.filter(scenario => isAvailableSet(scenario.id))
 export const AVAILABLE_MODULAR_SETS = MODULAR_SETS.filter(modular => isAvailableSet(modular.id))
 
@@ -456,6 +461,7 @@ export const ZONE_LABELS = {
   invocationDeck: 'deck Invocation', // Docteur Strange
   invocationDiscard: 'défausse Invocation',
   scenarioDeck: 'deck du scénario', // Armes Expérimentales, Manigance Annexe : le moteur précise son nom
+  scenarioDiscard: 'défausse du scénario', // celle du deck Piège (Kraven) : « défausse Piège »
   outOfGame: 'hors jeu' // étapes de méchant vaincues, manigances d'un Démolisseur vaincu : montrées nulle part
 }
 

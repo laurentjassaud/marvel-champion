@@ -55,7 +55,7 @@ export function moveCard(game, card, targetZone, options = {}, quiet = false) {
   }
   let zone = targetZone
   if (zone === 'deck' || DECK_ZONES.includes(zone)) zone = deckZoneOf(game, card)
-  if (zone === 'discard' || DISCARD_ZONES.includes(zone)) zone = discardZoneOf(card)
+  if (zone === 'discard' || DISCARD_ZONES.includes(zone)) zone = discardZoneOf(game, card)
   const fromZone = card.zone
   // les cartes d'une pile de l'identité (Aura de la Mort de Valkyrie, Sens de Daredevil…) : « Mettre de côté » les
   // y range ; une amélioration Sens qui quitte le jeu y retourne, dessous (returnsUnder)

@@ -11,8 +11,9 @@
 // sous-onglets (DeckTabs), Préconstruits, Mes decks (les decks sauvegardés, stores/decks.js) et Charger un
 // deck (par un lien MarvelCDB) ; leurs volets défilent à l'horizontale (HeroDecks). Une bande
 // symétrique ferme la grille par le bas ; les deux bandes restent aux autres étapes, sans sous-onglets.
-// Seuls les héros, scénarios et sets modulaires des boîtes proposées (AVAILABLE_PACKS, data.js) y figurent ;
-// un deck chargé peut jouer un autre héros que la table connaît.
+// Seuls les scénarios et sets modulaires des boîtes proposées (AVAILABLE_PACKS, data.js) y figurent ; les héros,
+// tous (sauf ceux que la table refuse pour l'instant), avec leur précon : hors ligne pour ceux de la table, lu sur
+// MarvelCDB pour les autres (HeroDecks, game/precons.js).
 import { reactive, ref, computed, watch, nextTick, onMounted } from 'vue'
 import BaseModal from './BaseModal.vue'
 import SetupHex from './setup/SetupHex.vue'

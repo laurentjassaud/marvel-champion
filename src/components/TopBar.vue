@@ -114,7 +114,8 @@ watch(() => gameStore.matchup, fitTitle, { deep: true, flush: 'post' })
         <button type="button" class="slant tab" title="Des pions à glisser sur la table" data-pawn-anchor
           aria-controls="pawn-tray" :aria-expanded="ui.pawnTrayOpen" @click="ui.togglePawnTray()">Pions</button>
         <button type="button" class="slant tab" :disabled="!gameStore.isReady" title="Même héros, même deck, même scénario, depuis le début" @click="ui.openModal('restart')">Recommencer</button>
-        <button type="button" class="slant tab red" @click="ui.openModal('setup')">Nouvelle partie</button>
+        <!-- la fenêtre s'ouvre sur la page d'accueil ; fermée sans lancer de partie, retour à la table (ui.openNewGame) -->
+        <button type="button" class="slant tab red" @click="ui.openNewGame()">Nouvelle partie</button>
         <!-- au bout de la barre : signaler un bug (sa fenêtre, BugReportModal : le rapport part par e-mail, avec
              la partie), plein écran et aide -->
         <button type="button" class="slant tab bug" aria-label="Signaler un bug" title="Signaler un bug : le rapport part avec la partie en cours"

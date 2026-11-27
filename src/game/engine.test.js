@@ -46,7 +46,9 @@ describe('données', () => {
   })
 
   it('mise en place : la boîte de base, le paquet Le Bouffon Vert, les paquets héros Captain America, Hulk et Thor, et Kraven (fan-made)', () => {
-    expect(AVAILABLE_HEROES.map(h => h.id)).toEqual(['spider_man', 'captain_marvel', 'she_hulk', 'iron_man', 'black_panther', 'captain_america', 'hulk', 'thor'])
+    // tous les héros de la table, avec leur précon (les autres se lisent en ligne : game/precons.js)
+    expect(AVAILABLE_HEROES.map(h => h.id)).toEqual(['spider_man', 'captain_marvel', 'she_hulk', 'iron_man', 'black_panther', 'black_widow', 'doctor_strange',
+      'captain_america', 'hulk', 'ms_marvel', 'thor', 'hawkeye', 'spider_woman', 'quicksilver', 'scarlet_witch', 'wasp', 'ant_man'])
     // chaque héros proposé a son deck préconstruit
     for (const hero of AVAILABLE_HEROES) expect(PRECON_DECKS[hero.id], hero.id).toBeTruthy()
     expect(AVAILABLE_SCENARIOS.map(v => v.id)).toEqual(['rhino', 'klaw', 'ultron', 'risky_business', 'mutagen_formula', 'kraven'])
@@ -1264,6 +1266,48 @@ describe('Kraven le Chasseur (fan-made)', () => {
     expect(E.dealScenarioDeckCardToPlayer(game(), L)).toBeNull()
   })
 
+  it('deck Piège : ses cartes défaussées vont dans sa propre défausse, remélangée dans le deck sans pénalité', () => {
+    const s = kraven()
+    const trap = E.dealScenarioDeckCardToPlayer(s, L)
+    E.flipCard(s, trap)
+    E.moveCard(s, trap, 'discard')
+    expect(trap.zone).toBe('scenarioDiscard')
+    expect(s.log.at(-1).text).toBe(`« ${E.cardName(trap)} » : table → défausse Piège.`)
+    // déposée sur la défausse Rencontre, elle va quand même dans la sienne ; une carte Rencontre, dans la défausse Rencontre
+    const next = E.dealScenarioDeckCardToPlayer(s, L)
+    E.moveCard(s, next, 'encounterDiscard', {}, true)
+    expect(next.zone).toBe('scenarioDiscard')
+    const other = E.cardsInZone(s, 'encounterDeck').at(-1)
+    E.moveCard(s, other, 'discard', {}, true)
+    expect(other.zone).toBe('encounterDiscard')
+    // deck vidé, puis reconstitué depuis sa défausse : pas de pion Accélération
+    while (E.cardsInZone(s, 'scenarioDeck').length) E.moveCard(s, E.cardsInZone(s, 'scenarioDeck').at(-1), 'discard', {}, true)
+    expect(E.cardsInZone(s, 'scenarioDiscard')).toHaveLength(16)
+    const acceleration = s.accelerationTokens
+    expect(E.shuffleDiscardIntoDeck(s, 'scenarioDiscard', L)).toBe(16)
+    expect(E.cardsInZone(s, 'scenarioDeck')).toHaveLength(16)
+    expect(E.cardsInZone(s, 'scenarioDeck').every(c => !c.faceUp)).toBe(true)
+    expect(s.accelerationTokens).toBe(acceleration)
+    expect(s.log.at(-1).text).toBe('La défausse Piège (16 cartes) est remélangée dans le deck Piège, qui compte maintenant 16 cartes.')
+    // les autres decks du scénario n'ont pas de défausse à eux : Armes Expérimentales (Crossbones)
+    const t = game({ hero: 'hawkeye', deckList: PRECON_DECKS.hawkeye, scenario: 'crossbones', modulars: ['hydra_assault', 'weapon_master', 'legions_of_hydra'] })
+    const weapon = E.cardsInZone(t, 'scenarioDeck').at(-1)
+    E.moveCard(t, weapon, 'discard', {}, true)
+    expect(weapon.zone).toBe('encounterDiscard')
+  })
+
+  it('Kraven II révélé : le Collier de Dents cherché (paquet ou défausse) et attaché, dès la mise en place en expert', () => {
+    const necklace = s => s.cards.find(c => E.definitionOf(c).id === 'krv-11')
+    const s = kraven()
+    expect(necklace(s).zone).toBe('encounterDeck')
+    E.moveCard(s, necklace(s), 'discard', {}, true) // dans la défausse Rencontre
+    E.defeatVillain(s, villain(s), L)
+    expect(necklace(s)).toMatchObject({ zone: 'table', faceUp: true })
+    expect(logTexts(s)).toContain('« Kraven le Chasseur » II, une fois révélé : « Collier de Dents » attachée au méchant (Attachement), paquet Rencontre mélangé.')
+    // en expert, Kraven II commence la partie : le Collier est déjà attaché
+    expect(necklace(kraven({ expert: true }))).toMatchObject({ zone: 'table', faceUp: true })
+  })
+
   it('Kraven III révélé : une carte Piège pour vous, face cachée', () => {
     const s = kraven({ expert: true })
     expect(E.definitionOf(villain(s)).stage).toBe('II')
@@ -1272,6 +1316,83 @@ describe('Kraven le Chasseur (fan-made)', () => {
     expect(E.cardsInZone(s, 'scenarioDeck')).toHaveLength(15)
     expect(s.cards.filter(c => c.dealtToPlayer && E.definitionOf(c).set === 'kraven_traps')).toHaveLength(1)
     expect(logTexts(s)).toContain('« Kraven le Chasseur » III, une fois révélé : vous recevez une carte Piège face cachée, posée devant votre identité.')
+  })
+})
+
+describe('boutons + et − d\'une carte (CardCounterSteps)', () => {
+  const onTable = (s, card) => { E.moveCard(s, card, 'table', { x: 300, y: 200 }, true); return card }
+  const findCard = (s, pred) => s.cards.find(c => !c.isPawn && pred(E.definitionOf(c), c))
+
+  it('un allié : ses dégâts, même sans dégât (+ : un dégât de plus, − : un de moins) ; à 0 PV, il part à la défausse', () => {
+    const s = game()
+    const ally = onTable(s, findCard(s, (d, c) => d.type === 'ally' && c.zone !== 'table'))
+    expect(E.counterStepKindOf(s, ally)).toBe('damage')
+    const hitPoints = E.definitionOf(ally).hitPoints
+    for (let i = 1; i < hitPoints; i++) E.stepCounter(s, ally, 'damage', 1, L)
+    expect(ally).toMatchObject({ zone: 'table', damage: hitPoints - 1 })
+    E.stepCounter(s, ally, 'damage', -1, L)
+    expect(ally.damage).toBe(hitPoints - 2)
+    E.stepCounter(s, ally, 'damage', 1, L)
+    E.stepCounter(s, ally, 'damage', 1, L)
+    expect(ally.zone).toBe('playerDiscard')
+    expect(s.log.at(-1).text).toBe(`« ${E.cardName(ally)} » n'a plus de PV : à la défausse.`)
+    // sans dégât : − ne fait rien de plus, il reste
+    const other = onTable(s, findCard(s, (d, c) => d.type === 'ally' && c.zone !== 'table' && c.zone !== 'playerDiscard') ?? ally)
+    E.stepCounter(s, other, 'damage', -1, L)
+    expect(other).toMatchObject({ zone: 'table', damage: 0 })
+  })
+
+  it('Hawkeye allié et ses Flèches : les boutons visent ses PV ; ses jetons à 0 ne le défaussent pas', () => {
+    const s = game({ hero: 'captain_marvel', deckList: PRECON_DECKS.captain_marvel })
+    const hawkeye = onTable(s, findCard(s, d => d.type === 'ally' && d.name === 'Hawkeye'))
+    expect(hawkeye.tokens).toBe(4)
+    expect(E.counterStepKindOf(s, hawkeye)).toBe('damage')
+    for (let i = 0; i < 4; i++) E.stepCounter(s, hawkeye, 'tokens', -1, L)
+    expect(hawkeye).toMatchObject({ zone: 'table', tokens: 0 })
+  })
+
+  it('les manigances : la menace, même à 0 ; une manigance annexe sans menace part à la défausse, pas la principale', () => {
+    const s = game()
+    const main = E.cardsInZone(s, 'table').find(c => E.definitionOf(c).type === 'main_scheme')
+    expect(E.counterStepKindOf(s, main)).toBe('threat')
+    s.counters[2].value = 1
+    E.stepCounter(s, main, 'threat', -1, L)
+    E.stepCounter(s, main, 'threat', -1, L)
+    expect(main.zone).toBe('table')
+    expect(s.counters[2].value).toBe(0)
+    const side = onTable(s, findCard(s, d => d.type === 'side_scheme'))
+    expect(E.counterStepKindOf(s, side)).toBe('threat')
+    side.threat = 2
+    E.stepCounter(s, side, 'threat', -1, L)
+    expect(side.zone).toBe('table')
+    E.stepCounter(s, side, 'threat', -1, L)
+    expect(side.zone).toBe('encounterDiscard')
+    expect(s.log.at(-1).text).toBe(`« ${E.cardName(side)} » n'a plus de menace : à la défausse.`)
+  })
+
+  it('une carte à Utilisations : ses jetons, défaussée sans jeton ; Entreprise Criminelle (environnement) reste', () => {
+    const s = game({ hero: 'black_panther', deckList: PRECON_DECKS.black_panther })
+    const team = onTable(s, findCard(s, d => d.name === 'Équipe Médicale'))
+    expect(team.tokens).toBe(3)
+    expect(E.counterStepKindOf(s, team)).toBe('tokens')
+    for (let i = 0; i < 3; i++) E.stepCounter(s, team, 'tokens', -1, L)
+    expect(team.zone).toBe('playerDiscard')
+    expect(s.log.at(-1).text).toBe('« Équipe Médicale » n\'a plus de jeton : à la défausse.')
+    const t = game({ scenario: 'risky_business', modulars: ['goblin_gimmicks'] })
+    const enterprise = E.cardsInZone(t, 'table').find(c => E.definitionOf(c).type === 'environment')
+    expect(E.counterStepKindOf(t, enterprise)).toBe('tokens')
+    E.stepCounter(t, enterprise, 'tokens', -1, L)
+    E.stepCounter(t, enterprise, 'tokens', -1, L)
+    expect(enterprise).toMatchObject({ zone: 'table', tokens: 0 })
+  })
+
+  it('un sbire : ses dégâts, même sans dégât, défaussé à 0 PV ; l\'identité n\'en a pas (ses PV sont le grand compteur)', () => {
+    const s = game()
+    const minion = onTable(s, findCard(s, d => d.type === 'minion'))
+    expect(E.counterStepKindOf(s, minion)).toBe('damage')
+    for (let i = 0; i < E.definitionOf(minion).hitPoints; i++) E.stepCounter(s, minion, 'damage', 1, L)
+    expect(minion.zone).toBe('encounterDiscard')
+    expect(E.counterStepKindOf(s, E.identityCard(s))).toBeNull()
   })
 })
 

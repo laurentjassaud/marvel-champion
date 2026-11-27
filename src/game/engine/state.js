@@ -226,15 +226,16 @@ export const revealHint = card => (card.definitionId === SHADOW_OF_THE_PAST_ID ?
 export const DECK_ZONES = ['playerDeck', 'encounterDeck', 'invocationDeck', 'scenarioDeck']
 
 /** Les zones-défausses. */
-export const DISCARD_ZONES = ['playerDiscard', 'encounterDiscard', 'invocationDiscard']
+export const DISCARD_ZONES = ['playerDiscard', 'encounterDiscard', 'invocationDiscard', 'scenarioDiscard']
 
 /** Règles spéciales (rules.js) du scénario de la partie. */
 export const scenarioRulesOf = game => scenarioRules(game.setup?.scenario)
 
 /**
- * Le deck propre au scénario, à côté du paquet Rencontre ({set, type?, name, shortName}), ou null :
- * Armes Expérimentales (Crossbones), Manigance Annexe (Crâne Rouge). Ses cartes se révèlent une à une ;
- * une fois défaussées, elles vont dans la défausse Rencontre.
+ * Le deck propre au scénario, à côté du paquet Rencontre ({set, type?, name, shortName, dealsToPlayer?,
+ * discard?}), ou null : Armes Expérimentales (Crossbones), Manigance Annexe (Crâne Rouge), Piège (Kraven). Ses
+ * cartes se révèlent une à une ; une fois défaussées, elles vont dans la défausse Rencontre, ou dans sa propre
+ * défausse (zone scenarioDiscard) s'il en a une (discard : le deck Piège).
  */
 export const scenarioDeckOf = game => scenarioRulesOf(game).scenarioDeck ?? null
 
@@ -249,16 +250,22 @@ export function deckZoneOf(game, card) {
   return isInScenarioDeck(scenarioDeckOf(game), definitionOf(card)) ? 'scenarioDeck' : 'encounterDeck'
 }
 
-/** La défausse propre à une carte : défausse Invocation, défausse Rencontre, ou défausse du joueur. */
-export function discardZoneOf(card) {
+/**
+ * La défausse propre à une carte : défausse Invocation, défausse du joueur, défausse du deck du scénario quand
+ * il en a une (deck Piège), ou défausse Rencontre.
+ */
+export function discardZoneOf(game, card) {
   if (isInvocationCard(card)) return 'invocationDiscard'
-  return isEncounterCard(card) ? 'encounterDiscard' : 'playerDiscard'
+  if (!isEncounterCard(card)) return 'playerDiscard'
+  const scenarioDeck = scenarioDeckOf(game)
+  return scenarioDeck?.discard && isInScenarioDeck(scenarioDeck, definitionOf(card)) ? 'scenarioDiscard' : 'encounterDiscard'
 }
 
-/** Nom d'une zone pour le journal ; le deck du scénario prend son nom ("deck Armes Expérimentales"). */
+/** Nom d'une zone pour le journal ; le deck du scénario et sa défausse prennent son nom ("deck Armes Expérimentales"). */
 export function zoneLabel(game, zone) {
   const scenarioDeck = scenarioDeckOf(game)
   if (zone === 'scenarioDeck' && scenarioDeck) return `deck ${scenarioDeck.name}`
+  if (zone === 'scenarioDiscard' && scenarioDeck) return `défausse ${scenarioDeck.name}`
   // une pile de l'identité : « de côté (héros) », ou le nom de son deck (« deck Travaux », « pile Versions »)
   const heroPile = HERO_PILE_ZONES.includes(zone) ? heroPileOfZone(game, zone) : null
   if (heroPile && heroPile.label !== 'De côté') return `${heroPile.isDeck ? 'deck' : 'pile'} ${heroPile.label}`

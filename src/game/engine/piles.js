@@ -6,7 +6,7 @@
 import { TYPE_LABELS } from '../data.js'
 import {
   definitionOf, cardName, cardsInZone, identityCard, plural, logMessage, randomIndex, moveToTop, shuffleZone,
-  encounterPile, activeVillainName, scenarioDeckOf, startingThreatOf, revealHint, heroPileOfZone
+  encounterPile, activeVillainName, scenarioDeckOf, startingThreatOf, revealHint, heroPileOfZone, zoneLabel
 } from './state.js'
 import { DEFAULT_LAYOUT, nextEncounterSpot, nextDealtSpot } from './layout.js'
 import { moveCard, takeFromPile, entryTokensNote } from './moves.js'
@@ -34,23 +34,25 @@ export function drawCard(game, layout, quiet = false) {
 }
 
 /** La pioche où se remélange chaque défausse (« Remélanger dans le paquet »). */
-export const DECK_OF_DISCARD = { playerDiscard: 'playerDeck', encounterDiscard: 'encounterDeck' }
+export const DECK_OF_DISCARD = { playerDiscard: 'playerDeck', encounterDiscard: 'encounterDeck', scenarioDiscard: 'scenarioDeck' }
 
 /**
  * « Remélanger dans le paquet » (menu d'une défausse, ou pioche dans un paquet vide, après confirmation) :
- * les cartes de la défausse du joueur ou de la défausse Rencontre rejoignent leur paquet, qui est mélangé.
- * Un paquet vide ne se reconstitue que de cette façon ; s'il était vide, la règle du paquet épuisé
- * s'applique : vous recevez une carte Rencontre face cachée devant votre identité (paquet du joueur), ou
- * un pion Accélération s'ajoute (paquet Rencontre). Un paquet qui avait encore des cartes est remélangé
- * sans pénalité. Avec les Démolisseurs, la défausse et le paquet du méchant actif.
+ * les cartes de la défausse du joueur, de la défausse Rencontre ou de celle du deck du scénario (deck Piège)
+ * rejoignent leur paquet, qui est mélangé. Un paquet vide ne se reconstitue que de cette façon ; s'il était
+ * vide, la règle du paquet épuisé s'applique : vous recevez une carte Rencontre face cachée devant votre
+ * identité (paquet du joueur), ou un pion Accélération s'ajoute (paquet Rencontre) ; le deck du scénario n'a
+ * pas de pénalité. Un paquet qui avait encore des cartes est remélangé sans pénalité. Avec les Démolisseurs,
+ * la défausse et le paquet du méchant actif.
  * Rend le nombre de cartes remélangées.
  */
 export function shuffleDiscardIntoDeck(game, discardZone, layout = DEFAULT_LAYOUT) {
   const deckZone = DECK_OF_DISCARD[discardZone]
   if (!deckZone) return 0
   const isPlayer = discardZone === 'playerDiscard'
-  // les piles Rencontre du méchant actif (Démolisseurs) ; celles du joueur entières
-  const pileOf = zone => (isPlayer ? cardsInZone(game, zone) : encounterPile(game, zone))
+  const isEncounter = discardZone === 'encounterDiscard'
+  // les piles Rencontre du méchant actif (Démolisseurs) ; les autres entières
+  const pileOf = zone => (isEncounter ? encounterPile(game, zone) : cardsInZone(game, zone))
   const discardPile = pileOf(discardZone)
   if (!discardPile.length) return 0
   const deckWasEmpty = !pileOf(deckZone).length
@@ -58,10 +60,18 @@ export function shuffleDiscardIntoDeck(game, discardZone, layout = DEFAULT_LAYOU
   for (const card of discardPile) Object.assign(card, { zone: deckZone, faceUp: false })
   shuffleZone(game, deckZone)
   const deckSize = pileOf(deckZone).length
-  const what = isPlayer ? 'Votre défausse' : `La défausse Rencontre${game.activeVillainSet ? ` de « ${activeVillainName(game)} »` : ''}`
-  const where = isPlayer ? 'votre paquet' : 'le paquet Rencontre'
+  let what = 'Votre défausse'
+  let where = 'votre paquet'
+  if (isEncounter) {
+    what = `La défausse Rencontre${game.activeVillainSet ? ` de « ${activeVillainName(game)} »` : ''}`
+    where = 'le paquet Rencontre'
+  } else if (!isPlayer) {
+    what = `La ${zoneLabel(game, discardZone)}`
+    where = `le ${zoneLabel(game, deckZone)}`
+  }
   let penalty = ''
-  if (deckWasEmpty) penalty = ` ${isPlayer ? emptyPlayerDeckPenalty(game, layout) : emptyEncounterDeckPenalty(game)}`
+  if (deckWasEmpty && isPlayer) penalty = ` ${emptyPlayerDeckPenalty(game, layout)}`
+  else if (deckWasEmpty && isEncounter) penalty = ` ${emptyEncounterDeckPenalty(game)}`
   logMessage(game, `${what} (${plural(discardPile.length, 'carte')}) est remélangée dans ${where}, qui compte maintenant ${plural(deckSize, 'carte')}.${penalty}`, true)
   return discardPile.length
 }

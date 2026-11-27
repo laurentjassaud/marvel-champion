@@ -111,7 +111,8 @@ const classes = computed(() => ({
   pictured: !!pawnKind.value,
   land: !isPawn.value && isFaceShown.value && !!definitionOf(props.card).landscape,
   tapped: props.positioned && props.card.exhausted,
-  sel: !props.inert && ui.selectedCardId === props.card.id,
+  // la carte sélectionnée, ou une carte de la table du groupe sélectionné au lasso
+  sel: !props.inert && (ui.selectedCardId === props.card.id || (props.positioned && ui.selectedCardIds.includes(props.card.id))),
   rand: !props.inert && ui.randomlyPickedCardId === props.card.id,
   flash: !props.inert && ui.flashedCardIds.includes(props.card.id)
 }))

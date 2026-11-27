@@ -26,8 +26,9 @@ function gitCommit(command) {
 //    partager ni partie, ni decks, ni réglages avec la production, et la page n'est pas référencée (noindex, pas
 //    de plan du site). Elle appelle les mêmes scripts du serveur (/api/…) que la production. Elle est réservée
 //    aux personnes qui ont le mot de passe (règle dans la configuration d'Apache, server/test/gamebox-test.conf ;
-//    son .htaccess en seconde ligne de défense) et n'a donc pas de service worker : il servirait la page depuis son cache sans que le navigateur redemande le mot de passe, et ses
-//    propres demandes (nouvelle version, images pas encore gardées) seraient alors refusées.
+//    son .htaccess en seconde ligne de défense) et n'a donc pas de service worker : il servirait la page depuis
+//    son cache sans que le navigateur redemande le mot de passe, et ses propres demandes (nouvelle version, images
+//    pas encore gardées) seraient alors refusées.
 // Les chemins sont relatifs ('./') par défaut : dist/ fonctionne où qu'il soit déposé (racine du domaine ou
 // sous-dossier). BASE_PATH impose un préfixe absolu si besoin.
 // L'inscription aux nouvelles (« Rester informé ») appelle /api/signup.php, le script PHP du site. En local
@@ -37,8 +38,8 @@ const SIGNUP_PROXY = { '/api': 'http://127.0.0.1:8000' }
 // Référencement : l'adresse publique de l'appli (SITE_URL, avec sa barre finale), dont index.html a besoin en
 // entier (adresse canonique, image de partage, données structurées) et le plan du site.
 const SITE_URL = (process.env.SITE_URL || 'https://www.gameboxheroes.fr/marvel-champions-table/').replace(/\/?$/, '/')
-// La description, reprise dans les résultats de recherche, og:description, les données structurées et le manifeste
-// (espace insécable avant le point d'exclamation).
+// La description, reprise dans les résultats de recherche, og:description, les données structurées, le texte montré
+// sans JavaScript (index.html) et le manifeste (espace insécable avant le point d'exclamation).
 const DESCRIPTION = 'Projet perso fan-made partagé avec la communauté : Marvel Champions dans le navigateur, sur ordinateur ou tablette, et en français, of course ! :)'
 
 /**
@@ -125,11 +126,10 @@ export default defineConfig(({ mode, command }) => {
         },
         workbox: {
           // les cartes des boîtes proposées (AVAILABLE_PACKS dans data.js) sont téléchargées dès l'installation :
-          // la boîte de base (cards/base, 209 images, ≈16 Mo), le paquet Le Bouffon Vert (57 images, ≈4 Mo) et les
-          // paquets héros Captain America, Hulk et Thor (84 images, ≈6 Mo), et le scénario fan-made Kraven le Chasseur
-          // (33 images, ≈2,6 Mo). Toute partie proposée se joue hors
-          // ligne, quels que soient le héros, le méchant et le set modulaire. Une autre boîte proposée un jour :
-          // l'ajouter ici.
+          // la boîte de base (cards/base, 209 images, ≈16 Mo), le paquet Le Bouffon Vert (57 images, ≈4 Mo), les
+          // paquets héros Captain America, Hulk et Thor (84 images, ≈6 Mo) et le scénario fan-made Kraven le Chasseur
+          // (33 images, ≈2,5 Mo). Toute partie proposée se joue hors ligne, quels que soient le héros, le méchant et
+          // le set modulaire. Une autre boîte proposée un jour : l'ajouter ici.
           // Les polices (woff2, src/styles/fonts.css) aussi : le texte garde sa police hors ligne ; et les SVG (le
           // grand logo de l'accueil)
           globPatterns: ['**/*.{js,css,html,png,webp,woff2,svg}', 'backs/*.jpg', 'cards/base/*.jpg', 'cards/bouffon vert/*.jpg',

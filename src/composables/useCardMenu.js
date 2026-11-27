@@ -11,7 +11,7 @@ import { useUiStore } from '../stores/ui.js'
 /** Les pioches : une carte de l'une d'elles ouvre le menu de la pile. */
 export const DECK_PILES = ['playerDeck', 'encounterDeck', 'invocationDeck', 'scenarioDeck']
 /** Les piles qui ont leur propre menu au clic droit ou à l'appui long : les pioches et les défausses. */
-export const PILES_WITH_MENU = [...DECK_PILES, 'playerDiscard', 'encounterDiscard', 'invocationDiscard']
+export const PILES_WITH_MENU = [...DECK_PILES, 'playerDiscard', 'encounterDiscard', 'invocationDiscard', 'scenarioDiscard']
 
 /** Une ligne de menu : son libellé, l'action, et le raccourci clavier affiché à droite. */
 const menuItem = (label, run, shortcut) => ({ label, run, key: shortcut })
@@ -44,6 +44,12 @@ export function useCardMenu() {
       openPileMenu(card.zone, x, y)
       return
     }
+    // une carte du groupe sélectionné au lasso : le menu du groupe
+    const group = card.zone === 'table' && ui.selectedCardIds.includes(card.id) ? gameStore.selectedGroup() : []
+    if (group.length) {
+      openGroupMenu(group, x, y)
+      return
+    }
     ui.selectCard(card.id)
     const items = card.isPawn
       ? [menuItem('Supprimer le pion', () => gameStore.moveCard(card.id, 'discard'), 'Suppr')]
@@ -55,6 +61,30 @@ export function useCardMenu() {
     else if (isKnown) title = cardName(card)
     // cardId : la carte, montrée en grand à côté du menu sur écran tactile, où l'aperçu de côté est petit
     ui.openContextMenu({ x, y, title, items: withoutExtraSeparators(items), cardId: isKnown ? card.id : null })
+  }
+
+  /**
+   * Menu du groupe sélectionné au lasso : incliner ou redresser toutes ses cartes, ou les envoyer ensemble dans
+   * la main, la défausse ou « De côté ». L'identité, le méchant et la manigance principale restent sur la table :
+   * le nombre de cartes qui partent est alors précisé.
+   */
+  function openGroupMenu(group, x, y) {
+    const leaving = group.filter(gameStore.leavesTableWithGroup)
+    const count = leaving.length < group.length ? ` (${leaving.length})` : ''
+    const items = [
+      menuItem(group.some(card => !card.exhausted) ? 'Tout incliner' : 'Tout redresser', () => gameStore.toggleGroupExhausted(), 'T'),
+      null,
+      ...(leaving.length
+        ? [
+            menuItem(`Prendre en main${count}`, () => gameStore.moveGroup('hand'), 'H'),
+            menuItem(`Défausser${count}`, () => gameStore.moveGroup('discard'), 'Suppr'),
+            menuItem(`Mettre de côté${count}`, () => gameStore.moveGroup('setAside'), 'X'),
+            null
+          ]
+        : []),
+      menuItem('Désélectionner', () => ui.selectCard(null), 'Échap')
+    ]
+    ui.openContextMenu({ x, y, title: `${group.length} cartes sélectionnées`, items: withoutExtraSeparators(items) })
   }
 
   /** Lignes d'une carte sur la table : incliner, retourner, compteurs, stade de Kang, jeton Actif, cartes d'état. */
@@ -133,6 +163,7 @@ export function useCardMenu() {
   function pileItems(card) {
     const takeLabels = {
       encounterDeck: 'Mettre en jeu', scenarioDeck: 'Mettre en jeu', setAside: 'Mettre en jeu', encounterDiscard: 'Remettre en jeu',
+      scenarioDiscard: 'Remettre en jeu',
       invocationDeck: 'Poser sur la table', invocationDiscard: 'Poser sur la table', heroSetAside: 'Poser sur la table',
       heroSetAside2: 'Poser sur la table'
     }
@@ -153,7 +184,7 @@ export function useCardMenu() {
     if (card.isIdentity) return []
     const items = []
     if (card.zone !== 'hand') items.push(menuItem('Prendre en main', () => gameStore.moveCard(card.id, 'hand'), 'H'))
-    if (card.zone !== discardZoneOf(card)) items.push(menuItem('Défausser', () => gameStore.moveCard(card.id, 'discard'), 'Suppr'))
+    if (card.zone !== discardZoneOf(gameStore.game, card)) items.push(menuItem('Défausser', () => gameStore.moveCard(card.id, 'discard'), 'Suppr'))
     // une carte que l'identité met de côté va dans sa pile « De côté » (moteur, moveCard)
     if (!['setAside', 'heroSetAside', 'heroSetAside2'].includes(card.zone)) items.push(menuItem('Mettre de côté', () => gameStore.moveCard(card.id, 'setAside'), 'X'))
     if (!DECK_PILES.includes(card.zone)) {
@@ -213,6 +244,12 @@ export function useCardMenu() {
       invocationDiscard: ['Défausse Invocation', [
         menuItem('Chercher dans la défausse…', () => ui.openModal('pile', { zone: 'invocationDiscard' })),
         topCardItem('invocationDiscard', name => `Remettre « ${name} » sur le deck Invocation`, cardId => gameStore.moveCard(cardId, 'deck'))
+      ]],
+      // la défausse du deck du scénario, quand il en a une (Piège, Kraven)
+      scenarioDiscard: [`Défausse ${gameStore.scenarioDeck?.name ?? ''}`, [
+        menuItem('Chercher dans la défausse…', () => ui.openModal('pile', { zone: 'scenarioDiscard' })),
+        topCardItem('scenarioDiscard', name => `Remettre « ${name} » en jeu`, cardId => gameStore.takeFromPile(cardId, 'scenarioDiscard')),
+        reshuffleItem('scenarioDiscard', `Remélanger dans le deck ${gameStore.scenarioDeck?.name ?? ''}…`)
       ]]
     }
     const [title, items] = menus[zone]

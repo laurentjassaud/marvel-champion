@@ -81,12 +81,15 @@ watch(mulliganDue, due => {
       <!-- colonne de droite, jusqu'au bandeau du joueur -->
       <aside class="side">
         <SideResizer />
-        <div class="encrow" :class="{ x4: gameStore.scenarioDeck }">
+        <div class="encrow" :class="{ x4: gameStore.scenarioDeck && !gameStore.scenarioDeck.discard, x5: gameStore.scenarioDeck?.discard }">
           <CardPile zone="encounterDeck" label="Rencontre" variant="e" title="Clic : révéler" />
           <CardPile zone="encounterDiscard" label="Défausse R." variant="e" title="Clic : voir" />
-          <!-- le deck propre au scénario : Armes Expérimentales (Crossbones), Manigance Annexe (Crâne Rouge) -->
+          <!-- le deck propre au scénario : Armes Expérimentales (Crossbones), Manigance Annexe (Crâne Rouge), Piège
+               (Kraven, avec sa propre défausse) -->
           <CardPile v-if="gameStore.scenarioDeck" zone="scenarioDeck" :label="gameStore.scenarioDeck.shortName" variant="e"
             :title="`Deck ${gameStore.scenarioDeck.name} · clic : révéler la carte du dessus · appui long ou clic droit : autres choix`" />
+          <CardPile v-if="gameStore.scenarioDeck?.discard" zone="scenarioDiscard" :label="`Défausse ${gameStore.scenarioDeck.shortName[0]}.`"
+            variant="e" :title="`Défausse ${gameStore.scenarioDeck.name} · clic : voir`" />
           <CardPile zone="setAside" label="De côté" title="Clic : voir" />
         </div>
         <!-- la carte agrandie et le journal, chacun dans son onglet -->
@@ -95,8 +98,9 @@ watch(mulliganDue, due => {
     </main>
     <PlayerDock :inert="ui.introOpen" />
 
-    <!-- la page d'accueil, par-dessus la table et sous les fenêtres (« Scénarios » ouvre « Nouvelle partie ») ;
-         après « Lancer la partie », elle a déjà disparu (sa sortie) : retirée aussitôt, sans fondu -->
+    <!-- la page d'accueil, par-dessus la table et sous les fenêtres (« Scénarios » ouvre « Nouvelle partie » ; en
+         partie, « Nouvelle partie » de la barre la rouvre sous sa fenêtre, ui.openNewGame) ; après « Lancer la
+         partie », elle a déjà disparu (sa sortie) : retirée aussitôt, sans fondu -->
     <Transition name="fade-intro" :css="ui.scene !== 'in'">
       <IntroScreen v-if="ui.introOpen" />
     </Transition>

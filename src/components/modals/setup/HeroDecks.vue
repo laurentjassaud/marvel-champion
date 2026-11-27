@@ -2,8 +2,11 @@
 // Les trois volets du choix du héros, sous ses sous-onglets (DeckTabs), côte à côte sur un rail qui défile à
 // l'horizontale : le volet choisi glisse à sa place, les autres sortent du cadre (et ne prennent ni le
 // clavier ni les lecteurs d'écran : inert).
-//   Préconstruits    les héros des boîtes proposées, chacun avec son deck préconstruit ; « Au hasard » dans
-//                    la dernière case (maquette)
+//   Préconstruits    les héros de la table, chacun avec son deck préconstruit (hors ligne), puis « Au hasard »,
+//                    qui tire l'un d'eux ; dessous, sous leur intitulé, les héros dont le précon se lit sur
+//                    MarvelCDB (game/precons.js : tous les autres, sauf Elektra et Iron Fist), lu au choix du héros
+//                    (son portrait tourne le temps de la lecture), sans rejoindre Mes decks. La grille défile :
+//                    deux rangées en vue, comme les autres étapes
 //   Mes decks        les decks sauvegardés (stores/decks.js), en vignettes du héros, comme les préconstruits ;
 //                    leur croix les retire
 //   Charger un deck  un lien MarvelCDB (deck publié, ou deck personnel si son auteur partage ses decks), ou le
@@ -19,6 +22,7 @@ import { portraitOf } from './portraits.js'
 import { useGridColumns } from './useGridColumns.js'
 import { AVAILABLE_HEROES, DEFINITION_BY_ID, heroName } from '../../../game/data.js'
 import { fetchMarvelCdbDeck, parseMarvelCdbLink } from '../../../game/marvelcdb.js'
+import { ONLINE_PRECONS, fetchOnlinePrecon } from '../../../game/precons.js'
 import { fetchMc4dbDeck, parseMc4dbLink, HAS_MC4DB_RELAY } from '../../../game/mc4db.js'
 import { cgbuilderImageUrl } from '../../../composables/useAssets.js'
 import { useDecksStore, importedDefinitionsOf } from '../../../stores/decks.js'
@@ -43,7 +47,40 @@ const decksStore = useDecksStore()
 const viewportElement = ref(null)
 const columns = useGridColumns(viewportElement)
 const fillersAfter = count => Math.max(2 * columns.value, Math.ceil(count / columns.value) * columns.value) - count
+/** Les cases vides qui finissent la rangée commencée (sans compléter deux rangées). */
+const rowFillersAfter = count => (columns.value - (count % columns.value)) % columns.value
+/** Le décalage d'arrivée d'une case (SetupModal, --i) : les deux premières rangées l'une après l'autre, la suite ensemble. */
+const arrival = index => ({ '--i': Math.min(index, 2 * columns.value) })
 const DRAWN_AT_LAUNCH = 'tiré au lancement'
+
+/* ---------- Préconstruits ---------- */
+
+/** Le précon en ligne en cours de lecture (son id), et l'erreur de la dernière lecture. */
+const loadingPreconId = ref(null)
+const preconError = ref('')
+/** Le deck d'un précon lu en ligne : il ne rejoint pas Mes decks ; sa clé le reconnaît comme le choix fait. */
+const onlinePreconKey = heroId => `precon:${heroId}`
+const onlinePreconDetail = precon => `précon ${precon.aspect} · lu sur MarvelCDB`
+
+/**
+ * Le précon d'un héros que la table n'a pas : lu sur MarvelCDB (game/precons.js), il devient le choix du héros ;
+ * une lecture ratée (pas de connexion) laisse le choix fait et dit pourquoi. Un second appui pendant la lecture
+ * ne fait rien.
+ */
+async function pickOnlinePrecon(precon) {
+  if (loadingPreconId.value) return
+  loadingPreconId.value = precon.id
+  preconError.value = ''
+  try {
+    const { hero, deckList } = await fetchOnlinePrecon(precon)
+    const deck = { key: onlinePreconKey(hero), label: `précon ${precon.aspect}`, hero, deckList, importedDefinitions: importedDefinitionsOf(hero, deckList) }
+    emit('pick', { hero, deck })
+  } catch (error) {
+    preconError.value = error.message
+  } finally {
+    loadingPreconId.value = null
+  }
+}
 
 /* ---------- Mes decks ---------- */
 
@@ -145,15 +182,24 @@ async function loadOnlineDeck() {
       <!-- Préconstruits -->
       <section id="deck-panel-precon" class="deck-panel" :class="{ active: tab === 0 }" role="tabpanel"
         aria-labelledby="deck-tab-precon" :inert="tab !== 0">
-        <div class="choices">
-          <PortraitChoice v-for="(hero, index) in AVAILABLE_HEROES" :key="hero.id" :style="{ '--i': index }" :label="hero.name"
+        <!-- la grille défile : deux rangées en vue (scroll-y : l'ascenseur des fenêtres, main.css) -->
+        <div class="choices precons scroll-y">
+          <PortraitChoice v-for="(hero, index) in AVAILABLE_HEROES" :key="hero.id" :style="arrival(index)" :label="hero.name"
             :detail="`précon ${hero.aspect}`" v-bind="portraitOf('hero', hero.id)" :selected="props.hero === hero.id && !deck"
             v-on="pointing(hero.name, `précon ${hero.aspect}`)" @pick="emit('pick', { hero: hero.id, deck: null })" />
-          <PortraitChoice v-for="n in fillersAfter(AVAILABLE_HEROES.length + 1)" :key="`filler-${n}`" filler />
-          <PortraitChoice :style="{ '--i': AVAILABLE_HEROES.length }" label="Au hasard" :detail="DRAWN_AT_LAUNCH" special
+          <PortraitChoice :style="arrival(AVAILABLE_HEROES.length)" label="Au hasard" :detail="DRAWN_AT_LAUNCH" special
             :selected="props.hero === 'random'" v-on="pointing('Héros au hasard', DRAWN_AT_LAUNCH)"
             @pick="emit('pick', { hero: 'random', deck: null })" />
+          <PortraitChoice v-for="n in rowFillersAfter(AVAILABLE_HEROES.length + 1)" :key="`filler-${n}`" filler />
+          <!-- les précons lus sur MarvelCDB, au choix du héros -->
+          <p class="online-title">Précons lus sur MarvelCDB, au choix du héros (connexion nécessaire)</p>
+          <PortraitChoice v-for="(precon, index) in ONLINE_PRECONS" :key="precon.id" :style="arrival(AVAILABLE_HEROES.length + 1 + index)"
+            :label="precon.name" :detail="onlinePreconDetail(precon)" v-bind="portraitOf('hero', precon.id, precon.heroCode)"
+            :selected="deck?.key === onlinePreconKey(precon.id)" :busy="loadingPreconId === precon.id"
+            v-on="pointing(precon.name, onlinePreconDetail(precon))" @pick="pickOnlinePrecon(precon)" />
+          <PortraitChoice v-for="n in rowFillersAfter(ONLINE_PRECONS.length)" :key="`online-filler-${n}`" filler />
         </div>
+        <p v-if="preconError" class="err precon-error" role="alert">{{ preconError }}</p>
       </section>
 
       <!-- Mes decks -->
@@ -221,6 +267,22 @@ async function loadOnlineDeck() {
   position: relative; display: grid; grid-template-columns: repeat(auto-fill, calc(88 * var(--su))); gap: calc(4 * var(--su));
   justify-content: center;
 }
+
+/* les précons : la grille défile, deux rangées en vue (88 px, 4 px entre elles). Elle déborde de 14 px de chaque
+   côté (24 à droite, la place de l'ascenseur) et de 10 px en haut et en bas, rendus en marge intérieure : la même
+   largeur utile que les autres grilles (dix cases), et la place du contour de focus d'une case */
+.precons {
+  --peek: 10px;
+  max-height: calc(2 * 88 * var(--su) + 4 * var(--su) + 2 * var(--peek));
+  margin: calc(-1 * var(--peek)) -24px calc(-1 * var(--peek)) -14px; padding: var(--peek) 14px;
+  overflow-y: auto; overscroll-behavior: contain; align-content: start;
+}
+/* l'intitulé des précons lus sur MarvelCDB, sur toute la largeur de la grille */
+.online-title {
+  grid-column: 1 / -1; margin: calc(10 * var(--su)) 0 calc(4 * var(--su)); padding-top: calc(10 * var(--su));
+  border-top: 1px solid #34426c; text-align: center; font-size: 13px; color: #c2c3fd;
+}
+.precon-error { margin-top: 12px; text-align: center; }
 
 /* un deck sauvegardé : sa vignette, et sa croix à cheval sur le coin haut droit (toujours là au doigt, au
    survol à la souris) */

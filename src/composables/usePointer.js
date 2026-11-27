@@ -1,7 +1,10 @@
 // Souris, doigt et stylet, gérés de la même façon et en un seul endroit (écouteurs posés sur le document) :
 // glisser-déposer entre les zones, toucher, double-clic / double toucher, aperçu au survol, menu au clic
-// droit ou à l'appui long. Les cartes portent l'attribut data-id, les zones où l'on dépose data-zone, les
-// pions de la liste « Pions » (PawnTray), qu'on glisse sur la table pour les y poser, data-pawn.
+// droit ou à l'appui long, lasso. Les cartes portent l'attribut data-id, les zones où l'on dépose data-zone,
+// les pions de la liste « Pions » (PawnTray), qu'on glisse sur la table pour les y poser, data-pawn.
+// Le lasso : un glisser sur la table hors des cartes trace un rectangle ; les cartes qu'il touche (pas les
+// pions) forment un groupe (ui.selectedCardIds), qui se glisse d'un bloc depuis n'importe laquelle de ses
+// cartes : ailleurs sur la table, ou dans une zone (défausse, main, pile…) où il part tout entier.
 
 import { onMounted, onBeforeUnmount } from 'vue'
 import { PAWN_KIND_BY_ID } from '../game/data.js'
@@ -34,8 +37,13 @@ export function usePointer() {
 
   /** Appui du pointeur principal, pas encore devenu un glisser. */
   let press = null
-  /** Glisser en cours : {cardElement, card, ghost, offsetX, offsetY, pointerId…}, ou pour un nouveau pion {pawnId, ghost…}. */
+  /**
+   * Glisser en cours : {cardElement, card, ghost, offsetX, offsetY, pointerId, followers…}, ou pour un nouveau pion
+   * {pawnId, ghost…}. followers : les autres cartes du groupe glissé, [{element, ghost, dx, dy}] ([] pour une carte seule).
+   */
   let drag = null
+  /** Lasso en cours : {table, element (le rectangle), tableRect, startX, startY, pointerId}. */
+  let lasso = null
   /** Dernier toucher {cardId, time, x, y} : pour reconnaître un double toucher (doigt et stylet). */
   let lastTap = null
   let pointerType = 'mouse'
@@ -86,7 +94,14 @@ export function usePointer() {
   function onPointerDown(event) {
     if (!event.isPrimary || event.button !== 0) return
     const target = pressableUnder(event.target)
-    if (!target || target.closest('.menu')) return
+    if (!target) {
+      // sur la table, hors des cartes : un glisser y tracera le lasso (un simple appui retire la sélection, GameTable) ;
+      // pas depuis les boutons + et − de la carte sélectionnée (CardCounterSteps)
+      const table = !event.target.closest?.('.card-steps') && event.target.closest?.('[data-zone="table"]')
+      if (table) press = { lassoTable: table, hit: null, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, longPressTimer: null }
+      return
+    }
+    if (target.closest('.menu')) return
     // un pion de la liste « Pions » : un glisser le pose sur la table ; un simple toucher, son bouton s'en charge
     // (au milieu de la table). Pas d'appui long : on peut le tenir avant de le tirer
     const pawnSource = target.closest('[data-pawn]')
@@ -95,8 +110,9 @@ export function usePointer() {
       return
     }
     const hit = cardUnder(event.target)
-    // la carte appuyée est sélectionnée tout de suite (filet jaune), sans attendre que le bouton remonte
-    if (hit) ui.selectCard(hit.card.id)
+    // la carte appuyée est sélectionnée tout de suite (filet jaune), sans attendre que le bouton remonte ; une
+    // carte du groupe sélectionné au lasso le garde, pour le glisser (un simple clic le défait : activateCard)
+    if (hit) ui.selectCard(hit.card.id, { keepGroup: true })
     const rect = hit?.element.getBoundingClientRect()
     press = {
       hit,
@@ -122,22 +138,75 @@ export function usePointer() {
   /** La carte tirée au hasard perd son contour rouge dès qu'on la touche ou la déplace. */
   const clearRandomMark = card => { if (ui.randomlyPickedCardId === card.id) ui.randomlyPickedCardId = null }
 
-  /** L'appui devient un glisser : une copie de la carte (le « fantôme ») suit le pointeur, la carte s'estompe. */
-  function startDrag() {
-    clearTimeout(press.longPressTimer)
-    const { element, card } = press.hit
-    clearRandomMark(card)
+  /** Une copie de la carte (le « fantôme »), debout, à sa taille, posée sur la page pour suivre le pointeur ; la carte s'estompe. */
+  function ghostOf(element) {
     const ghost = element.cloneNode(true)
     ghost.classList.add('ghost')
     ghost.classList.remove('sel', 'tapped')
     ghost.removeAttribute('data-id')
     Object.assign(ghost.style, { width: `${element.offsetWidth}px`, height: `${element.offsetHeight}px`, zIndex: '', left: '0', top: '0' })
-    // une carte inclinée est tournée : on la saisit par son centre
-    if (card.zone === 'table' && card.exhausted) { press.offsetX = element.offsetWidth / 2; press.offsetY = element.offsetHeight / 2 }
     document.body.appendChild(ghost)
     element.style.opacity = '.25'
-    drag = { ...press, cardElement: element, card, ghost }
+    return ghost
+  }
+
+  /**
+   * L'appui devient un glisser : le fantôme de la carte suit le pointeur. Une carte du groupe sélectionné au
+   * lasso emmène les autres : leurs fantômes suivent, chacun à sa place par rapport à elle.
+   */
+  function startDrag() {
+    clearTimeout(press.longPressTimer)
+    const { element, card } = press.hit
+    clearRandomMark(card)
+    // une carte inclinée est tournée : on la saisit par son centre
+    if (card.zone === 'table' && card.exhausted) { press.offsetX = element.offsetWidth / 2; press.offsetY = element.offsetHeight / 2 }
+    const ghost = ghostOf(element)
+    const group = card.zone === 'table' && ui.selectedCardIds.includes(card.id) ? gameStore.selectedGroup() : []
+    const followers = group.filter(other => other !== card).flatMap(other => {
+      const otherElement = element.parentElement.querySelector(`:scope > .card[data-id="${other.id}"]`)
+      return otherElement ? [{ element: otherElement, ghost: ghostOf(otherElement), dx: other.x - card.x, dy: other.y - card.y }] : []
+    })
+    drag = { ...press, cardElement: element, card, ghost, followers, isGroup: group.length > 1 }
     press = null
+  }
+
+  /** Le glisser sur la table hors des cartes devient un lasso : un rectangle pointillé, posé sur la page. */
+  function startLasso() {
+    const element = document.createElement('div')
+    element.className = 'lasso'
+    document.body.appendChild(element)
+    lasso = { table: press.lassoTable, element, tableRect: press.lassoTable.getBoundingClientRect(), startX: press.startX, startY: press.startY, pointerId: press.pointerId }
+    press = null
+  }
+
+  /**
+   * Le lasso suit le pointeur, sans sortir de la table ; les cartes de la table qu'il touche (pas les pions),
+   * inclinées comprises (leur rectangle à l'écran), sont sélectionnées au fur et à mesure.
+   */
+  function updateLasso(event) {
+    const { tableRect } = lasso
+    const insideX = x => Math.min(Math.max(x, tableRect.left), tableRect.right)
+    const insideY = y => Math.min(Math.max(y, tableRect.top), tableRect.bottom)
+    const left = Math.min(insideX(lasso.startX), insideX(event.clientX))
+    const right = Math.max(insideX(lasso.startX), insideX(event.clientX))
+    const top = Math.min(insideY(lasso.startY), insideY(event.clientY))
+    const bottom = Math.max(insideY(lasso.startY), insideY(event.clientY))
+    Object.assign(lasso.element.style, { left: `${left}px`, top: `${top}px`, width: `${right - left}px`, height: `${bottom - top}px` })
+    const cardIds = [...lasso.table.querySelectorAll(':scope > .card[data-id]:not(.token)')]
+      .filter(element => {
+        const rect = element.getBoundingClientRect()
+        return rect.left < right && rect.right > left && rect.top < bottom && rect.bottom > top
+      })
+      .map(element => element.dataset.id)
+    ui.selectCards(cardIds)
+  }
+
+  /** Fin du lasso : sa dernière sélection reste, le rectangle s'efface. */
+  function finishLasso(event) {
+    updateLasso(event)
+    lasso.element.remove()
+    lasso = null
+    ignoreNextClick = true
   }
 
   /** Un pion de la liste « Pions » quitte la liste : son image, à sa taille sur la table, suit le pointeur par son milieu. */
@@ -166,13 +235,21 @@ export function usePointer() {
         press.scrollRow.scrollLeft = press.scrollStart - deltaX
         return
       }
-      if (press.pawnSource) startPawnDrag()
+      if (press.lassoTable) startLasso()
+      else if (press.pawnSource) startPawnDrag()
       // une pile, une carte dans une fenêtre de pile ou la main ne se glissent pas : bouger annule seulement l'appui long
       else if (!press.hit) { clearTimeout(press.longPressTimer); press = null; return }
       else startDrag()
     }
+    if (lasso && event.pointerId === lasso.pointerId) {
+      updateLasso(event)
+      return
+    }
     if (!drag || event.pointerId !== drag.pointerId) return
-    drag.ghost.style.transform = `translate(${event.clientX - drag.offsetX}px, ${event.clientY - drag.offsetY}px)`
+    const x = event.clientX - drag.offsetX
+    const y = event.clientY - drag.offsetY
+    drag.ghost.style.transform = `translate(${x}px, ${y}px)`
+    for (const follower of drag.followers ?? []) follower.ghost.style.transform = `translate(${x + follower.dx}px, ${y + follower.dy}px)`
     clearDropHighlight()
     // un pion ne se pose que sur la table : seule elle s'éclaire sous lui
     const zoneElement = zoneElementAt(event.clientX, event.clientY)
@@ -184,7 +261,21 @@ export function usePointer() {
       finishPress(event)
       return
     }
+    if (lasso && event.pointerId === lasso.pointerId) {
+      finishLasso(event)
+      return
+    }
     if (drag && event.pointerId === drag.pointerId) finishDrag(event)
+  }
+
+  /** Efface les fantômes d'un glisser et rend leur opacité aux cartes glissées. */
+  function clearGhosts(finished) {
+    for (const moved of [finished, ...(finished.followers ?? [])]) {
+      moved.ghost.remove()
+      const element = moved.cardElement ?? moved.element
+      if (element) element.style.opacity = ''
+    }
+    clearDropHighlight()
   }
 
   /** Fin d'un appui sans glisser : un toucher (ou double toucher) sur une carte. */
@@ -209,9 +300,7 @@ export function usePointer() {
     ignoreNextClick = true
     const finished = drag
     drag = null
-    finished.ghost.remove()
-    if (finished.cardElement) finished.cardElement.style.opacity = ''
-    clearDropHighlight()
+    clearGhosts(finished)
     if (finished.pawnId) {
       dropPawn(finished, event)
       return
@@ -220,6 +309,10 @@ export function usePointer() {
     if (!zoneElement) return
     const zone = zoneElement.dataset.zone
     const { card } = finished
+    if (finished.isGroup) {
+      dropGroup(finished, zone, zoneElement, event)
+      return
+    }
     if (zone === 'table') {
       // à l'endroit lâché ; le moteur la garde entière sur la table, à sa taille sur la table (une carte de
       // la main n'a pas la même) : décalée vers le haut si elle dépasse du bas ou passe sous les PV du méchant
@@ -244,6 +337,24 @@ export function usePointer() {
   }
 
   /**
+   * Fin du glisser d'un groupe sélectionné au lasso : sur la table, chaque carte suit celle qu'on tenait, et le
+   * groupe reste sélectionné ; ailleurs (défausse, main, pile…), il y part tout entier, sauf l'identité, le
+   * méchant et la manigance principale (gameStore.moveGroup).
+   */
+  function dropGroup(finished, zone, zoneElement, event) {
+    const { card } = finished
+    if (zone !== 'table') {
+      gameStore.moveGroup(zone)
+      return
+    }
+    const tableRect = zoneElement.getBoundingClientRect()
+    const x = event.clientX - tableRect.left - finished.offsetX
+    const y = event.clientY - tableRect.top - finished.offsetY
+    gameStore.moveGroupOnTable(x - card.x, y - card.y)
+    ui.selectCard(card.id, { keepGroup: true })
+  }
+
+  /**
    * Un pion lâché sur la table s'y pose, à l'endroit lâché (le moteur le garde entier sur la table), et est
    * sélectionné ; lâché ailleurs, ou rendu à la liste, il n'est pas posé.
    */
@@ -262,11 +373,13 @@ export function usePointer() {
   function onPointerCancel() {
     if (press) clearTimeout(press.longPressTimer)
     press = null
+    if (lasso) {
+      lasso.element.remove()
+      lasso = null
+    }
     if (!drag) return
-    drag.ghost.remove()
-    if (drag.cardElement) drag.cardElement.style.opacity = ''
+    clearGhosts(drag)
     drag = null
-    clearDropHighlight()
   }
 
   // doigt et stylet ont notre propre double toucher ; la souris garde le double-clic natif (vitesse réglée dans le système)

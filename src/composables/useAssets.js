@@ -90,7 +90,8 @@ export function cardBackUrl(card) {
  */
 const VILLAIN_ART_FILES = {
   rhino: 'villains/rhino.webp', klaw: 'villains/klaw.webp', ultron: 'villains/ultron.webp',
-  risky_business: 'villains/norman-osborn.webp', mutagen_formula: 'villains/bouffon-vert.webp'
+  risky_business: 'villains/norman-osborn.webp', mutagen_formula: 'villains/bouffon-vert.webp',
+  kraven: 'villains/kraven.webp' // le scénario fan-made : Kraven dans la jungle, son fusil à la main
 }
 
 /** Le fond de la table (maquette) : une ville de nuit vue d'en bas, 1672 × 941 px. */

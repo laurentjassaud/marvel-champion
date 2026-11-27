@@ -53,7 +53,7 @@ function restart() {
       <template v-else>
         <button type="button" class="modal-btn" @click="ui.closeModal()">Fermer</button>
         <button type="button" class="modal-btn" @click="restart">Recommencer la partie</button>
-        <button type="button" class="modal-btn primary" @click="ui.openModal('setup')">Nouvelle partie</button>
+        <button type="button" class="modal-btn primary" @click="ui.openNewGame()">Nouvelle partie</button>
       </template>
     </template>
   </BaseModal>

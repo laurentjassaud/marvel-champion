@@ -167,6 +167,60 @@ export function addTokens(game, card, amount) {
   logMessage(game, `${cardLabel(card)} : ${plural(card.tokens, 'jeton')}.`)
 }
 
+/** Les compteurs des boutons + et − d'une carte (CardCounterSteps), du plus prioritaire au moins prioritaire. */
+export const STEP_KINDS = ['damage', 'threat', 'tokens']
+/** Les cartes « Utilisations » : sans jeton, elles sont défaussées (« quand il n'y en a plus, défaussez cette carte »). */
+const USES_TYPES = ['upgrade', 'support', 'attachment']
+/** Les jetons avec lesquels la face en jeu de la carte entre en jeu (0 sans). */
+const entryTokensOf = card => (card.side ? definitionOf(card).backEntryTokens : definitionOf(card).entryTokens) ?? 0
+
+/**
+ * Le compteur que visent les boutons + et − d'une carte de la table, ou null si elle n'en a pas : les dégâts d'un
+ * allié ou d'un sbire (avant ses jetons), la menace d'une manigance, sinon ses jetons. Ils sont là même à 0
+ * pour un allié, un sbire, une manigance et une carte qui entre en jeu avec des jetons (Utilisations) ; pour les
+ * autres cartes (carte face cachée…), seulement si elles portent ce compteur. Le méchant et l'identité gardent
+ * leurs PV dans les grands compteurs : seuls des jetons sur leur carte leur en donnent (ou les dégâts d'un des
+ * Démolisseurs, qui les garde sur sa carte).
+ */
+export function counterStepKindOf(game, card) {
+  if (!card || card.zone !== 'table' || card.isPawn) return null
+  const definition = definitionOf(card)
+  const isMainSchemeWithCounter = card.faceUp && definition.type === 'main_scheme' && threatCounterScheme(game) === card
+  const threat = card.threat || (isMainSchemeWithCounter ? game.counters[2].value : 0)
+  if (card.faceUp && ['ally', 'minion'].includes(definition.type) && counterKindOf(card) === 'damage') return 'damage'
+  if (card.faceUp && counterKindOf(card) === 'threat') return 'threat'
+  if (threat > 0) return 'threat'
+  if (card.tokens > 0 || (card.faceUp && entryTokensOf(card) > 0)) return 'tokens'
+  if (card.damage > 0) return 'damage' // un méchant des Démolisseurs, qui garde ses dégâts sur sa carte
+  return null
+}
+
+/**
+ * Un appui sur + (amount 1) ou − (amount -1) d'une carte de la table (CardCounterSteps) : 1 de plus ou de moins
+ * sur ce compteur (addDamage, addThreat, addTokens) ; pour un personnage, + lui pose un dégât, − lui en retire un.
+ * La carte est défaussée quand elle n'a plus de quoi rester : un allié ou un sbire dont les dégâts atteignent ses
+ * PV, une manigance annexe qui n'a plus de menace, une carte à Utilisations (amélioration, soutien, attachement)
+ * qui n'a plus de jeton. Ne le sont jamais : la manigance principale, un environnement (Entreprise Criminelle), un
+ * personnage à jetons (Hawkeye garde sa carte sans Flèche), le méchant, l'identité.
+ * Rend ce qu'a donné l'action, pour que l'écran le présente (la défaite du méchant qui perd les PV de Klaw
+ * « l'Immortel », une manigance principale achevée…).
+ */
+export function stepCounter(game, card, kind, amount, layout = DEFAULT_LAYOUT) {
+  let result
+  if (kind === 'damage') result = addDamage(game, card, amount, layout)
+  else if (kind === 'threat') result = addThreat(game, card, amount)
+  else if (kind === 'tokens') addTokens(game, card, amount)
+  if (card.zone !== 'table' || !card.faceUp) return result
+  const definition = definitionOf(card)
+  let emptied = ''
+  if (kind === 'damage' && ['ally', 'minion'].includes(definition.type) && definition.hitPoints > 0 && card.damage >= definition.hitPoints) emptied = 'de PV'
+  else if (kind === 'threat' && amount < 0 && definition.type === 'side_scheme' && !card.threat) emptied = 'de menace'
+  else if (kind === 'tokens' && amount < 0 && USES_TYPES.includes(definition.type) && entryTokensOf(card) > 0 && !card.tokens) emptied = 'de jeton'
+  if (!emptied) return result
+  logMessage(game, `${cardLabel(card)} n'a plus ${emptied} : à la défausse.`)
+  return moveCard(game, card, 'discard', { layout }, true) ?? result
+}
+
 /** Seuil de menace de la manigance principale, lu dans le libellé de son compteur ("Menace /7" → 7) ; null s'il est inconnu. */
 export function threatThreshold(game) {
   return Number((game.counters[2].label.match(/\/(\d+)/) || [])[1]) || null

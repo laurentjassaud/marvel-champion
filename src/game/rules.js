@@ -292,8 +292,10 @@ export const heroPileCodes = (heroId, { outsideDeck = false } = {}) => (heroRule
 //                                           cachée (Prison d'Hydra)
 //   setAside           cartes du set du méchant mises de côté, hors jeu (Le Dormeur, les Empire de Kang)
 //   scenarioDeck       deck propre au scénario, à côté du paquet Rencontre, fait d'un set (ou de ses cartes
-//                      d'un type) : {set, type?, name, shortName, dealsToPlayer?} ; dealsToPlayer : son menu
-//                      attribue aussi sa carte du dessus au joueur, face cachée (Kraven : deck Piège)
+//                      d'un type) : {set, type?, name, shortName, dealsToPlayer?, discard?} ; dealsToPlayer : son
+//                      menu attribue aussi sa carte du dessus au joueur, face cachée ; discard : ses cartes défaussées
+//                      vont dans sa propre défausse, à côté de lui, et non dans la défausse Rencontre (Kraven : deck
+//                      Piège)
 //   oneEnvironment     un environnement qui entre en jeu défausse les autres (Personne ne Passe)
 //   expertSet          en expert, les cartes du méchant forment un set à part (Kang Expert), toutes ses étapes servent
 //   removesObligation  l'obligation du héros est retirée de la partie (Kang)
@@ -541,20 +543,20 @@ export const SCENARIO_RULES = {
   // fan-made : le deck Piège attend à côté du paquet Rencontre ; ses cartes s'attribuent face cachée au joueur
   kraven: {
     automated: [
-      'Mise en place : le deck Piège à côté du paquet Rencontre (pile Pièges) ; « attribuez-vous une carte PIÈGE » : clic droit sur la pile → Carte face cachée pour vous.',
-      'Kraven le Chasseur (III) révélé : une carte Piège pour vous, face cachée devant votre identité.'
+      'Mise en place : le deck Piège à côté du paquet Rencontre (pile Pièges), avec sa propre défausse ; « attribuez-vous une carte PIÈGE » : clic droit sur la pile → Carte face cachée pour vous.',
+      'Kraven le Chasseur (II) révélé : le Collier de Dents est cherché dans le paquet Rencontre et sa défausse, et attaché au méchant ; Kraven le Chasseur (III) révélé : une carte Piège pour vous, face cachée devant votre identité.'
     ],
     byHand: [
       'Quand un de vos personnages attaque Kraven le Chasseur : une carte Piège pour vous, puis révélez (F) chaque carte Piège attribuée, une fois par round.',
       'Stade 1B : 2 menaces quand vous passez sous forme de héros, 1 de moins quand vous repassez en alter ego ; stade 2B : 1 menace après chaque carte Piège révélée, une fois par round.',
-      'Kraven le Chasseur (II) révélé : le Collier de Dents ; stade 2A révélé : Le Sérum de Calypso (le journal les rappelle).'
+      'Stade 2A révélé : Le Sérum de Calypso (le journal le rappelle).'
     ],
-    scenarioDeck: { set: 'kraven_traps', name: 'Piège', shortName: 'Pièges', dealsToPlayer: true },
+    scenarioDeck: { set: 'kraven_traps', name: 'Piège', shortName: 'Pièges', dealsToPlayer: true, discard: true },
     mainSchemes: {
       'krv-05': { onRevealA: 'cherchez la manigance annexe Le Sérum de Calypso dans le paquet Rencontre ou sa défausse, révélez-la et mélangez le paquet Rencontre' } // La Grande Chasse
     },
     villainStages: {
-      'krv-02': { onRevealA: 'cherchez l\'attachement Collier de Dents dans le paquet Rencontre ou sa défausse et révélez-le' }, // Kraven le Chasseur (II)
+      'krv-02': { revealCardId: 'krv-11' }, // Kraven le Chasseur (II) : Collier de Dents
       'krv-03': { dealScenarioDeckCards: 1 } // Kraven le Chasseur (III)
     }
   }

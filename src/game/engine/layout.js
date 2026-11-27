@@ -8,7 +8,8 @@
 //
 // Le bord gauche de la table est occupé par le décor du méchant : son illustration en haut
 // (`layout.villainInset`, en pixels depuis le bord gauche) et ses PV en grand en bas (`layout.heroInset` ;
-// `layout.villainHud` : {right, top}, le bloc mesuré, posé par-dessus la table). Le méchant et sa manigance
+// `layout.villainHud` : {right, top}, la ligne des PV et la menace mesurées, posées par-dessus la table ; le
+// nom du méchant, au-dessus d'elles, peut être recouvert par les cartes). Le méchant et sa manigance
 // principale sont en haut, après l'illustration. L'identité est en bas, au milieu de la partie libre de la
 // table (entre les PV du méchant et le bord droit : au-dessus de la main) ; la rangée du héros va d'abord vers
 // la gauche jusqu'aux PV du méchant, puis à droite de l'identité. Les cartes Rencontre que la table pose
@@ -209,8 +210,9 @@ function visibleBox(card, cardWidth) {
 
 /**
  * Garde une carte de la table entière à l'écran (glissée, inclinée, retournée, ou la table redimensionnée) :
- * ramenée dans la table si elle en dépasse, et remontée au-dessus des PV du méchant, posés par-dessus la
- * table en bas à gauche (`layout.villainHud`), si elle passe dessous.
+ * ramenée dans la table si elle en dépasse, et remontée au-dessus de la ligne des PV du méchant et de la
+ * menace, posées par-dessus la table en bas à gauche (`layout.villainHud`), si elle passe dessous : elle peut
+ * alors recouvrir le nom du méchant, juste au-dessus.
  */
 export function keepCardOnTable(card, layout) {
   if (card.zone !== 'table') return

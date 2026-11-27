@@ -301,16 +301,28 @@ Les erreurs sont dans le journal d'erreurs Apache, préfixées `[gamebox-mc4db]`
 
 La copie de test de l'appli (`npm run build:test`, envoyée dans `/home/prod/WWW/base/test/`) est réservée aux personnes qui ont un identifiant et son mot de passe. C'est Apache qui les demande (authentification HTTP de base) : le navigateur ouvre sa propre fenêtre de connexion, puis les joint à chaque demande du dossier. Tout le dossier est protégé (la page, le code, les images), pas seulement la page. Le site n'est servi qu'en https : ils ne circulent jamais en clair. Il n'y a pas de déconnexion : le navigateur les oublie quand on le ferme.
 
-La règle est dans la configuration d'Apache : `/etc/apache2/conf-available/gamebox-test.conf` (source : `server/test/gamebox-test.conf`). Elle ne dépend donc pas de ce qu'on envoie dans `/test/`. Le `.htaccess` que `npm run build:test` pose aussi dans `dist-test/` (source : `server/test/.htaccess`) n'est qu'une seconde ligne de défense : sur le VPS, il n'a pas été appliqué. Les mots de passe sont dans `/home/prod/gamebox-private/test.htpasswd`, hors de la racine web, jamais dans le dépôt. On n'y garde que leur empreinte (bcrypt).
+La règle est dans la configuration d'Apache : `/etc/apache2/conf-available/gamebox-test.conf` (source : `server/test/gamebox-test.conf`). Elle ne dépend donc pas de ce qu'on envoie dans `/test/`. Le `.htaccess` que `npm run build:test` pose aussi dans `dist-test/` (source : `server/test/.htaccess`) n'est qu'une seconde ligne de défense : sur le VPS, il n'a pas été appliqué. Envoyé avec le reste, son effet dépend du réglage `AllowOverride` de la racine web (pour le voir : `grep -ri allowoverride /etc/apache2/sites-enabled/ /etc/apache2/apache2.conf`) :
+- `None` : Apache ne le lit pas, il est sans effet ;
+- `All`, ou une liste qui contient `AuthConfig` : il s'applique, en double de `gamebox-test.conf` ;
+- une liste **sans** `AuthConfig` (par exemple `FileInfo`, ajouté un jour pour des réécritures d'adresses) : Apache le lit, refuse ses directives et répond **500 sur toute la copie de test**, même avec le bon mot de passe (voir les pannes, plus bas).
+
+Les mots de passe sont dans `/home/prod/gamebox-private/test.htpasswd`, hors de la racine web, jamais dans le dépôt. On n'y garde que leur empreinte (bcrypt).
+
+**Les deux chemins de `gamebox-test.conf` sont écrits en dur** : ceux du VPS actuel, `/home/prod/WWW/base/test` (le bloc `<Directory>`) et `/home/prod/gamebox-private/test.htpasswd` (`AuthUserFile`). Sur un autre serveur, ou si le site change de dossier, adapte-les à ton DocumentRoot et à ton dossier privé avant de copier le fichier. `<Directory>` désigne un dossier du disque : Apache le compare lettre par lettre au chemin qu'il construit pour chaque demande (DocumentRoot + adresse), sans suivre les liens symboliques. Si les deux ne correspondent pas (autre DocumentRoot, dossier renommé, DocumentRoot qui passe par un lien), la règle ne s'applique à rien et `/test/` est ouvert à tous, **sans aucune erreur** : `configtest` répond quand même `Syntax OK`, et le rechargement ne dit rien. Seul le test `curl` de « Vérifier », plus bas, le montre : le refaire après tout changement sur le serveur (nouveau VPS, DocumentRoot modifié, dossier renommé).
 
 **À faire une fois**, en SSH (déjà fait sur le VPS actuel ; `htpasswd` vient du paquet `apache2-utils`, installé avec Apache) :
 
 ```bash
+# 0. le vrai DocumentRoot du site, et donc le chemin à mettre dans <Directory> (DocumentRoot + /test)
+grep -ri documentroot /etc/apache2/sites-enabled/
+sudo apache2ctl -S                      # les sites actifs et leurs fichiers de configuration
+
 # 1. les mots de passe : -c crée le fichier (et efface l'ancien) ; htpasswd demande le mot de passe deux fois, sans l'afficher
 sudo htpasswd -cB /home/prod/gamebox-private/test.htpasswd <identifiant>
 sudo chown prod:www-data /home/prod/gamebox-private/test.htpasswd && sudo chmod 640 /home/prod/gamebox-private/test.htpasswd
 
-# 2. la règle d'Apache (copier server/test/gamebox-test.conf sur le serveur, ou coller son bloc <Directory> avec sudo nano)
+# 2. la règle d'Apache (copier server/test/gamebox-test.conf sur le serveur, ou coller son bloc <Directory> avec sudo nano),
+#    ses deux chemins adaptés à ceux trouvés en 0 et en 1
 sudo cp gamebox-test.conf /etc/apache2/conf-available/
 sudo a2enconf gamebox-test
 sudo apache2ctl configtest              # attendu : Syntax OK
@@ -326,15 +338,17 @@ sudo htpasswd -D /home/prod/gamebox-private/test.htpasswd <identifiant>         
 sudo htpasswd -v /home/prod/gamebox-private/test.htpasswd <identifiant>         # vérifier un mot de passe
 ```
 
-**Vérifier** que la protection tient (le serveur répond 404 à toute adresse en `/.` : on ne peut pas savoir de l'extérieur si un `.htaccess` est là) :
+**Vérifier** que la protection tient, après l'installation et après tout changement sur le serveur (le serveur répond 404 à toute adresse en `/.` : on ne peut pas savoir de l'extérieur si un `.htaccess` est là) :
 
 ```bash
 curl -sI https://www.gameboxheroes.fr/test/ | head -1                    # attendu : HTTP/1.1 401 Unauthorized
 curl -sI -u <identifiant> https://www.gameboxheroes.fr/test/ | head -1   # demande le mot de passe ; attendu : 200 OK
 ```
 
-- **200 sans mot de passe** : la règle n'est pas active (`sudo a2enconf gamebox-test`, puis recharger Apache), ou la racine web n'est plus `/home/prod/WWW/base`.
-- **500** : Apache ne peut pas lire `test.htpasswd` (droits ci-dessus, groupe `www-data`). Le détail est dans `/var/log/apache2/base-error.log`.
+- **200 sans mot de passe** : la règle n'est pas active (`sudo a2enconf gamebox-test`, puis recharger Apache), ou le chemin de son bloc `<Directory>` n'est pas celui des fichiers (DocumentRoot autre que `/home/prod/WWW/base`, dossier renommé, DocumentRoot qui passe par un lien symbolique) : le corriger d'après `grep -ri documentroot /etc/apache2/sites-enabled/`, puis recharger Apache.
+- **500** : le journal dit laquelle des deux causes (`sudo tail -n 20 /var/log/apache2/base-error.log`).
+  - `/home/prod/WWW/base/test/.htaccess: AuthType not allowed here` (ou une autre de ses directives) : le `.htaccess` de la copie de test est lu, mais `AllowOverride` n'autorise pas `AuthConfig`. Le plus simple : le supprimer (`sudo rm /home/prod/WWW/base/test/.htaccess`), la règle d'Apache suffit ; il revient à chaque envoi de `dist-test/` en entier, à supprimer de nouveau ou à ne pas envoyer. Sinon, ajouter `AuthConfig` à la ligne `AllowOverride` de la racine web, puis `sudo apache2ctl configtest && sudo systemctl reload apache2`.
+  - `Could not open password file` : Apache ne peut pas lire `test.htpasswd` (chemin d'`AuthUserFile`, ou droits ci-dessus, groupe `www-data`).
 - **401 même avec le bon mot de passe** : le journal le dit (`sudo grep -i auth /var/log/apache2/base-error.log | tail -n 5`). `Password Mismatch` : le mot de passe enregistré est autre (le refaire avec `htpasswd -B`) ; `not found` : l'identifiant est autre (les majuscules comptent).
 
 La copie de test n'a pas de service worker. Il servirait la page depuis son cache sans que le navigateur redemande le mot de passe, et ses propres demandes (nouvelle version, images) seraient alors refusées. Elle se recharge donc toujours depuis le serveur. Les scripts `/api/…` de la racine, qu'elle appelle comme la production, ne sont pas protégés : ils doivent rester ouverts pour la production.

@@ -67,10 +67,22 @@ export const useUiStore = defineStore('ui', () => {
   const tableHeight = ref(0)
   /** Largeur, depuis le bord gauche de la table, des PV du méchant affichés en grand en bas (mesurée par VillainHud). */
   const heroInset = ref(0)
-  /** Bord haut de ce bloc, depuis le haut de la table ; null s'il n'est pas posé par-dessus la table (téléphone, tablette en portrait). */
+  /**
+   * La partie de ce bloc qu'aucune carte ne recouvre : la ligne des PV et la menace, sous le nom du méchant (une
+   * carte peut, elle, recouvrir le nom). Son bord haut, depuis le haut de la table ; null si le bloc n'est pas
+   * posé par-dessus la table (téléphone, tablette en portrait).
+   */
   const villainHudTop = ref(null)
+  /** Son bord droit, depuis le bord gauche de la table (le nom, au-dessus, peut être plus large). */
+  const villainHudRight = ref(0)
   /** Carte sélectionnée (clic) : cible des raccourcis clavier quand la souris n'est sur aucune carte. */
   const selectedCardId = ref(null)
+  /**
+   * Groupe de cartes de la table sélectionnées ensemble, au lasso (un glisser sur la table hors des cartes,
+   * usePointer) : deux cartes ou plus, vide sinon. Elles se glissent ensemble, et les raccourcis T, H, X, Suppr
+   * et le menu agissent sur toutes (useKeyboard, useCardMenu).
+   */
+  const selectedCardIds = ref([])
   /** Carte de la main tirée au hasard, entourée de rouge jusqu'à ce qu'on la touche. */
   const randomlyPickedCardId = ref(null)
   /**
@@ -118,9 +130,10 @@ export const useUiStore = defineStore('ui', () => {
 
   /**
    * Disposition de la table pour le moteur, dans une partie contre le méchant de ce scénario : {width,
-   * height, cardWidth, villainInset, heroInset, villainHud} (villainHud : {right, top}, les PV du méchant
-   * posés par-dessus la table, qu'une carte ne doit pas passer dessous ; null sinon). Les minimums ne servent qu'à l'instant où la table n'est
-   * pas encore mesurée : plus grands que la vraie taille, ils poseraient des cartes hors de la table. Le
+   * height, cardWidth, villainInset, heroInset, villainHud} (villainHud : {right, top}, la ligne des PV du
+   * méchant et la menace, posées par-dessus la table, qu'une carte ne doit pas recouvrir ; son nom, au-dessus,
+   * peut l'être ; null sinon). Les minimums ne servent qu'à l'instant où la table n'est pas encore mesurée :
+   * plus grands que la vraie taille, ils poseraient des cartes hors de la table. Le
    * décor du méchant laisse toujours la place de quatre cartes en haut (méchant, manigance couchée, une
    * carte Rencontre) et de trois en bas.
    */
@@ -133,18 +146,39 @@ export const useUiStore = defineStore('ui', () => {
       cardWidth: card,
       villainInset: Math.round(Math.min(villainArtInset(scenarioId), Math.max(0, width - card * 3.8 - 80))),
       heroInset: Math.round(Math.min(heroInset.value, Math.max(0, width - card * 3.4 - 80))),
-      villainHud: heroInset.value && villainHudTop.value != null ? { right: heroInset.value, top: villainHudTop.value } : null
+      villainHud: villainHudRight.value && villainHudTop.value != null ? { right: villainHudRight.value, top: villainHudTop.value } : null
     }
   }
   /** La tirette « Taille » revient à la largeur de la première visite (double-clic sur son libellé). */
   const resetCardWidth = () => { cardWidth.value = defaultCardWidth() }
   const setTableSize = (width, height) => { tableWidth.value = width; tableHeight.value = height }
-  /** Place prise sur la table par les PV du méchant affichés en grand (mesurée par VillainHud) : son bord droit et son bord haut (null : pas sur la table). */
-  const setHeroInset = (width, top = null) => {
+  /**
+   * Place prise sur la table par les PV du méchant affichés en grand (mesurée par VillainHud) : le bord droit de
+   * tout le bloc (la rangée du héros commence après lui), puis le bord haut et le bord droit de la partie que les
+   * cartes ne recouvrent pas, la ligne des PV et la menace (top null : le bloc n'est pas sur la table).
+   */
+  const setHeroInset = (width, top = null, right = width) => {
     heroInset.value = Math.max(0, width)
     villainHudTop.value = top
+    villainHudRight.value = Math.max(0, right)
   }
-  const selectCard = cardId => { selectedCardId.value = cardId }
+  /**
+   * Sélectionne une carte (null : aucune) et défait le groupe sélectionné au lasso, sauf avec keepGroup si la
+   * carte en fait partie (appuyer sur une carte du groupe pour le glisser ne le défait pas).
+   */
+  const selectCard = (cardId, { keepGroup = false } = {}) => {
+    selectedCardId.value = cardId
+    if (!keepGroup || !selectedCardIds.value.includes(cardId)) selectedCardIds.value = []
+  }
+  /** Sélectionne ces cartes de la table (le lasso) : un groupe s'il y en a deux ou plus, sinon une carte seule ou aucune. */
+  const selectCards = cardIds => {
+    if (cardIds.length < 2) {
+      selectCard(cardIds[0] ?? null)
+      return
+    }
+    selectedCardId.value = null
+    selectedCardIds.value = cardIds
+  }
   /** Allume ces cartes (flashedCardIds) le temps de l'animation card-flash de main.css : 0,6 s, puis 0,6 s pour s'effacer. */
   let flashTimer
   const flashCards = cardIds => {
@@ -167,9 +201,23 @@ export const useUiStore = defineStore('ui', () => {
   const closeContextMenu = () => { contextMenu.value = null }
   /** Ouvre une fenêtre (et ferme le menu contextuel et la liste des pions) ; `extra` : ses paramètres (zone de la pile, résultat…). */
   const openModal = (type, extra = {}) => { contextMenu.value = null; pawnTrayOpen.value = false; modal.value = { type, ...extra } }
-  const closeModal = () => { modal.value = null }
+  /** Ferme la fenêtre ; « Nouvelle partie » ouverte depuis la partie (openNewGame) ramène aussi à la table. */
+  const closeModal = () => {
+    if (modal.value?.overGame) introOpen.value = false
+    modal.value = null
+  }
   /** Revient à la page d'accueil (le menu, la liste des pions ou la fenêtre ouverts se ferment) ; la partie reste où elle en est. */
   const openIntro = () => { contextMenu.value = null; pawnTrayOpen.value = false; modal.value = null; introOpen.value = true }
+  /**
+   * « Nouvelle partie » depuis la partie (la barre, les fenêtres de fin de partie) : la fenêtre s'ouvre sur la page
+   * d'accueil, comme depuis son lien « Scénarios ». Fermée sans lancer de partie, elle ramène à la table, là où on
+   * en était (overGame, closeModal) ; « Lancer la partie » fait sa sortie habituelle (launchGame).
+   */
+  const openNewGame = () => {
+    const overGame = !introOpen.value
+    openIntro()
+    openModal('setup', overGame ? { overGame } : {})
+  }
   /** Ouvre ou ferme la liste des pions. */
   const togglePawnTray = () => { contextMenu.value = null; pawnTrayOpen.value = !pawnTrayOpen.value }
   const closePawnTray = () => { pawnTrayOpen.value = false }
@@ -199,10 +247,10 @@ export const useUiStore = defineStore('ui', () => {
   }
 
   return {
-    cardWidth, resetCardWidth, sideTab, deckTab, sideColumnWidth, tableWidth, tableHeight, heroInset, selectedCardId, randomlyPickedCardId, flashedCardIds, hoveredCardId,
-    preview, contextMenu, pawnTrayOpen, modal, introOpen, setupCount, isDealing, scene, sceneCount, layout, setTableSize, setHeroInset, selectCard,
+    cardWidth, resetCardWidth, sideTab, deckTab, sideColumnWidth, tableWidth, tableHeight, heroInset, selectedCardId, selectedCardIds, randomlyPickedCardId, flashedCardIds, hoveredCardId,
+    preview, contextMenu, pawnTrayOpen, modal, introOpen, setupCount, isDealing, scene, sceneCount, layout, setTableSize, setHeroInset, selectCard, selectCards,
     flashCard, flashCards, flashAfterDeal, flushFlashAfterDeal, showPreview, openContextMenu, closeContextMenu,
-    openModal, closeModal, openIntro, closeIntro, launchGame, togglePawnTray, closePawnTray
+    openModal, closeModal, openIntro, openNewGame, closeIntro, launchGame, togglePawnTray, closePawnTray
   }
 })
 

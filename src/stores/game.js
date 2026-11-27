@@ -54,6 +54,13 @@ export const useGameStore = defineStore('game', () => {
   const pileOf = zone => (game.value && ['encounterDeck', 'encounterDiscard'].includes(zone) ? Engine.encounterPile(game.value, zone) : cardsIn(zone))
   /** La carte qui porte cet identifiant, ou null. */
   const cardById = cardId => (game.value && cardId ? Engine.cardById(game.value, cardId) : null)
+
+  // la carte sélectionnée qui arrive dans une défausse (glissée, menu, Suppr, défaussée à 0 par le moteur…) perd
+  // son filet jaune : la sélection est retirée. Une carte qu'on touche sur le dessus d'une défausse, elle, reste
+  // sélectionnée (elle n'a pas changé de zone)
+  watch([() => ui.selectedCardId, () => cardById(ui.selectedCardId)?.zone], ([cardId, zone], [previousCardId, previousZone]) => {
+    if (cardId && cardId === previousCardId && zone !== previousZone && Engine.DISCARD_ZONES.includes(zone)) ui.selectCard(null)
+  })
   /** Docteur Strange : le deck Invocation et sa défausse s'affichent à côté des piles du joueur. */
   const hasInvocationDeck = computed(() => !!game.value?.cards.some(Engine.isInvocationCard))
   /**
@@ -105,6 +112,17 @@ export const useGameStore = defineStore('game', () => {
   }
   /** La disposition actuelle de la table (le décor du méchant dépend du scénario en cours). */
   const layout = () => ui.layout(game.value?.setup?.scenario)
+
+  /**
+   * Le groupe sélectionné au lasso (ui.selectedCardIds) : ses cartes encore sur la table, de la plus basse à la
+   * plus haute dans l'empilement ; [] s'il en reste moins de deux.
+   */
+  function selectedGroup() {
+    const cards = ui.selectedCardIds.map(cardById).filter(card => card?.zone === 'table')
+    return cards.length > 1 ? cards.sort((a, b) => a.zIndex - b.zIndex) : []
+  }
+  /** Une carte du groupe qui le suit hors de la table : ni l'identité, ni le méchant, ni une manigance principale. */
+  const leavesTableWithGroup = card => !card.isIdentity && !['villain', 'main_scheme'].includes(Engine.definitionOf(card).type)
 
   /**
    * L'état de la partie juste avant le changement présenté par la fenêtre ouverte (étape du méchant,
@@ -248,8 +266,9 @@ export const useGameStore = defineStore('game', () => {
       run(Engine.logMessage, `${label[0].toUpperCase()}${label.slice(1)} mélangé.`)
     },
     /**
-     * « Remélanger dans le paquet », confirmé dans sa fenêtre : la défausse du joueur ou Rencontre rejoint son
-     * paquet, mélangé ; un paquet qui était vide applique sa pénalité (carte Rencontre, pion Accélération).
+     * « Remélanger dans le paquet », confirmé dans sa fenêtre : la défausse du joueur, Rencontre ou Piège rejoint
+     * son paquet, mélangé ; un paquet qui était vide applique sa pénalité (carte Rencontre, pion Accélération ; aucune
+     * pour le deck Piège).
      */
     shuffleDiscardIntoDeck: discardZone => run(Engine.shuffleDiscardIntoDeck, discardZone, layout()),
     /** Après avoir cherché dans une pioche : elle est mélangée, comme le demandent les règles. */
@@ -268,12 +287,20 @@ export const useGameStore = defineStore('game', () => {
       if (card === null) offerReshuffle('encounterDiscard', { thenEncounter: 'revealEncounterCard' })
       return card
     },
-    revealScenarioDeckCard: () => run(Engine.revealScenarioDeckCard, layout()),
+    // deck du scénario vide : s'il a sa propre défausse (deck Piège), la fenêtre « Remélanger » s'ouvre, puis l'action se fait
+    revealScenarioDeckCard: () => {
+      const card = run(Engine.revealScenarioDeckCard, layout())
+      if (card === null) offerReshuffle('scenarioDiscard', { thenEncounter: 'revealScenarioDeckCard' })
+      return card
+    },
     /** « Attribuez-vous une carte PIÈGE du deck PIÈGE » (Kraven) : face cachée devant l'identité, comme une carte Rencontre. */
     dealScenarioDeckCardToPlayer: () => {
       const deckName = scenarioDeck.value?.name ?? ''
       if (run(Engine.dealScenarioDeckCardToPlayer, layout())) run(Engine.logMessage, `Vous recevez une carte du deck ${deckName} face cachée, posée devant votre identité.`)
-      else run(Engine.logMessage, `Deck ${deckName} vide.`)
+      else {
+        run(Engine.logMessage, `Deck ${deckName} vide.`)
+        offerReshuffle('scenarioDiscard', { thenEncounter: 'dealScenarioDeckCardToPlayer' })
+      }
     },
     dealBoostCard: () => {
       if (run(Engine.dealBoostCard, layout())) run(Engine.logMessage, 'Carte Rencontre posée face cachée (boost).')
@@ -341,12 +368,55 @@ export const useGameStore = defineStore('game', () => {
     /** Redresse toutes les cartes du joueur sur la table. */
     readyPlayerCards: () => { for (const card of cardsIn('table')) if (!Engine.isEncounterCard(card)) card.exhausted = false },
 
+    /* ---------- groupe sélectionné au lasso ---------- */
+    selectedGroup,
+    leavesTableWithGroup,
+    /**
+     * Le groupe part dans une zone (main, défausse, « De côté », une pile) : chaque carte comme moveCard, de la
+     * plus basse à la plus haute (celle du dessus finit sur le dessus de la pile), sauf l'identité, le méchant et
+     * la manigance principale, qui restent sur la table. Un changement présenté (la défaite du méchant quand Klaw
+     * « l'Immortel » est défaussée…) l'est une fois, et son « Annuler » défait tout le groupe. Le groupe est
+     * ensuite défait.
+     */
+    moveGroup: zone => {
+      const cards = selectedGroup().filter(leavesTableWithGroup)
+      runAndPresentChange(() => {
+        let change
+        for (const card of cards) {
+          const result = run(Engine.moveCard, card, zone, { layout: layout() })
+          if (!change) change = result
+        }
+        return change
+      })
+      ui.selectCard(null)
+    },
+    /** Le groupe glissé sur la table : chaque carte décalée de (dx, dy), entière sur la table, dans son ordre d'empilement. */
+    moveGroupOnTable: (dx, dy) => {
+      for (const card of selectedGroup()) run(Engine.moveCard, card, 'table', { x: card.x + dx, y: card.y + dy, layout: layout() })
+    },
+    /** Incline tout le groupe si une de ses cartes est redressée, sinon le redresse tout entier. */
+    toggleGroupExhausted: () => {
+      const cards = selectedGroup()
+      const exhaust = cards.some(card => !card.exhausted)
+      for (const card of cards) {
+        if (card.exhausted === exhaust) continue
+        run(Engine.toggleExhausted, card)
+        Engine.keepCardOnTable(card, layout())
+      }
+    },
+
     /* ---------- dégâts, menace, jetons ---------- */
     // un méchant vaincu (étape suivante, victoire), une manigance principale achevée ou le héros tombé à 0 PV
     // est présenté dans sa fenêtre
     addDamage: (cardId, amount) => runAndPresentChange(() => run(Engine.addDamage, cardById(cardId), amount, layout())),
     addThreat: (cardId, amount) => runAndPresentChange(() => run(Engine.addThreat, cardById(cardId), amount)),
     addTokens: (cardId, amount) => run(Engine.addTokens, cardById(cardId), amount),
+    /**
+     * Les boutons + et − d'une carte de la table (CardCounterSteps) : 1 de plus ou de moins sur ce compteur ; arrivée
+     * à 0 (PV d'un allié ou d'un sbire, menace d'une manigance annexe, jetons d'une Utilisations), la carte est
+     * défaussée. Un changement présenté (méchant vaincu, manigance achevée) l'est dans sa fenêtre.
+     */
+    stepCounter: (cardId, kind, amount) => withCard(cardId, card => runAndPresentChange(() => run(Engine.stepCounter, card, kind, amount, layout()))),
     /** Kang : le stade 3 est achevé, le stade 4 arrive à la fin de la phase (une carte Empire de Kang dessous). */
     completeKangStage3: () => runAndPresentChange(() => run(Engine.completeKangStage3)),
     /** « Annuler » des fenêtres du méchant et de la manigance : revient à l'état d'avant le changement. */
